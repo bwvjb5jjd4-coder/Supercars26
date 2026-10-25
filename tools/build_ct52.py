@@ -36,6 +36,8 @@ once("<span>13 venues</span>","<span>${EVENTS.length} venues</span>")
 h=h.replace("['goldcoast','adelaide','townsville']","['goldcoast','adelaide','townsville','homebush']")
 h=h.replace("['goldcoast','adelaide','townsville','albert']","['goldcoast','adelaide','townsville','albert','homebush']")
 # Pit lane on the left of Australia Avenue (west), the grid on the right.
+# Pit exit where the map has it, just past the Australia Avenue kink (the entry already matches).
+once("exit=this.e.key==='sandown'?235:340","exit=this.e.key==='sandown'?235:this.e.key==='homebush'?140:340")
 once("this.e.key==='townsville'?-1:chosen","['townsville','homebush'].includes(this.e.key)?-1:chosen")
 (root/'index.html').write_text(h)
 print('ok',lay['length'],len(h))

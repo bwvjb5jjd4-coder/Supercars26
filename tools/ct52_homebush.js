@@ -9,11 +9,15 @@
    from the white line to the concrete walls, walls straight along each street with escape
    roads straight on at every corner, walls along the pit lane. Australia Avenue is the
    widest straight in Australian racing, Edwin Flack Avenue one of the narrowest.
+   The layout is traced from the Wikipedia track map (tools/homebush_layout.py) and the world
+   keeps that map's orientation; everything below is placed in map pixels through ct52Q.
    Precinct: ANZ Stadium with its arched roof trusses, the Showground stadium, the Dome and
    exhibition halls (the paddock), the arena, Olympic Boulevard's light towers and
    merchandise alley, the station, hotels, a few apartment towers, offices, car parks and
    the warehouses around the park. */
-const CT52_HB={lane:9.4,wide:13.5,narrow:8.6,escape:30,tol:8};
+const CT52_HB={lane:9.4,wide:13.5,narrow:8.6,escape:30,tol:8,px:3.3165};
+// Map pixel (on the 500x345 track map) to layout metres.
+function ct52Q(px,py){return[(px-235)*CT52_HB.px,(py-168)*CT52_HB.px];}
 function ct52Hb(W){return W?.e?.key==='homebush';}
 CT48_STREET.push('homebush');
 DC36_CLIMATE.homebush={grass:'#6f8053',gravel:'#b5a38c'};
@@ -22,8 +26,8 @@ DC37_EVENT_BRANDS.homebush='Dunlop';DC37_REGION_BRANDS.homebush=['Destination NS
 // ---------- Street walls (the Gold Coast method, with a width per street) ----------
 function ct52Width(s){
  const mx=(s.a.x+s.b.x)/2,mz=(s.a.z+s.b.z)/2,ns=Math.abs(s.vz)>.8;
- if(ns&&s.l>300&&mx>300)return CT52_HB.wide;    // Australia Avenue
- if(ns&&s.l>300&&mx<-200)return CT52_HB.narrow; // Edwin Flack Avenue
+ if(ns&&s.l>200&&mx>400)return CT52_HB.wide;    // Australia Avenue
+ if(ns&&s.l>200&&mx<-400)return CT52_HB.narrow; // Edwin Flack Avenue
  return CT52_HB.lane;
 }
 function ct52Streets(W){
@@ -112,13 +116,16 @@ SC25World.prototype.makeTerrainGeometry=function(){
 // is whatever is left. Four layers in one RGBA texture, 2.4 m a texel, filtered smoothly.
 const CT52_MAP={size:2400,res:1024};
 function ct52Plan(){
- const R=(x0,z0,x1,z1)=>({rect:[x0,z0,x1,z1]}),E=(x,z,a,b)=>({ell:[x,z,a,b]}),Ln=(pts,w)=>({line:pts,w});
+ const P=(x,y)=>ct52Q(x,y),R=(x0,y0,x1,y1)=>({rect:[...P(x0,y0),...P(x1,y1)]}),E=(x,y,a,b)=>({ell:[...P(x,y),a,b]}),Ln=(pts,w)=>({line:pts.map(([x,y])=>P(x,y)),w});
  return{
-  pav:[R(28,-610,92,440),E(-120,-10,170,190),R(-260,-560,20,-240),E(-110,-390,112,126),R(92,-135,235,25),E(236,-410,64,64),R(240,370,440,450),R(90,380,230,450),R(-260,420,-60,560),R(345,-470,450,250),R(-640,420,-470,600)],
-  car:[R(-600,-470,-350,-150),R(-600,-110,-350,250),R(-250,-800,420,-640),R(600,-470,820,-170),R(110,60,330,220),R(-820,620,-300,800),R(580,620,900,780)],
-  bed:[R(-590,-150,-360,-110),R(-596,-420,-356,-400),R(-596,-300,-356,-280),R(-596,30,-356,50),R(-596,150,-356,170),R(600,-330,820,-310)],
-  road:[Ln([[530,300],[548,760]],24),Ln([[470,-520],[446,-1150]],22),Ln([[-300,-560],[-320,-1150]],16),Ln([[-312,330],[-760,345]],16),Ln([[530,300],[1000,310]],18),Ln([[60,560],[60,1000]],22),
-   Ln([[-700,560],[760,560]],16),Ln([[92,470],[545,470]],14),Ln([[990,-1300],[990,1300]],44),Ln([[-700,-1300],[-700,1300]],18),Ln([[-1000,-1300],[-1000,1300]],14),Ln([[-1300,-200],[-300,-200]],14),Ln([[-1300,300],[-320,300]],14),Ln([[-700,-880],[990,-880]],16),Ln([[400,330],[400,250]],10)],
+  // Olympic Boulevard's concourse, the stadium and Showground forecourts, the paddock behind the
+  // pits, the station plaza, hotel and arena forecourts.
+  pav:[Ln([[188,40],[193,62],[215,345],[219,420]],46),E(142,205,175,200),E(300,118,120,135),E(240,140,70,70),R(350,182,378,250),R(268,262,352,300),R(160,292,240,312),R(262,300,312,350)],
+  car:[R(300,186,348,248),R(10,150,62,272),R(185,5,372,38),R(402,180,470,262),R(90,300,150,300),R(400,300,470,345),R(20,295,60,345)],
+  bed:[R(12,215,60,221),R(186,8,370,11),R(404,262,468,266),R(266,302,350,306)],
+  road:[Ln([[379,55],[375,-120]],26),Ln([[391,277],[396,520]],26),Ln([[379,55],[600,50]],18),Ln([[169,60],[95,-10],[40,-80]],16),Ln([[87,139],[30,100],[-120,60]],16),
+   Ln([[79,280],[76,520]],14),Ln([[79,280],[-200,282]],16),Ln([[261,282],[600,284]],16),Ln([[205,300],[600,296]],12),Ln([[205,175],[385,175]],10),Ln([[262,175],[262,256]],10),
+   Ln([[225,97],[385,97]],9),Ln([[250,60],[250,175]],8),Ln([[357,60],[357,175]],8),Ln([[358,256],[386,256]],8),Ln([[-300,-40],[680,-40]],16),Ln([[640,-200],[640,520]],40),Ln([[-300,420],[680,420]],16)],
  };
 }
 function ct52LandUse(W){
@@ -401,41 +408,44 @@ function ct52BuildHomebush(W){
   for(const fa of [.12,.3,.48,.66,.84]){const q=dc32PitAt(W,fa),w=56,d=Math.min(108,W.pit.length*.18-10),c={x:q.p.x+q.n.x*gs*(40+w/2),y:0,z:q.p.z+q.n.z*gs*(40+w/2),ax:{x:q.n.x*gs,z:q.n.z*gs},az:{x:q.v.x,z:q.v.z}};
    ct52Place(W,'hall '+h,c,w,d,f=>{K.begin(f);ct52Hall(K,W,{...f,x:f.x-f.ax.x*w/2,z:f.z-f.ax.z*w/2},w,d,13,H,MB,'HALL '+h);},12,2);h++;}
   ct52Trucks(K,W,MB);}
- // Venues.
- ct52Place(W,'ANZ Stadium',ct52F(W,-120,-10),268,320,f=>{K.begin(f);ct52Stadium(K,W,f,H,MB);},20,2);
- ct52Place(W,'Showground stadium',ct52F(W,-110,-392),180,210,f=>{K.begin(f);ct52Showground(K,W,f,H,MB);},16,2);
- ct52Place(W,'The Dome',ct52F(W,236,-410),100,100,f=>{K.begin(f);ct52Dome(K,W,f,H,MB);},16,2);
- ct52Place(W,'Arena',ct52F(W,159,-55),120,130,f=>{K.begin(f);ct52Arena(K,W,{...f,x:f.x-f.ax.x*59,z:f.z-f.ax.z*59},H,MB);},16,2);
- ct52Place(W,'Station',ct52F(W,338,402),196,42,f=>{K.begin(f);ct52Station(K,W,f,H,MB);},16,2);
+ // Venues, in map pixels (ct52Q): the stadium between Edwin Flack Avenue and Olympic Boulevard,
+ // the Showground, Dome and halls inside the circuit, the station beside Murray Rose Avenue,
+ // the arena, hotels, Aquatic and Athletic Centres south of Dawn Fraser Avenue.
+ const F=(x,y,yaw=0)=>ct52F(W,...ct52Q(x,y),yaw);
+ ct52Place(W,'ANZ Stadium',F(142,205),268,320,f=>{K.begin(f);ct52Stadium(K,W,f,H,MB);},20,2);
+ ct52Place(W,'Showground stadium',F(300,118),180,210,f=>{K.begin(f);ct52Showground(K,W,f,H,MB);},16,2);
+ ct52Place(W,'The Dome',F(238,140),100,100,f=>{K.begin(f);ct52Dome(K,W,f,H,MB);},16,2);
+ ct52Place(W,'Arena',F(285,326),120,130,f=>{K.begin(f);ct52Arena(K,W,{...f,x:f.x-f.ax.x*59,z:f.z-f.ax.z*59},H,MB);},16,2);
+ ct52Place(W,'Station',F(310,272),196,42,f=>{K.begin(f);ct52Station(K,W,f,H,MB);},16,2);
  // Aquatic Centre: long glazed hall with exterior masts. Athletic Centre: field and main stand.
- ct52Place(W,'Aquatic Centre',ct52F(W,-160,482,-Math.PI/2),100,150,f=>{K.begin(f);K.tint=[1,1,1];K.box(f,0,9,0,100,18,150,{side:H.conc,front:MB.glass,top:null});K.tint=[.9,.92,.93];K.box(f,0,18.4,0,104,.8,154,{side:H.white,top:MB.roof});
+ ct52Place(W,'Aquatic Centre',F(348,338,-Math.PI/2),100,150,f=>{K.begin(f);K.tint=[1,1,1];K.box(f,0,9,0,100,18,150,{side:H.conc,front:MB.glass,top:null});K.tint=[.9,.92,.93];K.box(f,0,18.4,0,104,.8,154,{side:H.white,top:MB.roof});
   for(let z=-60;z<=60;z+=30){K.tint=[.95,.95,.95];K.box(f,-56,16,z,1.2,32,1.2,H.steel);ct52Tube(K,f,[-56,31,z],[-30,18.8,z],.2,H.steel);ct52Tube(K,f,[-56,31,z],[-52,0,z],.15,H.steel);}
   ct52Sign(W,f,-50.6,13,0,'SYDNEY OLYMPIC PARK AQUATIC CENTRE',60,'#0d4f8b');},16,2);
- ct52Place(W,'Athletic Centre',ct52F(W,-556,512),150,170,f=>{K.begin(f);const plan=[];for(let k=0;k<32;k++){const t=-k/32*Math.PI*2;plan.push([Math.cos(t)*52,Math.sin(t)*72]);}K.tint=[.85,.45,.38];K.prism(H.conc,f,ct48GcCCW(plan),.02,.1,H.conc,null);
+ ct52Place(W,'Athletic Centre',F(118,338),150,170,f=>{K.begin(f);const plan=[];for(let k=0;k<32;k++){const t=-k/32*Math.PI*2;plan.push([Math.cos(t)*52,Math.sin(t)*72]);}K.tint=[.85,.45,.38];K.prism(H.conc,f,ct48GcCCW(plan),.02,.1,H.conc,null);
   const inner=plan.map(([x,z])=>[x*.72,z*.82]);K.tint=[1,1,1];K.prism(H.pitch,f,ct48GcCCW(inner),.1,.14,H.pitch,null);const g={...f,x:f.x+f.ax.x*58,z:f.z+f.ax.z*58};K.begin(g);ct48Grandstand(K,W,g,90,MB,MB.seats.blue,null);},16,2);
- // Olympic Boulevard: nineteen light towers and the merchandise alley.
- let towers=0;for(let k=0;k<19;k++){const f=ct52F(W,78,-470+42*k);if(!ct52Clear(W,f,3,3,12,1))continue;K.begin(f);ct52LightTower(K,f,H);ct52Lot(W,f,3,3,'tower');towers++;}W.ct52Stats.towers=towers;
- for(const [z,len] of [[-300,280],[220,150]]){const f=ct52F(W,46,z,Math.PI);if(ct52Clear(W,{...f,x:f.x-8*sc},18,len,12,0)){K.begin(f);ct48GcMarket(K,W,f,len,2,M,people);ct52Lot(W,{...f,x:f.x+f.ax.x*7,z:f.z+f.ax.z*7},16,len+4,'market');}}
- // Hotels by the station, a few apartment towers, offices along Australia Avenue.
- const hotel=(name,x,z,w,d,Hh,seed,glass)=>ct52Place(W,name,ct52F(W,x,z,-Math.PI/2),w,d,f=>{K.begin(f);if(glass)ct48GcGlassTower(K,W,f,w,d,Hh,seed,M);else ct48GcRenderBlock(K,W,f,w,d,Hh,seed,M,people,false);W.ct52Signs.push({f,x:-w/2-.3,y:Hh+2.4,w:Math.min(d*.7,20),text:name});},12,2);
- W.ct52Signs=[];hotel('NOVOTEL',140,410,24,44,46.5,7,false);hotel('IBIS',200,412,20,32,34.5,8,false);hotel('PULLMAN',-30,410,28,44,30,9,true);
- const tower=(x,z,yaw,w,d,Hh,seed,kind)=>ct52Place(W,'tower '+seed,ct52F(W,x,z,yaw),w,d,f=>{K.begin(f);if(kind==='glass')ct48GcGlassTower(K,W,f,w,d,Hh,seed,M);else ct48GcBalconyTower(K,W,f,w,d,Hh,seed,M,people,true);},12,3);
- tower(668,90,0,30,40,74,21,'balcony');tower(690,-60,0,28,36,62,22,'balcony');tower(708,250,0,30,42,86,23,'balcony');tower(380,560,-Math.PI/2,28,40,68,24,'balcony');tower(480,566,-Math.PI/2,26,36,56,25,'balcony');
- tower(160,-262,Math.PI,34,48,18,41,'glass');tower(250,-250,Math.PI,30,44,22,42,'glass');tower(165,-420,Math.PI,30,40,16,43,'glass');
- tower(668,-290,0,40,56,38,31,'glass');tower(680,-440,0,36,50,44,32,'glass');tower(760,-600,0,34,44,30,33,'glass');
+ // Olympic Boulevard: the light towers down the concourse and the merchandise alley.
+ let towers=0;for(let k=0;k<17;k++){const y=74+k*12.4,f=F(193+(y-62)*22/283+9,y);if(!ct52Clear(W,f,3,3,12,1))continue;K.begin(f);ct52LightTower(K,f,H);ct52Lot(W,f,3,3,'tower');towers++;}W.ct52Stats.towers=towers;
+ {const yaw=-Math.atan2(22,283);for(const [y,len] of [[120,200],[230,140]]){const f=F(193+(y-62)*22/283-4,y,yaw+Math.PI);if(ct52Clear(W,{...f,x:f.x-8*sc,z:f.z},18,len,12,0)){K.begin(f);ct48GcMarket(K,W,f,len,2,M,people);ct52Lot(W,{...f,x:f.x+f.ax.x*7,z:f.z+f.ax.z*7},16,len+4,'market');}}}
+ // Hotels by Olympic Boulevard, a few apartment towers, offices around the park.
+ const hotel=(name,x,y,w,d,Hh,seed,glass)=>ct52Place(W,name,F(x,y,-Math.PI/2),w,d,f=>{K.begin(f);if(glass)ct48GcGlassTower(K,W,f,w,d,Hh,seed,M);else ct48GcRenderBlock(K,W,f,w,d,Hh,seed,M,people,false);W.ct52Signs.push({f,x:-w/2-.3,y:Hh+2.4,w:Math.min(d*.7,20),text:name});},12,2);
+ W.ct52Signs=[];hotel('NOVOTEL',236,301,24,44,46.5,7,false);hotel('IBIS',236,326,20,32,34.5,8,false);hotel('PULLMAN',176,304,28,44,30,9,true);
+ const tower=(x,y,yaw,w,d,Hh,seed,kind)=>ct52Place(W,'tower '+seed,F(x,y,yaw),w,d,f=>{K.begin(f);if(kind==='glass')ct48GcGlassTower(K,W,f,w,d,Hh,seed,M);else ct48GcBalconyTower(K,W,f,w,d,Hh,seed,M,people,true);},12,3);
+ tower(426,212,0,30,40,74,21,'balcony');tower(448,262,0,28,36,62,22,'balcony');tower(426,318,0,30,42,86,23,'balcony');tower(472,318,0,28,40,68,24,'balcony');tower(120,22,-Math.PI/2,26,36,56,25,'balcony');
+ tower(250,22,Math.PI/2,34,48,18,41,'glass');tower(300,22,Math.PI/2,30,44,22,42,'glass');tower(345,22,Math.PI/2,30,40,16,43,'glass');
+ tower(430,30,0,40,56,38,31,'glass');tower(482,90,0,36,50,44,32,'glass');tower(485,175,0,34,44,30,33,'glass');
  W.ct48GcSigns=[];
  // Grandstands behind the walls.
  const stand=(ph,side,len,seat,brand)=>{const i=Math.floor(W.at(ph).t*W.N)%W.N,L=walls.lane[side][i];for(let t=0;t<6;t++){const f=ct48Frame(W,ph,side,L+3.5+t*5);const c={...f,x:f.x+f.ax.x*9.5,z:f.z+f.ax.z*9.5};if(!ct48Clear(W,f,19,len+4,L+2,6)||!ct52Clear(W,c,21,len+6,L+2,1))continue;K.begin(f);ct48Grandstand(K,W,f,len,MB,MB.seats[seat],brand);ct52Lot(W,c,21,len+6,'stand');W.ct52Stats.stands=(W.ct52Stats.stands||0)+1;return;}};
- stand(.975,1,64,'blue','Dunlop');stand(.04,1,56,'red','Repco');stand(.15,1,44,'orange','Supercheap Auto');stand(.27,1,50,'green','Shell');stand(.375,1,40,'blue','Penrite');stand(.49,1,52,'red','Bosch');stand(.585,1,40,'orange','Castrol');
- stand(.64,1,50,'blue','Mobil 1');stand(.70,1,44,'green','Pirtek');stand(.76,1,44,'red','Dunlop');stand(.83,1,40,'blue','Coca-Cola');stand(.905,1,48,'orange','Repco');
+ stand(.975,1,64,'blue','Dunlop');stand(.05,1,56,'red','Repco');stand(.125,1,44,'orange','Supercheap Auto');stand(.2,1,50,'green','Shell');stand(.27,1,40,'blue','Penrite');stand(.325,1,52,'red','Bosch');stand(.41,1,40,'orange','Castrol');
+ stand(.53,1,50,'blue','Mobil 1');stand(.58,1,44,'green','Pirtek');stand(.65,1,44,'red','Dunlop');stand(.72,1,40,'blue','Coca-Cola');stand(.76,1,48,'orange','Repco');stand(.915,1,44,'green','Shell');
  // Footbridges over the track.
- let bridges=0;for(const [ph,b] of [[.125,'Repco'],[.205,'Dunlop'],[.45,'Supercheap Auto'],[.53,'Penrite'],[.69,'Shell'],[.775,'Repco']]){const i=Math.floor(W.at(ph).t*W.N)%W.N;if(ct52Bridge(K,W,MB,H,i,b))bridges++;}W.ct52Stats.bridges=bridges;
+ let bridges=0;for(const [ph,b] of [[.1,'Repco'],[.225,'Dunlop'],[.4,'Supercheap Auto'],[.55,'Penrite'],[.68,'Shell'],[.85,'Repco']]){const i=Math.floor(W.at(ph).t*W.N)%W.N;if(ct52Bridge(K,W,MB,H,i,b))bridges++;}W.ct52Stats.bridges=bridges;
  // Warehouses: Homebush Bay and Silverwater industrial land to the west and north.
  let sheds=0;const shed=(x,z,yaw,seed,far)=>{const w=34+ct48Hash(seed,1)*40,d=44+ct48Hash(seed,2)*60,h=8+ct48Hash(seed,3)*5,f=ct52F(W,x,z,yaw);if(!ct52Clear(W,{...f,x:f.x-f.ax.x*12,z:f.z-f.ax.z*12},w+24,d,30,6))return;K.begin(f);ct52Warehouse(K,W,f,w,d,h,seed,H,MB,far);ct52Lot(W,f,w,d,'warehouse');sheds++;
   // Trucks and staff cars in the yard.
   for(let k=0;k<4;k++){const q=K52at(f,-w/2-9,0,-d/2+6+k*7);if(ct48Hash(seed,k+9)<.6)cars.push([q[0],q[2],Math.atan2(f.ax.x,f.ax.z),Math.floor(ct48Hash(seed,k)*1000)]);}};
  let seed=101;for(let x=-780;x>=-1300;x-=125)for(let z=-1080;z<=700;z+=118){shed(x+(ct48Hash(x,z)-.5)*20,z+(ct48Hash(z,x)-.5)*20,0,seed++,x<-1050);}
- for(let x=-640;x<=900;x+=136)for(const z of [-960,-1100,-1240]){if(z===-960&&x>-300&&x<450)continue;shed(x+(ct48Hash(x,z)-.5)*24,z,Math.PI/2,seed++,z<-1150);}
+ for(let x=-640;x<=900;x+=136)for(const z of [-800,-940,-1080,-1220]){shed(x+(ct48Hash(x,z)-.5)*24,z,Math.PI/2,seed++,z<-1150);}
  for(let x=-760;x>=-1250;x-=150)for(const z of [880,1020])shed(x,z,0,seed++,true);W.ct52Stats.warehouses=sheds;
  K.flush('Olympic Park precinct');
  for(const s of W.ct52Signs){const p=K52at(s.f,s.x,s.y,0);W.signPlane(W.sign(s.text,'#123247',1024,128),s.w,s.w/8,new THREE.Vector3(...p),Math.atan2(-s.f.ax.x,-s.f.ax.z));}
@@ -446,7 +456,7 @@ function ct52BuildHomebush(W){
     if(x<x0||x>x1||z<z0||z>z1)continue;const k=Math.floor(ct48Hash(u,v+rv)*1000);if(k%100<50||cars.length>8000)continue;const L=land.at(x,z);if(L[1]<.6||L[0]>.3)continue;if(!okTree(x,z,2.6))continue;cars.push([x,z,Math.atan2(dir.x,dir.z)+(k%2?Math.PI:0),k]);}}}
  W.ct52Stats.cars=cars.length;
  // Spectators along the fences where there is room, facing the track.
- for(let i=0;i<W.N;i+=2)for(const side of [-1,1]){const s=W.samples[i],L=walls.lane[side][i],ph=i/W.N;const busy=(ph>.94||ph<.1||ph>.62&&ph<.8||ph>.24&&ph<.3)?.7:.25;
+ for(let i=0;i<W.N;i+=2)for(const side of [-1,1]){const s=W.samples[i],L=walls.lane[side][i],ph=i/W.N;const busy=(ph>.92||ph<.16||ph>.29&&ph<.36||ph>.58&&ph<.62||ph>.76&&ph<.8)?.7:.25;
   for(let row=0;row<3;row++){if(ct48Hash(i,side*7+row)>busy)continue;const l=L+2.2+row*.9+ct48Hash(i,row)*.4,x=s.p.x+s.n.x*side*l+s.v.x*(ct48Hash(row,i)-.5)*1.5,z=s.p.z+s.n.z*side*l+s.v.z*(ct48Hash(row,i)-.5)*1.5;
    if(ct48GcInside(W,x,z,.6)||ct52Hit(W,x,z,.4)||(W.ct48Reserved||[]).some(q=>Math.hypot(q.x-x,q.z-z)<q.r)||W.pit?.samples&&(W.pitDistance(x,z)<12||ct48PitFloor(W,x,z,4)!==null))continue;people.push([x,0,z,Math.atan2(-s.n.x*side,-s.n.z*side)+(ct48Hash(i,row,3)-.5)*.6,ct48Hash(i,side,row)]);}}
  // Trees: avenues along the streets, a line outside the walls, parkland and bush beyond.
