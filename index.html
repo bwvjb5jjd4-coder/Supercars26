@@ -3630,7 +3630,7 @@ const RF41_TEXTURES=new Map();
 async function rf41LoadTextures(){
  const data=JSON.parse(document.getElementById('rf41-liveries').textContent),probe=document.createElement('canvas').getContext('webgl2')||document.createElement('canvas').getContext('webgl'),compressed=!!probe?.getExtension('WEBGL_compressed_texture_s3tc')&&!!probe?.getExtension('WEBGL_compressed_texture_s3tc_srgb');
  probe?.getExtension('WEBGL_lose_context')?.loseContext();
- const files=new Map(Object.entries(data).map(([key,row])=>[key,fetch(compressed?row.dds:row.webp).then(r=>{if(!r.ok)throw Error('Livery '+key+' failed to load ('+r.status+')');return r.arrayBuffer()})]));
+ const files=new Map(Object.entries(data).map(([key,row])=>[key,fetch(compressed?row.dds:row.webp,{cache:'no-cache'}).then(r=>{if(!r.ok)throw Error('Livery '+key+' failed to load ('+r.status+')');return r.arrayBuffer()})]));
  for(const [key,row]of Object.entries(data)){
   let tex;
   if(compressed){
