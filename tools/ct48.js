@@ -56,7 +56,7 @@ function ct48LowerTerrain(W,g){
 }
 const ct48Terrain=SC25World.prototype.makeTerrainGeometry;
 SC25World.prototype.makeTerrainGeometry=function(){
- const g=this.e.key==='bathurst'&&typeof ct48BathurstTerrain==='function'?ct48BathurstTerrain(this):ct48Terrain.call(this);
+ const g=(typeof ct48CustomTerrain==='function'&&ct48CustomTerrain(this))||ct48Terrain.call(this);
  ct48LowerTerrain(this,g);this.ct48TerrainGeometry=g;return g;
 };
 

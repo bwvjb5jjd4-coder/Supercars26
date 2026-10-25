@@ -44,6 +44,8 @@ function ct48TerrainColour(W,x,z){
  const i=Math.floor(gx),j=Math.floor(gz),u=gx-i,v=gz-j,k=j*(N+1)+i,out=[0,0,0];
  for(let ch=0;ch<3;ch++){const h=o=>c[(k+o)*3+ch];out[ch]=u+v<=1?h(0)*(1-u-v)+h(1)*u+h(N+1)*v:h(N+2)*(u+v-1)+h(N+1)*(1-u)+h(1)*(1-v);}return out;
 }
+// Circuits with their own terrain plug in here (Bathurst, and the ct49 circuits).
+function ct48CustomTerrain(W){return W.e.key==='bathurst'?ct48BathurstTerrain(W):null;}
 // Height lookups made before the mesh exists use the analytic mountain.
 const ct48TerrainHeight=SC25World.prototype.terrainHeight;
 SC25World.prototype.terrainHeight=function(x,z){
@@ -217,14 +219,14 @@ function ct48PitComplex(K,W,M){
  const pit=W.pit;if(!pit?.samples||!pit.bays?.length)return;const side=pit.bays[Math.floor(pit.bays.length/2)].side;
  const garages=(W.sc27Structures||[]).filter(b=>b.kind==='pit garage');if(!garages.length)return;
  const fs=garages.map(b=>dc32PitNear(W,{x:b.x,z:b.z}).f),half=(garages[0].d/2+.5)/pit.length,from=Math.min(...fs)-half,to=Math.max(...fs)+half,chunks=Math.max(4,Math.round((to-from)*pit.length/24));
- const y0=5.65,floor=3.7,top=y0+floor*2,frameAt=(fa,fb)=>{const a=dc32PitAt(W,fa),b=dc32PitAt(W,fb),mid=dc32PitAt(W,(fa+fb)/2),az={x:b.p.x-a.p.x,z:b.p.z-a.p.z},l=Math.hypot(az.x,az.z)||1;az.x/=l;az.z/=l;return{f:{x:(a.p.x+b.p.x)/2,y:Math.max(a.p.y,b.p.y),z:(a.p.z+b.p.z)/2,ax:{x:mid.n.x*side,z:mid.n.z*side},az},len:l+.04};};
+ const opt=W.ct48PitOpts||{},floors=opt.floors||2,y0=5.65,floor=3.7,top=y0+floor*floors,frameAt=(fa,fb)=>{const a=dc32PitAt(W,fa),b=dc32PitAt(W,fb),mid=dc32PitAt(W,(fa+fb)/2),az={x:b.p.x-a.p.x,z:b.p.z-a.p.z},l=Math.hypot(az.x,az.z)||1;az.x/=l;az.z/=l;return{f:{x:(a.p.x+b.p.x)/2,y:Math.max(a.p.y,b.p.y),z:(a.p.z+b.p.z)/2,ax:{x:mid.n.x*side,z:mid.n.z*side},az},len:l+.04};};
  const low=(f,x0,x1,len)=>{let lo=f.y;for(const x of [x0,(x0+x1)/2,x1])for(const z of [-.5,0,.5]){const X=f.x+f.ax.x*x+f.az.x*z*len,Z=f.z+f.ax.z*x+f.az.z*z*len;lo=Math.min(lo,gr26SceneryGround(W,X,Z));}return lo-f.y-.3;};
  for(let c=0;c<chunks;c++){const {f,len}=frameAt(from+(to-from)*c/chunks,from+(to-from)*(c+1)/chunks),uo=c*len;
   // Two floors of suites: glass to the pit lane, ribbon windows to the back, louvre fins.
-  K.box(f,16.5,y0+floor,0,14,floor*2,len,{front:M.glass,back:M.ribbon,left:M.concrete,right:M.concrete,top:M.concrete,bottom:M.underside,uo});
-  K.box(f,16.5,y0+floor,0,13.6,.3,len,{side:M.concrete});
-  for(let z=-len/2+1.5;z<len/2;z+=3)K.box(f,9.2,y0+floor,z,.6,floor*2,.12,M.white);
-  for(const lvl of [0,1]){const y=y0+lvl*floor;K.box(f,8.8,y+.12,0,1.4,.24,len,{side:M.white,bottom:M.white});K.lquad(M.rail,f,[[8.12,y+.24,-len/2],[8.12,y+.24,len/2],[8.12,y+1.3,len/2],[8.12,y+1.3,-len/2]],[-1,0,0]);K.box(f,8.12,y+1.32,0,.08,.06,len,M.steel);}
+  K.box(f,16.5,y0+floor*floors/2,0,14,floor*floors,len,{front:M.glass,back:M.ribbon,left:M.concrete,right:M.concrete,top:M.concrete,bottom:M.underside,uo});
+  for(let l=1;l<floors;l++)K.box(f,16.5,y0+floor*l,0,13.6,.3,len,{side:M.concrete});
+  for(let z=-len/2+1.5;z<len/2;z+=3)K.box(f,9.2,y0+floor*floors/2,z,.6,floor*floors,.12,M.white);
+  for(let lvl=0;lvl<floors;lvl++){const y=y0+lvl*floor;K.box(f,8.8,y+.12,0,1.4,.24,len,{side:M.white,bottom:M.white});K.lquad(M.rail,f,[[8.12,y+.24,-len/2],[8.12,y+.24,len/2],[8.12,y+1.3,len/2],[8.12,y+1.3,-len/2]],[-1,0,0]);K.box(f,8.12,y+1.32,0,.08,.06,len,M.steel);}
   // Concrete garage floors right through to the back wall (no grass inside).
   K.lquad(M.concreteWarm,f,[[7.6,.025,-len/2],[19.6,.025,-len/2],[19.6,.025,len/2],[7.6,.025,len/2]],[0,1,0]);
   // Rear service block down to the ground, with a loading door every other bay.
@@ -237,8 +239,9 @@ function ct48PitComplex(K,W,M){
  }
  // Stair and lift cores at both ends, from the ground up past the roof.
  for(const [fa,dir] of [[from,-1],[to,1]]){const g=frameAt(fa,fa+dir*7/pit.length),f=g.f,b0=low(f,9.5,24,7);K.box(f,16.5,(b0+top+2.2)/2,dir*0,14,top+2.2-b0,7,{side:M.concreteWarm,top:M.concrete});K.lquad(M.glass,f,[[9.47,b0+.5,-1.2],[9.47,b0+.5,1.2],[9.47,top+1.8,1.2],[9.47,top+1.8,-1.2]],[-1,0,0],[0,0,1.5,0,1.5,3.6,0,3.6]);ct48Reserve(W,f,24,8,top+3,'pit core');}
+ W.ct48PitSpan={from,to,top,side,frameAt};
  const m=dc32PitAt(W,(from+to)/2),q=m.p.clone().addScaledVector(m.n,side*6.3);q.y+=top+.3;
- W.signPlane(W.sign('MOUNT PANORAMA  ·  BATHURST','#14324a',1024,96),70,1.6,q,Math.atan2(-m.n.x*side,-m.n.z*side));
+ W.signPlane(W.sign(opt.name||'MOUNT PANORAMA  ·  BATHURST',opt.signColour||'#14324a',1024,96),Math.min(70,(to-from)*pit.length*.6),1.6,q,Math.atan2(-m.n.x*side,-m.n.z*side));
  // Race control beyond the pit exit end: four floors, wider glass control room, mast.
  const e=dc32PitAt(W,Math.min(.95,to+.06)),ax={x:e.n.x*side,z:e.n.z*side},az={x:e.v.x,z:e.v.z},f={x:e.p.x+ax.x*13,y:e.p.y,z:e.p.z+ax.z*13,ax,az};
  if(ct48Clear(W,f,10,10,12,0)){const b0=low(f,0,10,10);K.box(f,5,(b0+14)/2,0,8,14-b0,8,{side:M.ribbon,top:M.concrete});K.box(f,4.6,16,0,10.5,4,10,{side:M.glass,top:M.concrete});K.box(f,4.6,18.25,0,11.5,.5,11,{side:M.white,top:M.roof});K.box(f,6,22,2,.18,7,.18,M.steel);K.box(f,6,24.5,2,1.4,.12,.12,M.steel);
@@ -422,7 +425,7 @@ function ct48Forest(W){
  for(let i=0;i<16000;i++){const s=W.at(W.rnd()),side=W.rnd()<.5?-1:1,l=24+Math.pow(W.rnd(),1.6)*240,x=s.p.x+s.n.x*side*l+(W.rnd()-.5)*20,z=s.p.z+s.n.z*side*l+(W.rnd()-.5)*20;
   if(W.nearest({x,z}).distance<23||blocked(x,z,1.5))continue;if(W.pit?.samples&&(W.pitDistance(x,z)<25||ct48PitFloor(W,x,z,6)!==null))continue;if(W.rnd()<.25)add('tree',x,z,9+W.rnd()*12);else add('shrub',x,z,1.4+W.rnd()*1.8);}
  for(const [x,z,k] of W.ct48Garden||[])k==='tree'?add('tree',x,z,7+W.rnd()*5):add('shrub',x,z,1.0+W.rnd()*.8);
- const mat=(map)=>{const m=new T.MeshStandardMaterial({map,color:'#a3ab95',alphaTest:.45,side:T.DoubleSide,roughness:.95});return m;},mt=mat(tex.tree),ms=mat(tex.shrub),dummy=new T.Object3D(),col=new T.Color();let total=0;
+ const mat=(map)=>{const m=new T.MeshStandardMaterial({map,color:'#a3ab95',alphaTest:.45,side:T.DoubleSide,roughness:.95});return typeof ct49Foliage==='function'?ct49Foliage(m):m;},mt=mat(tex.tree),ms=mat(tex.shrub),dummy=new T.Object3D(),col=new T.Color();let total=0;
  for(const [kind,list] of Object.entries(rows))list.forEach((items,v)=>{if(!items.length)return;const n=list.length,g=ct48Billboard(v/n+.002,(v+1)/n-.002),m=new T.InstancedMesh(g,kind==='tree'?mt:ms,items.length);m.name=`Bathurst ${kind}s ${v}`;
   items.forEach(([x,y,z,w,h,yaw,shade],i)=>{dummy.position.set(x,y,z);dummy.rotation.set(0,yaw,0);dummy.scale.set(w,h,w);dummy.updateMatrix();m.setMatrixAt(i,dummy.matrix);m.setColorAt(i,col.setRGB(shade,shade,shade*.96));});
   m.computeBoundingSphere();m.receiveShadow=false;m.castShadow=false;W.world.add(m);total+=items.length;});
