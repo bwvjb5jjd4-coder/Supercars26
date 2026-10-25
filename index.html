@@ -4962,6 +4962,30 @@ function ct48SeatWalls(W){
 const ct48SceneryWalls=SC25World.prototype.makeScenery;
 SC25World.prototype.makeScenery=function(){ct48SeatWalls(this);return ct48SceneryWalls.call(this);};
 
+// Sponsor signage sized like the real thing: logos fill the whole concrete face and large mesh
+// banners hang on the catch fence above. Both are seated on the actual wall rows, so nothing floats.
+function ct48WallBoards(W,brand,add){
+ const rows=W.batches.wall?.rows||[],street=ct48Street(W),face=street?1.1:.85,bh=face-.14,bw=bh*4;let n=0;
+ for(const r of rows){const [x,y,z,w,h,d,yaw]=r,fx=Math.sin(yaw||0),fz=Math.cos(yaw||0),q=W.samples[W.nearest({x,z}).i].p;
+  let nx=q.x-x,nz=q.z-z;const l=Math.hypot(nx,nz)||1;nx/=l;nz/=l;const normal=new THREE.Vector3(nx,0,nz),top=y+h/2,b=brand(n++);
+  const k=Math.max(1,Math.floor((d-.2)/(bw+.12))),gap=(d-k*bw)/k;
+  for(let j=0;j<k;j++){const t=-d/2+gap/2+bw/2+j*(bw+gap);add(new THREE.Vector3(x+fx*t+nx*(w/2+.03),top-face+.07+bh/2,z+fz*t+nz*(w/2+.03)),normal,bw,bh,b,'barrier');}
+  // Banner on every second fence panel (the same panels makeCatchFencing builds).
+  if(n%2===0&&d>5.6&&W.footprintClear(x,z,.18,d,yaw,street?8.8:15.5,6.8)){const H=1.3,Wd=Math.min(H*4,d-.3);
+   add(new THREE.Vector3(x+nx*.07,top+.18+H/2,z+nz*.07),normal,Wd,Wd/4,brand(n+5),'fence');}
+ }
+}
+const ct48FlushBoards=dc37FlushBoards;
+dc37FlushBoards=function(W,rows){
+ const old=rows.filter(r=>r.type==='barrier').map(r=>r.brand);
+ if(old.length){rows=rows.filter(r=>r.type!=='barrier');const brand=i=>old[Math.floor(i/2)%old.length],atlas=dc37Atlas(W);
+  ct48WallBoards(W,brand,(p,normal,width,height,b,type)=>{const index=atlas.names.indexOf(b);if(index<0)return;
+   const right=new THREE.Vector3().crossVectors(new THREE.Vector3(0,1,0),normal).normalize(),corners=[];
+   for(const [x,y] of [[-1,-1],[1,-1],[1,1],[-1,1]])corners.push(p.clone().addScaledVector(right,x*width/2).add(new THREE.Vector3(0,y*height/2,0)));
+   rows.push({corners,index,brand:b,type,center:p.clone(),width,height});});}
+ return ct48FlushBoards(W,rows);
+};
+
 /* CT48 Bathurst: Mount Panorama as the template circuit.
    Terrain: a real mountain (the circuit climbs its flank; the summit sits inside the loop,
    the far side of Skyline falls away, rolling hills on the horizon) on a 4x finer grid.
@@ -5184,7 +5208,7 @@ function ct48PitComplex(K,W,M){
  const low=(f,x0,x1,len)=>{let lo=f.y;for(const x of [x0,(x0+x1)/2,x1])for(const z of [-.5,0,.5]){const X=f.x+f.ax.x*x+f.az.x*z*len,Z=f.z+f.ax.z*x+f.az.z*z*len;lo=Math.min(lo,gr26SceneryGround(W,X,Z));}return lo-f.y-.3;};
  for(let c=0;c<chunks;c++){const {f,len}=frameAt(from+(to-from)*c/chunks,from+(to-from)*(c+1)/chunks),uo=c*len;
   // Two floors of suites: glass to the pit lane, ribbon windows to the back, louvre fins.
-  K.box(f,16.5,y0+floor,0,14,floor*2,len,{front:M.glass,back:M.ribbon,left:M.concrete,right:M.concrete,top:M.concrete,uo});
+  K.box(f,16.5,y0+floor,0,14,floor*2,len,{front:M.glass,back:M.ribbon,left:M.concrete,right:M.concrete,top:M.concrete,bottom:M.underside,uo});
   K.box(f,16.5,y0+floor,0,13.6,.3,len,{side:M.concrete});
   for(let z=-len/2+1.5;z<len/2;z+=3)K.box(f,9.2,y0+floor,z,.6,floor*2,.12,M.white);
   for(const lvl of [0,1]){const y=y0+lvl*floor;K.box(f,8.8,y+.12,0,1.4,.24,len,{side:M.white,bottom:M.white});K.lquad(M.rail,f,[[8.12,y+.24,-len/2],[8.12,y+.24,len/2],[8.12,y+1.3,len/2],[8.12,y+1.3,-len/2]],[-1,0,0]);K.box(f,8.12,y+1.32,0,.08,.06,len,M.steel);}
@@ -5391,4 +5415,22 @@ function ct48Forest(W){
   m.computeBoundingSphere();m.receiveShadow=false;m.castShadow=false;W.world.add(m);total+=items.length;});
  W.ct48Bush={trees:rows.tree.reduce((a,b)=>a+b.length,0),shrubs:rows.shrub.reduce((a,b)=>a+b.length,0)};return total;
 }
+
+// Mountain walls get the same full-face logos and fence banners as the rest of the circuit.
+const ct48WallBoardsBase=ct48WallBoards;
+ct48WallBoards=function(W,brand,add){
+ ct48WallBoardsBase(W,brand,add);if(W.e.key!=='bathurst')return;
+ const N=W.N,S=W.samples,bh=.58,bw=bh*4,H=1.1;let n=1000;
+ for(const side of [-1,1]){let run=0,fence=0;
+  for(let k=0;k<N;k++){const s=S[k],L=ct48WallAt(W,k,side);if(L>15.5){run=fence=0;continue;}
+   const prev=S[(k-1+N)%N];run+=s.p.distanceTo(prev.p);fence+=s.p.distanceTo(prev.p);
+   const ground=(gr27Surface(W,s.p.x+s.n.x*side*L,s.p.z+s.n.z*side*L,s.p.y,false)?.y??s.p.y)-.06,normal=s.n.clone().multiplyScalar(-side);
+   if(run>=bw+.15){run=0;const p=s.p.clone().addScaledVector(s.n,side*(L+.17));p.y=ground+.36+bh/2;add(p,normal,bw,bh,brand(n++),'barrier');}
+   if(fence>=H*4*2.2){const p=s.p.clone().addScaledVector(s.n,side*(L+.35)),right=new THREE.Vector3().crossVectors(new THREE.Vector3(0,1,0),normal).normalize();
+    // Only on gentle curves, so the banner never cuts through the fence mesh.
+    const ok=[-1,1].every(e=>{const c=p.clone().addScaledVector(right,e*H*2),dd=W.nearest(c).distance;return dd>L+.2&&dd<L+.39;});
+    if(ok){fence=0;p.y=ground+1.12+H/2;add(p,normal,H*4,H,brand(n+7),'fence');}}
+  }
+ }
+};
 </script></body></html>

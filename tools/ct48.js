@@ -228,3 +228,27 @@ function ct48SeatWalls(W){
 }
 const ct48SceneryWalls=SC25World.prototype.makeScenery;
 SC25World.prototype.makeScenery=function(){ct48SeatWalls(this);return ct48SceneryWalls.call(this);};
+
+// Sponsor signage sized like the real thing: logos fill the whole concrete face and large mesh
+// banners hang on the catch fence above. Both are seated on the actual wall rows, so nothing floats.
+function ct48WallBoards(W,brand,add){
+ const rows=W.batches.wall?.rows||[],street=ct48Street(W),face=street?1.1:.85,bh=face-.14,bw=bh*4;let n=0;
+ for(const r of rows){const [x,y,z,w,h,d,yaw]=r,fx=Math.sin(yaw||0),fz=Math.cos(yaw||0),q=W.samples[W.nearest({x,z}).i].p;
+  let nx=q.x-x,nz=q.z-z;const l=Math.hypot(nx,nz)||1;nx/=l;nz/=l;const normal=new THREE.Vector3(nx,0,nz),top=y+h/2,b=brand(n++);
+  const k=Math.max(1,Math.floor((d-.2)/(bw+.12))),gap=(d-k*bw)/k;
+  for(let j=0;j<k;j++){const t=-d/2+gap/2+bw/2+j*(bw+gap);add(new THREE.Vector3(x+fx*t+nx*(w/2+.03),top-face+.07+bh/2,z+fz*t+nz*(w/2+.03)),normal,bw,bh,b,'barrier');}
+  // Banner on every second fence panel (the same panels makeCatchFencing builds).
+  if(n%2===0&&d>5.6&&W.footprintClear(x,z,.18,d,yaw,street?8.8:15.5,6.8)){const H=1.3,Wd=Math.min(H*4,d-.3);
+   add(new THREE.Vector3(x+nx*.07,top+.18+H/2,z+nz*.07),normal,Wd,Wd/4,brand(n+5),'fence');}
+ }
+}
+const ct48FlushBoards=dc37FlushBoards;
+dc37FlushBoards=function(W,rows){
+ const old=rows.filter(r=>r.type==='barrier').map(r=>r.brand);
+ if(old.length){rows=rows.filter(r=>r.type!=='barrier');const brand=i=>old[Math.floor(i/2)%old.length],atlas=dc37Atlas(W);
+  ct48WallBoards(W,brand,(p,normal,width,height,b,type)=>{const index=atlas.names.indexOf(b);if(index<0)return;
+   const right=new THREE.Vector3().crossVectors(new THREE.Vector3(0,1,0),normal).normalize(),corners=[];
+   for(const [x,y] of [[-1,-1],[1,-1],[1,1],[-1,1]])corners.push(p.clone().addScaledVector(right,x*width/2).add(new THREE.Vector3(0,y*height/2,0)));
+   rows.push({corners,index,brand:b,type,center:p.clone(),width,height});});}
+ return ct48FlushBoards(W,rows);
+};

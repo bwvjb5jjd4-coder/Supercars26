@@ -221,7 +221,7 @@ function ct48PitComplex(K,W,M){
  const low=(f,x0,x1,len)=>{let lo=f.y;for(const x of [x0,(x0+x1)/2,x1])for(const z of [-.5,0,.5]){const X=f.x+f.ax.x*x+f.az.x*z*len,Z=f.z+f.ax.z*x+f.az.z*z*len;lo=Math.min(lo,gr26SceneryGround(W,X,Z));}return lo-f.y-.3;};
  for(let c=0;c<chunks;c++){const {f,len}=frameAt(from+(to-from)*c/chunks,from+(to-from)*(c+1)/chunks),uo=c*len;
   // Two floors of suites: glass to the pit lane, ribbon windows to the back, louvre fins.
-  K.box(f,16.5,y0+floor,0,14,floor*2,len,{front:M.glass,back:M.ribbon,left:M.concrete,right:M.concrete,top:M.concrete,uo});
+  K.box(f,16.5,y0+floor,0,14,floor*2,len,{front:M.glass,back:M.ribbon,left:M.concrete,right:M.concrete,top:M.concrete,bottom:M.underside,uo});
   K.box(f,16.5,y0+floor,0,13.6,.3,len,{side:M.concrete});
   for(let z=-len/2+1.5;z<len/2;z+=3)K.box(f,9.2,y0+floor,z,.6,floor*2,.12,M.white);
   for(const lvl of [0,1]){const y=y0+lvl*floor;K.box(f,8.8,y+.12,0,1.4,.24,len,{side:M.white,bottom:M.white});K.lquad(M.rail,f,[[8.12,y+.24,-len/2],[8.12,y+.24,len/2],[8.12,y+1.3,len/2],[8.12,y+1.3,-len/2]],[-1,0,0]);K.box(f,8.12,y+1.32,0,.08,.06,len,M.steel);}
@@ -428,3 +428,21 @@ function ct48Forest(W){
   m.computeBoundingSphere();m.receiveShadow=false;m.castShadow=false;W.world.add(m);total+=items.length;});
  W.ct48Bush={trees:rows.tree.reduce((a,b)=>a+b.length,0),shrubs:rows.shrub.reduce((a,b)=>a+b.length,0)};return total;
 }
+
+// Mountain walls get the same full-face logos and fence banners as the rest of the circuit.
+const ct48WallBoardsBase=ct48WallBoards;
+ct48WallBoards=function(W,brand,add){
+ ct48WallBoardsBase(W,brand,add);if(W.e.key!=='bathurst')return;
+ const N=W.N,S=W.samples,bh=.58,bw=bh*4,H=1.1;let n=1000;
+ for(const side of [-1,1]){let run=0,fence=0;
+  for(let k=0;k<N;k++){const s=S[k],L=ct48WallAt(W,k,side);if(L>15.5){run=fence=0;continue;}
+   const prev=S[(k-1+N)%N];run+=s.p.distanceTo(prev.p);fence+=s.p.distanceTo(prev.p);
+   const ground=(gr27Surface(W,s.p.x+s.n.x*side*L,s.p.z+s.n.z*side*L,s.p.y,false)?.y??s.p.y)-.06,normal=s.n.clone().multiplyScalar(-side);
+   if(run>=bw+.15){run=0;const p=s.p.clone().addScaledVector(s.n,side*(L+.17));p.y=ground+.36+bh/2;add(p,normal,bw,bh,brand(n++),'barrier');}
+   if(fence>=H*4*2.2){const p=s.p.clone().addScaledVector(s.n,side*(L+.35)),right=new THREE.Vector3().crossVectors(new THREE.Vector3(0,1,0),normal).normalize();
+    // Only on gentle curves, so the banner never cuts through the fence mesh.
+    const ok=[-1,1].every(e=>{const c=p.clone().addScaledVector(right,e*H*2),dd=W.nearest(c).distance;return dd>L+.2&&dd<L+.39;});
+    if(ok){fence=0;p.y=ground+1.12+H/2;add(p,normal,H*4,H,brand(n+7),'fence');}}
+  }
+ }
+};
