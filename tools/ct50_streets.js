@@ -80,6 +80,15 @@ function ct50Office(K,W,f,w,d,H,seed,M){
  ct48GcCrown(K,f,plan,H,seed,M,ct48GcPick(['plain','frame','plain'],h(6)));
 }
 // Pick a building for a lot by the city's mix and the lot's distance from the track.
+// Houses and warehouses run the Bathurst clearance test (track, pit, reserved spots); far-off
+// city lots have already passed ct50FarClear, so skip it there.
+const ct50ClearBase=ct48Clear;
+ct48Clear=function(W,...a){return W.ct50Far?true:ct50ClearBase(W,...a);};
+function ct50FarClear(W,f,w,d){
+ const bz=ct48GcBeachZ(W),half=(W.span+2400)/2-60;
+ for(const [a,b] of [[-1,-1],[1,-1],[1,1],[-1,1]]){const x=f.x+f.ax.x*a*(w/2+1)+f.az.x*b*(d/2+1),z=f.z+f.ax.z*a*(w/2+1)+f.az.z*b*(d/2+1);if(z<bz+24||Math.abs(x)>half||Math.abs(z)>half)return false;}
+ return true;
+}
 function ct50Lot(K,W,f,w,d,seed,M,MB,people,near,zone){
  const C=ct50C(W),h=k=>ct48Hash(seed,k);(W.ct48GcLots||=[]).push({x:f.x,z:f.z,ax:f.ax,az:f.az,w,d});K.begin(f);f.y=0;K.tint=[1,1,1];
  const st=W.ct48GcStats.types||(W.ct48GcStats.types={}),r=h(90),tall=(lo,hi)=>lo+(hi-lo)*Math.pow(h(91),1.4);let type;
@@ -152,11 +161,14 @@ function ct50BuildCity(W){
   ct50Park(W,bi,bj,false);
   // Built blocks: two to four lots around the block, footpath trees.
   const cbd=zone==='cbd';if(cbd&&h(2)>C.cbd.keep)continue;
+  // Blocks well clear of the circuit only need the city-edge test: lots never cross a street, so
+  // checking them against every other lot (and the track, pit and stands) is wasted work there.
+  const far=dist>240,l0=W.ct48GcLots.length;
   const lots=cbd?[[0,0,34,40]]:[[-13,-12,22,22],[13,-12,22,22],[-13,12,22,22],[13,12,22,22]];
   for(const [lu,lv,w0,d0] of lots){const w=w0*(.8+h(lu+lv+3)*.2),d=d0*(.8+h(lu-lv+4)*.2),q=blockAt(bi,bj,lu,lv),f={x:q.x,y:0,z:q.z,ax:lu<0||cbd?{x:-ax.x,z:-ax.z}:ax,az:lu<0||cbd?{x:-az.x,z:-az.z}:az};
-   if(!cbd&&h(lu*3+lv)<(C.vacant||.12))continue;if(ct48GcLotClear(W,f,w,d,2))ct50Lot(K,W,f,w,d,seed++,M,MB,people,dist<160,cbd?'cbd':'suburb');}
+   if(!cbd&&h(lu*3+lv)<(C.vacant||.12))continue;if(far?ct50FarClear(W,f,w,d):ct48GcLotClear(W,f,w,d,2)){W.ct50Far=far;try{ct50Lot(K,W,f,w,d,seed++,M,MB,people,dist<160,cbd?'cbd':'suburb');}finally{W.ct50Far=false;}}}
   if(dist<700)for(const [su,sv,len] of [[1,0,52],[-1,0,52],[0,1,56],[0,-1,56]])for(let t=-len/2+5;t<len/2-4;t+=11+h(len+t)*5){if(h(t*3+su+sv*2)>.55)continue;const lu=su?su*24.6:t,lv=sv?sv*22.6:t,q=blockAt(bi,bj,lu,lv);
-   if(ct48GcInside(W,q.x,q.z,2)||W.nearest(q).distance<CT48_GC.lane+4||W.ct48GcLots.some(o=>Math.abs((q.x-o.x)*o.ax.x+(q.z-o.z)*o.ax.z)<o.w/2+2&&Math.abs((q.x-o.x)*o.az.x+(q.z-o.z)*o.az.z)<o.d/2+2))continue;
+   if(!far&&(ct48GcInside(W,q.x,q.z,2)||W.nearest(q).distance<CT48_GC.lane+4)||(far?W.ct48GcLots.slice(l0):W.ct48GcLots).some(o=>Math.abs((q.x-o.x)*o.ax.x+(q.z-o.z)*o.ax.z)<o.w/2+2&&Math.abs((q.x-o.x)*o.az.x+(q.z-o.z)*o.az.z)<o.d/2+2))continue;
    if(h(t+5)<C.palms)palms.push([q.x,0,q.z]);else if(C.trees==='gum')gums.push([q.x,q.z,9+h(t+7)*5]);else trees.push([q.x,q.z,8+h(t+7)*5]);}}
  for(const [x,z,k] of W.ct48Garden)if(k==='tree')(C.trees==='gum'?gums.push([x,z,7+ct48Hash(x,z)*5]):trees.push([x,z,7+ct48Hash(x,z)*4]));
  K.flush(W.e.name+' city');
