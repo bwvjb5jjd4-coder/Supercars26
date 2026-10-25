@@ -122,9 +122,11 @@ dc32FreeDrive=function(x,dt,input){
 };
 
 // Rigid-body wall contact on the deepest corner: restitution, wall friction and a yaw kick.
+// Lane of the barrier line (metres from the centreline). Circuits with their own walls override it.
+function ph47WallLane(W,L,x,near){return ['goldcoast','adelaide','townsville'].includes(L.e.key)?9:16;}
 function ph47Walls(W,L,x,s,near,mass,Iz,dt){
  s.scrape=Math.max(0,s.scrape-dt*4);if(near.pit||dc32Mouth(W,x.pos))return;
- const wall=['goldcoast','adelaide','townsville'].includes(L.e.key)?9:16;if(Math.abs(near.lane)<wall-3.2)return;
+ const wall=ph47WallLane(W,L,x,near);if(Math.abs(near.lane)<wall-3.2)return;
  const side=Math.sign(near.lane)||1,ox=near.n.x*side,oz=near.n.z*side,l=DC33_HALF_LENGTH[x.team?.manufacturer]||2.45,w=PH47.width,fx=Math.sin(x.yaw),fz=Math.cos(x.yaw),gx=Math.cos(x.yaw),gz=-Math.sin(x.yaw);
  let pen=0,rx=0,rz=0,cl=0,cw=0;
  for(const a of [l,-l])for(const b of [w,-w]){const px=fx*a+gx*b,pz=fz*a+gz*b,p=(near.lane+px*near.n.x+pz*near.n.z)*side-wall;if(p>pen){pen=p;rx=px;rz=pz;cl=a;cw=b;}}

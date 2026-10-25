@@ -13,7 +13,9 @@ for a,b in hooks:
     assert html.count(a)==1,a
     html=html.replace(a,b)
 html=re.sub(r'<script id="ph47-physics">.*?</script>','',html,flags=re.S)
-i=html.rindex('</body>')
+# Circuits (ct48) build on the physics, so physics goes in front of them.
+i=html.find('<script id="ct48-circuits">')
+if i<0:i=html.rindex('</body>')
 html=html[:i]+'<script id="ph47-physics">\n'+js+'</script>'+html[i:]
 (root/'index.html').write_text(html)
 print('ok',len(html))
