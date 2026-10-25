@@ -91,6 +91,24 @@ function ct48Kerbs(W){
  (W.gr27Pavement||=[]).push({mesh,route:'track'});W.gr27SurfaceIndex=null;return mesh;
 }
 
+
+// Pit lane and garage floors (garages run 9.5–19.5 m from the pit centreline, the pit
+// building's rear block to 23.5 m). Ground inside them must stay under the floor.
+function ct48PitFloor(W,x,z,margin=1.5){
+ if(!W.pit?.samples)return null;const q=dc32PitNear(W,{x,z});if(!q)return null;
+ if(dc32PitPaved(W,q,margin))return q.p.y;const side=q.lane*W.pit.side;
+ return q.f>.17&&q.f<.83&&side>-4-margin&&side<23.5+margin&&q.distance<24+margin?q.p.y:null;
+}
+// The pit lane and garages sit on a level pad; the terrain eases down to it over 35 m, so
+// no grass or hillside can come up through the garage floors. Runs once the pit exists.
+function ct48FlattenPit(W){
+ const g=W.ct48TerrainGeometry,d=W.sc26Terrain;if(!g||!d||!W.pit?.samples)return;const p=g.attributes.position,pit=W.pit,xs=pit.samples.map(s=>s.p.x),zs=pit.samples.map(s=>s.p.z),pad=70;
+ const x0=Math.min(...xs)-pad,x1=Math.max(...xs)+pad,z0=Math.min(...zs)-pad,z1=Math.max(...zs)+pad;let changed=0;
+ for(let k=0;k<p.count;k++){const x=p.getX(k),z=p.getZ(k);if(x<x0||x>x1||z<z0||z>z1)continue;const q=dc32PitNear(W,{x,z});if(!q)continue;
+  const side=q.lane*pit.side,bay=q.f>.17&&q.f<.83,lo=bay?-6:-5,hi=bay?25:5,lat=side<lo?lo-side:side>hi?side-hi:0,along=Math.max(0,(bay?Math.max(.17-q.f,q.f-.83):0))*pit.length,out=Math.hypot(lat,along)+(q.distance>Math.max(Math.abs(side),0)+1?q.distance-Math.abs(side):0);
+  const target=q.p.y-.3,y=p.getY(k);if(y<=target)continue;const w=ct48Smooth(out/35),ny=target+(y-target)*w;if(ny<y-.001){p.setY(k,ny);changed++;}}
+ if(changed){d.positions=Array.from(p.array);p.needsUpdate=true;g.computeVertexNormals();}W.ct48PitFlattened=changed;
+}
 function ct48TerrainMesh(W){let found=null;W.world.traverse(o=>{if(!found&&o.isMesh&&o.geometry===W.ct48TerrainGeometry)found=o;});return found;}
 
 // Grass shoulders, both sides, white line to terrain. Same UV mapping and material as the
@@ -99,7 +117,7 @@ function ct48TerrainMesh(W){let found=null;W.world.traverse(o=>{if(!found&&o.isM
 function ct48Shoulders(W){
  if(ct48Street(W))return null;
  const N=W.N,S=W.samples,M=CT48_LANES.length,reach=ct48Reach(W),terrain=ct48TerrainMesh(W),size=W.sc26Terrain?.size||W.span+2400,pos=[],uv=[],col=[],ix=[];
- const pitY=(x,z)=>{if(!W.pit?.samples)return null;const q=dc32PitNear(W,{x,z});return q&&dc32PitPaved(W,q,1.5)?q.p.y:null;};
+ const pitY=(x,z)=>ct48PitFloor(W,x,z);
  for(const side of [-1,1]){const base=pos.length/3;
   for(let i=0;i<=N;i++){const s=S[i%N],r=reach[side][i%N],f=clamp((r-CT48_LANES[1])/(CT48_LANES[M-1]-CT48_LANES[1]),.04,1),road=s.p.y+.01;
    for(let k=0;k<M;k++){const L=k<2?CT48_LANES[k]:CT48_LANES[1]+(CT48_LANES[k]-CT48_LANES[1])*f,x=s.p.x+s.n.x*side*L,z=s.p.z+s.n.z*side*L,T=gr26SceneryGround(W,x,z);
@@ -153,6 +171,7 @@ function ct48Gravel(W,shoulder){
 const ct48MakeTrack=SC25World.prototype.makeTrack;
 SC25World.prototype.makeTrack=function(){
  ct48MakeTrack.call(this);
+ ct48FlattenPit(this);
  ct48Kerbs(this);
  if(ct48Street(this))return;
  // The old verge strips and sunken gravel ribbons are replaced by the shoulders.
@@ -197,3 +216,15 @@ function ct48GrassDetail(W,m){
 }
 const ct48MakeTrackDetail=SC25World.prototype.makeTrack;
 SC25World.prototype.makeTrack=function(){ct48MakeTrackDetail.call(this);ct48GrassDetail(this,ct48TerrainMesh(this)?.material);};
+
+// Trackside walls were placed at road height; with the new shoulders the ground under them
+// can fall away. Each wall block now reaches from below the ground at its lowest end to its
+// own height above the ground at its highest end, before the catch fences are built on top.
+function ct48SeatWalls(W){
+ const rows=W.batches.wall?.rows;if(!rows)return;
+ for(const r of rows){const [x,y,z,w,h,d,yaw]=r,fx=Math.sin(yaw||0),fz=Math.cos(yaw||0);let lo=Infinity,hi=-Infinity;
+  for(const t of [-.5,-.25,0,.25,.5]){const X=x+fx*d*t,Z=z+fz*d*t,g=gr27Surface(W,X,Z,y-h/2,false);if(!g)continue;lo=Math.min(lo,g.y);hi=Math.max(hi,g.y);}
+  if(!Number.isFinite(lo))continue;const bottom=lo-.3,top=hi+(ct48Street(W)?1.1:.85);r[1]=(top+bottom)/2;r[4]=top-bottom;}
+}
+const ct48SceneryWalls=SC25World.prototype.makeScenery;
+SC25World.prototype.makeScenery=function(){ct48SeatWalls(this);return ct48SceneryWalls.call(this);};

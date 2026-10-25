@@ -176,6 +176,7 @@ function ct48Materials(W){
  for(const [k,v] of Object.entries({white:'#f3f1ea',sand:'#e3d5ba',grey:'#b9bab5',charcoal:'#5d6166'}))M.render[k]=std({map:render,color:v,roughness:.85});
  // A house window: white frame, two sashes, curtains.
  M.window=ct48Night(W,std({map:W.texture(64,64,(c,w,h)=>{c.fillStyle='#f4f4f0';c.fillRect(0,0,w,h);const g=c.createLinearGradient(0,0,0,h);g.addColorStop(0,'#5c7584');g.addColorStop(1,'#26343d');c.fillStyle=g;c.fillRect(5,5,w-10,h-10);c.fillStyle='#f4f4f0';c.fillRect(w/2-2,5,4,h-10);c.fillStyle='rgba(235,225,200,.55)';c.fillRect(6,6,9,h-12);c.fillRect(w-15,6,9,h-12);}),roughness:.2,metalness:.3}));
+ M.picket=std({map:ct48Tex(W,64,64,(c,w,h)=>{c.clearRect(0,0,w,h);c.fillStyle='#f6f5ef';for(let x=4;x<w;x+=16){c.fillRect(x,10,8,h-10);c.beginPath();c.moveTo(x,10);c.lineTo(x+4,2);c.lineTo(x+8,10);c.fill();}c.fillRect(0,22,w,4);c.fillRect(0,48,w,4);},.6,1.05),alphaTest:.4,side:THREE.DoubleSide,roughness:.7});
  M.door=W.mat('#6b4a33',.7,.05);M.garageDoor=std({map:ct48Tex(W,64,64,(c,w,h)=>{c.fillStyle='#e7e7e1';c.fillRect(0,0,w,h);for(let y=0;y<h;y+=8){c.fillStyle='#bdbdb7';c.fillRect(0,y,w,2);}},2.4,2.1),roughness:.5,metalness:.3});
  return W.ct48Mats=M;
 }
@@ -185,7 +186,7 @@ function ct48Frame(W,phase,side,lane,along=0){const s=W.at(phase),ax=s.n.clone()
 function ct48Ground(W,f,w,d){let lo=Infinity,hi=-Infinity;for(const a of [-.5,0,.5])for(const b of [-.5,0,.5]){const x=f.x+f.ax.x*a*w+f.az.x*b*d,z=f.z+f.ax.z*a*w+f.az.z*b*d,h=gr26SceneryGround(W,x,z);lo=Math.min(lo,h);hi=Math.max(hi,h);}return{lo,hi};}
 function ct48Reserve(W,f,w,d,h,kind){const cx=f.x+f.ax.x*w/2,cz=f.z+f.ax.z*w/2;(W.ct48Reserved||=[]).push({x:cx,z:cz,r:Math.hypot(w,d)/2+2});W.registerStructure?.(kind,cx,cz,w,d,Math.atan2(f.az.x,f.az.z),h,f.y);}
 // Footprint from x=0 (front, toward the track) to x=w, centred on z.
-function ct48Clear(W,f,w,d,road=13,pit=7){for(let a=0;a<=4;a++)for(let b=0;b<=4;b++){const lx=a/4*w,lz=(b/4-.5)*d,x=f.x+f.ax.x*lx+f.az.x*lz,z=f.z+f.ax.z*lx+f.az.z*lz;if(W.nearest({x,z}).distance<road)return false;if(W.pit?.samples&&W.pitDistance(x,z)<pit)return false;for(const q of W.ct48Reserved||[])if(Math.hypot(q.x-x,q.z-z)<q.r)return false;}return true;}
+function ct48Clear(W,f,w,d,road=13,pit=7){for(let a=0;a<=4;a++)for(let b=0;b<=4;b++){const lx=a/4*w,lz=(b/4-.5)*d,x=f.x+f.ax.x*lx+f.az.x*lz,z=f.z+f.ax.z*lx+f.az.z*lz;if(W.nearest({x,z}).distance<road)return false;if(pit&&W.pit?.samples&&(W.pitDistance(x,z)<pit||ct48PitFloor(W,x,z,5)!==null))return false;for(const q of W.ct48Reserved||[])if(Math.hypot(q.x-x,q.z-z)<q.r)return false;}return true;}
 // Slide a footprint away from the track until it is clear.
 function ct48Find(W,phase,side,lane,w,d,road=13,tries=8,step=6){for(let t=0;t<tries;t++){const f=ct48Frame(W,phase,side,lane+t*step);if(ct48Clear(W,f,w,d,road))return f;}return null;}
 // Level platform: a concrete plinth hides any slope under the footprint.
@@ -205,26 +206,42 @@ function ct48Grandstand(K,W,f,len,M,seat,sponsor){
  K.lquad(M.underside,f,[[depth+.5,roofY-.05,len/2+1],[-1.5,roofY+1.35,len/2+1],[-1.5,roofY+1.35,-len/2-1],[depth+.5,roofY-.05,-len/2-1]],[0,-1,0]);
  K.box(f,-1.5,roofY+.95,0,.25,1.1,len+2,{side:M.white,front:M.darkSteel});
  if(sponsor){const tex=W.sign(sponsor,'#f4f4f4',1024,128),q=K.at(f,-1.68,roofY+.95,0);W.signPlane(tex,Math.min(len*.5,28),1.0,new THREE.Vector3(...q),Math.atan2(-f.ax.x,-f.ax.z));}
- ct48Reserve(W,f,depth+2,len+3,roofY+2,'grandstand');
+ // Stair towers at both ends and a concourse canopy along the back.
+ for(const sgn of [-1,1]){K.box(f,depth-2.5,(front+rise+2)/2,sgn*(len/2+2.2),5,front+rise+2,4.4,{side:M.ribbon,top:M.concrete,front:M.concreteWarm});K.box(f,depth-2.5,front+rise+2.2,sgn*(len/2+2.2),5.4,.35,4.8,{side:M.white,top:M.roof});}
+ K.box(f,depth+1.6,3.2,0,3.2,.25,len,{side:M.white,top:M.roof,bottom:M.underside});for(let z=-len/2+2;z<len/2;z+=8)K.box(f,depth+3,1.6,z,.18,3.2,.18,M.steel);
+ ct48Reserve(W,f,depth+4,len+10,roofY+2,'grandstand');
 }
-// Bathurst pit complex: two levels of corporate suites over the garages.
+// Bathurst pit complex: a solid building over the garages. Suites run exactly as far as
+// the garages do; a rear service block and two stair cores carry it down to the ground.
 function ct48PitComplex(K,W,M){
- const pit=W.pit;if(!pit?.samples||!pit.bays?.length)return;const side=pit.bays[Math.floor(pit.bays.length/2)].side,from=.20,to=.80,chunks=10;
- for(let c=0;c<chunks;c++){const fa=from+(to-from)*c/chunks,fb=from+(to-from)*(c+1)/chunks,a=dc32PitAt(W,fa),b=dc32PitAt(W,fb),mid=dc32PitAt(W,(fa+fb)/2),len=a.p.distanceTo(b.p)+.05;
-  const az={x:b.p.x-a.p.x,z:b.p.z-a.p.z},l=Math.hypot(az.x,az.z);az.x/=l;az.z/=l;const ax={x:mid.n.x*side,z:mid.n.z*side},f={x:(a.p.x+b.p.x)/2,y:Math.max(a.p.y,b.p.y),z:(a.p.z+b.p.z)/2,ax,az};
-  const y0=5.65,floor=3.7;
-  // Suites: glass front, balconies with glass balustrades, rear concrete with ribbon windows.
-  K.box(f,15.5,y0+floor,0,12,floor*2,len,{front:M.glass,back:M.ribbon,left:M.concrete,right:M.concrete,top:M.concrete,uo:c*len});
-  for(const lvl of [0,1]){const y=y0+lvl*floor;K.box(f,8.8,y+.12,0,1.4,.24,len,{side:M.white});K.lquad(M.rail,f,[[8.12,y+.24,-len/2],[8.12,y+.24,len/2],[8.12,y+1.3,len/2],[8.12,y+1.3,-len/2]],[-1,0,0]);K.box(f,8.12,y+1.32,0,.08,.06,len,M.steel);}
-  K.box(f,13.5,y0+floor*2+.35,0,17,.5,len+.02,{side:M.white,top:M.roof});
-  if(c===0||c===chunks-1)K.box(f,16,y0+floor+1.5,(c?1:-1)*(len/2-3),6,floor*2+3,6,{side:M.concreteWarm});
+ const pit=W.pit;if(!pit?.samples||!pit.bays?.length)return;const side=pit.bays[Math.floor(pit.bays.length/2)].side;
+ const garages=(W.sc27Structures||[]).filter(b=>b.kind==='pit garage');if(!garages.length)return;
+ const fs=garages.map(b=>dc32PitNear(W,{x:b.x,z:b.z}).f),half=(garages[0].d/2+.5)/pit.length,from=Math.min(...fs)-half,to=Math.max(...fs)+half,chunks=Math.max(4,Math.round((to-from)*pit.length/24));
+ const y0=5.65,floor=3.7,top=y0+floor*2,frameAt=(fa,fb)=>{const a=dc32PitAt(W,fa),b=dc32PitAt(W,fb),mid=dc32PitAt(W,(fa+fb)/2),az={x:b.p.x-a.p.x,z:b.p.z-a.p.z},l=Math.hypot(az.x,az.z)||1;az.x/=l;az.z/=l;return{f:{x:(a.p.x+b.p.x)/2,y:Math.max(a.p.y,b.p.y),z:(a.p.z+b.p.z)/2,ax:{x:mid.n.x*side,z:mid.n.z*side},az},len:l+.04};};
+ const low=(f,x0,x1,len)=>{let lo=f.y;for(const x of [x0,(x0+x1)/2,x1])for(const z of [-.5,0,.5]){const X=f.x+f.ax.x*x+f.az.x*z*len,Z=f.z+f.ax.z*x+f.az.z*z*len;lo=Math.min(lo,gr26SceneryGround(W,X,Z));}return lo-f.y-.3;};
+ for(let c=0;c<chunks;c++){const {f,len}=frameAt(from+(to-from)*c/chunks,from+(to-from)*(c+1)/chunks),uo=c*len;
+  // Two floors of suites: glass to the pit lane, ribbon windows to the back, louvre fins.
+  K.box(f,16.5,y0+floor,0,14,floor*2,len,{front:M.glass,back:M.ribbon,left:M.concrete,right:M.concrete,top:M.concrete,uo});
+  K.box(f,16.5,y0+floor,0,13.6,.3,len,{side:M.concrete});
+  for(let z=-len/2+1.5;z<len/2;z+=3)K.box(f,9.2,y0+floor,z,.6,floor*2,.12,M.white);
+  for(const lvl of [0,1]){const y=y0+lvl*floor;K.box(f,8.8,y+.12,0,1.4,.24,len,{side:M.white,bottom:M.white});K.lquad(M.rail,f,[[8.12,y+.24,-len/2],[8.12,y+.24,len/2],[8.12,y+1.3,len/2],[8.12,y+1.3,-len/2]],[-1,0,0]);K.box(f,8.12,y+1.32,0,.08,.06,len,M.steel);}
+  // Concrete garage floors right through to the back wall (no grass inside).
+  K.lquad(M.concreteWarm,f,[[7.6,.025,-len/2],[19.6,.025,-len/2],[19.6,.025,len/2],[7.6,.025,len/2]],[0,1,0]);
+  // Rear service block down to the ground, with a loading door every other bay.
+  const b0=low(f,19.6,24,len);K.box(f,21.8,(b0+y0)/2,0,4.4,y0-b0,len,{back:M.ribbon,front:M.concrete,left:M.concrete,right:M.concrete,top:null,uo});
+  if(c%2===0)K.lquad(M.garageDoor,f,[[24.03,b0+.3,-1.6],[24.03,b0+.3,1.6],[24.03,b0+3.6,1.6],[24.03,b0+3.6,-1.6]],[1,0,0],[0,0,1.5,0,1.5,1.6,0,1.6]);
+  // Roof: cantilevered slab with a dark fascia, rooftop plant and handrail.
+  K.box(f,15.2,top+.3,0,17.6,.5,len+.02,{side:M.white,top:M.roof,front:M.darkSteel,bottom:M.underside});
+  if(c%2===1){K.box(f,19,top+1.2,-len*.2,3.2,1.3,2.2,{side:M.steel,top:M.darkSteel});K.box(f,21.5,top+1.0,len*.2,1.8,.9,1.8,{side:M.steel,top:M.darkSteel});}
+  K.box(f,23.6,top+1.0,0,.06,.9,len,M.steel);
  }
- // Name across the fascia, readable from the main straight.
- const m=dc32PitAt(W,.5),q=m.p.clone().addScaledVector(m.n,side*5.0);q.y+=13.35;
- W.signPlane(W.sign('MOUNT PANORAMA  ·  BATHURST','#14324a',1024,96),70,2.0,q,Math.atan2(-m.n.x*side,-m.n.z*side));
- // Race control at the exit end: four floors, wider glass control room, mast.
- const e=dc32PitAt(W,.86),ax={x:e.n.x*side,z:e.n.z*side},az={x:e.v.x,z:e.v.z},f={x:e.p.x+ax.x*13,y:e.p.y,z:e.p.z+ax.z*13,ax,az};
- if(ct48Clear(W,f,10,10,12,0)){K.box(f,5,7,0,8,14,8,{side:M.ribbon,top:M.concrete});K.box(f,4.6,16,0,10.5,4,10,{side:M.glass,top:M.concrete});K.box(f,4.6,18.25,0,11.5,.5,11,{side:M.white,top:M.roof});K.box(f,6,22,2,.18,7,.18,M.steel);K.box(f,6,24.5,2,1.4,.12,.12,M.steel);
+ // Stair and lift cores at both ends, from the ground up past the roof.
+ for(const [fa,dir] of [[from,-1],[to,1]]){const g=frameAt(fa,fa+dir*7/pit.length),f=g.f,b0=low(f,9.5,24,7);K.box(f,16.5,(b0+top+2.2)/2,dir*0,14,top+2.2-b0,7,{side:M.concreteWarm,top:M.concrete});K.lquad(M.glass,f,[[9.47,b0+.5,-1.2],[9.47,b0+.5,1.2],[9.47,top+1.8,1.2],[9.47,top+1.8,-1.2]],[-1,0,0],[0,0,1.5,0,1.5,3.6,0,3.6]);ct48Reserve(W,f,24,8,top+3,'pit core');}
+ const m=dc32PitAt(W,(from+to)/2),q=m.p.clone().addScaledVector(m.n,side*6.3);q.y+=top+.3;
+ W.signPlane(W.sign('MOUNT PANORAMA  ·  BATHURST','#14324a',1024,96),70,1.6,q,Math.atan2(-m.n.x*side,-m.n.z*side));
+ // Race control beyond the pit exit end: four floors, wider glass control room, mast.
+ const e=dc32PitAt(W,Math.min(.95,to+.06)),ax={x:e.n.x*side,z:e.n.z*side},az={x:e.v.x,z:e.v.z},f={x:e.p.x+ax.x*13,y:e.p.y,z:e.p.z+ax.z*13,ax,az};
+ if(ct48Clear(W,f,10,10,12,0)){const b0=low(f,0,10,10);K.box(f,5,(b0+14)/2,0,8,14-b0,8,{side:M.ribbon,top:M.concrete});K.box(f,4.6,16,0,10.5,4,10,{side:M.glass,top:M.concrete});K.box(f,4.6,18.25,0,11.5,.5,11,{side:M.white,top:M.roof});K.box(f,6,22,2,.18,7,.18,M.steel);K.box(f,6,24.5,2,1.4,.12,.12,M.steel);
   const t=W.sign('RACE CONTROL','#c3262f',512,96),p=K.at(f,-.66,16,0);W.signPlane(t,6,1.1,new THREE.Vector3(...p),Math.atan2(-ax.x,-ax.z));ct48Reserve(W,{...f,x:f.x-ax.x*1,z:f.z-ax.z*1},12,12,20,'race control');}
 }
 // Houses: four Australian types, each with windows, door, gutters and a yard.
@@ -250,6 +267,17 @@ function ct48House(K,W,f,type,seed,M){
   K.box(f,fx-2,lift/2,w/2-1,1.4,lift,1.2,{side:M.concrete});}
  else{// modern skillion, two volumes
   K.lquad(roof,f,[[fx-.5,top+.2,-w/2-.4],[fx+d+.5,top+1.1,-w/2-.4],[fx+d+.5,top+1.1,w/2+.4],[fx-.5,top+.2,w/2+.4]],[0,1,0]);K.box(f,fx+d*.35,top+1.6,-w*.25,d*.7,3.2,w*.45,{side:M.render.charcoal,top:roof});K.lquad(M.glass,f,[[fx+d*.35-d*.35-.03,top+.4,-w*.4],[fx-.03,top+.4,-w*.1],[fx-.03,top+2.8,-w*.1],[fx-.03,top+2.8,-w*.4]],[-1,0,0],[0,0,1.5,0,1.5,3.6,0,3.6]);}
+ // Gutters on the long eaves, sills under the windows, a chimney on the older brick homes.
+ if(type!=='modern'&&type!=='queenslander')for(const sg of [-1,1])K.box(f,fx+d/2,top-.05,sg*(w/2+.55),d+1.1,.14,.14,M.white);
+ if(type!=='modern')for(const sg of [-1,1])K.box(f,fx+(sg<0?-.55:d+.55),top-.05,0,.14,.14,w+1.1,M.white);
+ for(const z of [-w*.28,w*.28])K.box(f,fx-.08,base+.84,z,.16,.08,2.0,M.white);
+ if(type==='brick'&&h(7)<.6)K.box(f,fx+d*.7,top+1.6,-w*.3,.9,3.0,.9,wall);
+ // Front garden: shrubs along the house, a tree in the yard (drawn with the forest).
+ (W.ct48Garden||=[]);for(let i=0;i<4;i++){const p=K.at(f,fx-.9,0,-w/2+1+i*(w-2)/3);W.ct48Garden.push([p[0],p[2],'shrub']);}
+ {const p=K.at(f,2.2+h(8)*2,0,(h(9)-.5)*w);W.ct48Garden.push([p[0],p[2],'tree']);}
+ // Front fence: white pickets on the older homes, a low brick wall on brick veneers; porch.
+ if(type==='queenslander'||type==='federation'){K.lquad(M.picket,f,[[.4,0,-w/2-1.5],[.4,0,w/2+1.5],[.4,1.05,w/2+1.5],[.4,1.05,-w/2-1.5]],[-1,0,0],[0,0,w+3,0,w+3,1.05,0,1.05]);K.box(f,.4,1.05,0,.08,.08,w+3,M.white);}
+ else if(type==='brick'){K.box(f,.4,.35,-w*.15,.3,.7,w*.7+1,{side:wall,top:M.concrete});K.box(f,fx-1.2,base+2.55,0,2.4,.15,3.2,{side:M.white,top:roof});for(const z of [-1.45,1.45])K.box(f,fx-2.3,base+1.27,z,.14,2.55,.14,M.white);}
  // Water tank, side fence, letterbox.
  if(h(5)<.75)K.cyl(f,fx+d+1.2,1.1,-w/2+1.2,1.0,2.2,M.colorbond[['surfmist','woodland','paperbark'][Math.floor(h(6)*3)]],10);
  for(const s of [-1,1])K.box(f,fx+d/2,.9,s*(w/2+(type==='brick'&&s>0?7:1.5)),d+12,1.8,.06,M.colorbond.woodland);
@@ -308,7 +336,8 @@ function ct48BuildBathurst(W){
  const outside=(ph)=>{const s=W.at(ph);for(const side of [-1,1]){const x=s.p.x+s.n.x*side*60,z=s.p.z+s.n.z*side*60;if(!ct48Inside(W,x,z))return side;}return 1;};
  ct48PitComplex(K,W,M);
  // Grandstands: main straight opposite the pits, Hell Corner, The Chase and Murray's.
- const stands=[[.012,-pitSide,22,64,'red','Repco'],[.032,-pitSide,22,52,'blue','Supercheap Auto'],[.958,outside(.966),26,48,'orange','Bathurst 1000'],[.982,outside(.975),24,44,'red','Shell'],[.061,outside(.06),26,44,'blue','Dunlop'],[.884,outside(.88),30,50,'green','Penrite']];
+ const awayFromPit=ph=>{const s=W.at(ph),q=W.pit?.samples?dc32PitNear(W,s.p):null;if(!q||q.distance>80)return outside(ph);return (q.p.x-s.p.x)*s.n.x+(q.p.z-s.p.z)*s.n.z>0?-1:1;};
+ const stands=[[.012,awayFromPit(.012),22,64,'red','Repco'],[.032,awayFromPit(.032),22,52,'blue','Supercheap Auto'],[.958,outside(.966),26,48,'orange','Bathurst 1000'],[.982,outside(.975),24,44,'red','Shell'],[.061,outside(.06),26,44,'blue','Dunlop'],[.884,outside(.88),30,50,'green','Penrite']];
  W.ct48Stands=0;for(const [ph,side,lane,len,seat,brand] of stands){const f=ct48Find(W,ph,side,lane,19,len+4,15);if(f){ct48Grandstand(K,W,f,len,M,M.seats[seat],brand);W.ct48Stands++;}}
  ct48Museum(K,W,ct48Find(W,.95,outside(.95),58,24,50,30),M);
  // Hospitality: suites behind Murray's, Brock's Skyline marquees and viewing deck.
@@ -342,7 +371,7 @@ SC25World.prototype.makeScenery=function(){
  // The mountain's own walls replace the generic wall line (and the fences built from it).
  const wall=this.batches.wall;if(wall)wall.rows=wall.rows.filter(r=>{const n=this.nearest({x:r[0],z:r[2]});return n.distance>24||ct48WallAt(this,n.i,1)>15.5;});
  ct48MountainWalls(this);ct48BuildBathurst(this);
- return ct48Scenery.call(this);
+ const out=ct48Scenery.call(this);ct48Forest(this);return out;
 };
 const ct48FlushB=SC25World.prototype.flushBatches;
 SC25World.prototype.flushBatches=function(){
@@ -354,3 +383,48 @@ SC25World.prototype.flushBatches=function(){
  }
  return ct48FlushB.call(this);
 };
+
+// The big green MOUNT PANORAMA board from the old scenery is not drawn at Bathurst.
+const ct48SignPlane=SC25World.prototype.signPlane;
+SC25World.prototype.signPlane=function(tex,w,h,...rest){if(this.e?.key==='bathurst'&&w===105&&h===9){const o=new THREE.Object3D();o.visible=false;return o;}return ct48SignPlane.call(this,tex,w,h,...rest);};
+
+// ---------- Bush: thousands of gum trees and shrubs as crossed billboards ----------
+function ct48TreeAtlas(W){
+ if(W.ct48TreeTex)return W.ct48TreeTex;const r=()=>W.rnd();
+ const tree=W.texture(512,256,(c,w,h)=>{c.clearRect(0,0,w,h);
+  for(let v=0;v<4;v++){const ox=v*128,cx=ox+64;
+   // Pale, slightly leaning trunk with a couple of forks.
+   c.strokeStyle=['#d9d2c3','#cfc4b0','#bfb5a2','#e2dccd'][v];c.lineCap='round';const lean=(r()-.5)*14;
+   c.lineWidth=7;c.beginPath();c.moveTo(cx,h);c.quadraticCurveTo(cx+lean,h*.6,cx+lean*.6,h*.32);c.stroke();
+   c.lineWidth=3.5;for(let b=0;b<4;b++){const y=h*(.38+r()*.25),s=r()<.5?-1:1;c.beginPath();c.moveTo(cx+lean*.7,y);c.quadraticCurveTo(cx+s*18,y-20,cx+s*(22+r()*16),y-38-r()*20);c.stroke();}
+   // Open eucalypt crown: clumps of leaves with gaps, darker underneath.
+   const greens=[['#4d5a3e','#6e7a55','#8a9168'],['#465338','#647050','#7f8a61'],['#55603f','#77805a','#9a9c74'],['#3f4c37','#5b6849','#77825d']][v];
+   for(let k=0;k<70;k++){const a=r()*Math.PI*2,rad=Math.sqrt(r()),x=cx+Math.cos(a)*rad*52,y=h*.30+Math.sin(a)*rad*h*.24,g=greens[y>h*.36?0:r()<.5?1:2];c.fillStyle=g;c.globalAlpha=.9;c.beginPath();c.ellipse(x,y,6+r()*10,4+r()*7,r()*3,0,7);c.fill();}
+   c.globalAlpha=1;}});
+ const shrub=W.texture(256,128,(c,w,h)=>{c.clearRect(0,0,w,h);for(let v=0;v<2;v++){const cx=v*128+64;for(let k=0;k<90;k++){const a=r()*Math.PI,rad=Math.sqrt(r()),x=cx+Math.cos(a)*rad*58,y=h-Math.sin(a)*rad*h*.92;c.fillStyle=[['#56623f','#6f7a50','#89905f'],['#5c5a3c','#7a7650','#9b9468']][v][Math.floor(r()*3)];c.beginPath();c.ellipse(x,y,5+r()*7,4+r()*5,r()*3,0,7);c.fill();}}});
+ return W.ct48TreeTex={tree,shrub};
+}
+function ct48Billboard(u0,u1){
+ // Two crossed quads, base at y=0, 1 x 1; normals up so every side is lit the same.
+ const p=[],uv=[],n=[],ix=[];for(const a of [0,Math.PI/2]){const k=p.length/3,cx=Math.cos(a)*.5,cz=Math.sin(a)*.5;p.push(-cx,0,-cz,cx,0,cz,cx,1,cz,-cx,1,-cz);uv.push(u0,0,u1,0,u1,1,u0,1);for(let i=0;i<4;i++)n.push(0,1,0);ix.push(k,k+1,k+2,k,k+2,k+3);}
+ const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(p,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));g.setAttribute('normal',new THREE.Float32BufferAttribute(n,3));g.setIndex(ix);return g;
+}
+function ct48Forest(W){
+ const T=THREE,tex=ct48TreeAtlas(W),size=W.sc26Terrain?.size||W.span+2400,town={x:1500,z:-1550},rows={tree:[[],[],[],[]],shrub:[[],[]]};
+ const blocked=(x,z,r)=>{for(const q of W.ct48Reserved||[])if(Math.hypot(q.x-x,q.z-z)<q.r+r)return true;return false;};
+ const add=(kind,x,z,hgt)=>{const v=Math.floor(W.rnd()*rows[kind].length),y=gr26SceneryGround(W,x,z)-.15;rows[kind][v].push([x,y,z,hgt*(kind==='tree'?.62+W.rnd()*.2:1.5+W.rnd()*.4),hgt,W.rnd()*Math.PI,.82+W.rnd()*.3]);};
+ // Bush everywhere the land is free: denser up the mountain and out on the horizon.
+ for(let i=0;i<52000;i++){const x=(W.rnd()-.5)*size*.96,z=(W.rnd()-.5)*size*.96,n=W.nearest({x,z}),d=n.distance;if(d<27)continue;
+  const g=gr26SceneryGround(W,x,z),dens=clamp(ct48Smooth((ct48Fbm(x/380,z/380,11)+.2)/.55)*.7+ct48Smooth((g-35)/90)*.35+ct48Smooth((d-500)/900)*.45,0,1);
+  if(W.rnd()>dens)continue;if(Math.hypot(x-town.x,z-town.z)<330&&W.rnd()<.85)continue;if(W.pit?.samples&&(W.pitDistance(x,z)<30||ct48PitFloor(W,x,z,8)!==null))continue;if(blocked(x,z,4))continue;
+  add('tree',x,z,d<300?11+W.rnd()*14:14+W.rnd()*16);}
+ // Undergrowth and roadside scrub closer in.
+ for(let i=0;i<16000;i++){const s=W.at(W.rnd()),side=W.rnd()<.5?-1:1,l=24+Math.pow(W.rnd(),1.6)*240,x=s.p.x+s.n.x*side*l+(W.rnd()-.5)*20,z=s.p.z+s.n.z*side*l+(W.rnd()-.5)*20;
+  if(W.nearest({x,z}).distance<23||blocked(x,z,1.5))continue;if(W.pit?.samples&&(W.pitDistance(x,z)<25||ct48PitFloor(W,x,z,6)!==null))continue;if(W.rnd()<.25)add('tree',x,z,9+W.rnd()*12);else add('shrub',x,z,1.4+W.rnd()*1.8);}
+ for(const [x,z,k] of W.ct48Garden||[])k==='tree'?add('tree',x,z,7+W.rnd()*5):add('shrub',x,z,1.0+W.rnd()*.8);
+ const mat=(map)=>{const m=new T.MeshStandardMaterial({map,color:'#a3ab95',alphaTest:.45,side:T.DoubleSide,roughness:.95});return m;},mt=mat(tex.tree),ms=mat(tex.shrub),dummy=new T.Object3D(),col=new T.Color();let total=0;
+ for(const [kind,list] of Object.entries(rows))list.forEach((items,v)=>{if(!items.length)return;const n=list.length,g=ct48Billboard(v/n+.002,(v+1)/n-.002),m=new T.InstancedMesh(g,kind==='tree'?mt:ms,items.length);m.name=`Bathurst ${kind}s ${v}`;
+  items.forEach(([x,y,z,w,h,yaw,shade],i)=>{dummy.position.set(x,y,z);dummy.rotation.set(0,yaw,0);dummy.scale.set(w,h,w);dummy.updateMatrix();m.setMatrixAt(i,dummy.matrix);m.setColorAt(i,col.setRGB(shade,shade,shade*.96));});
+  m.computeBoundingSphere();m.receiveShadow=false;m.castShadow=false;W.world.add(m);total+=items.length;});
+ W.ct48Bush={trees:rows.tree.reduce((a,b)=>a+b.length,0),shrubs:rows.shrub.reduce((a,b)=>a+b.length,0)};return total;
+}
