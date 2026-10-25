@@ -53,9 +53,16 @@ function ct48GcWalls(W){
   }
   // Densify to ≤3 m pieces so walls can be cut at the pit roads and indexed for physics.
   const dense=[];for(let k=0;k<pts.length;k++){const a=pts[k],b=pts[(k+1)%pts.length],l=Math.hypot(b.x-a.x,b.z-a.z),n=Math.max(1,Math.ceil(l/3));for(let j=0;j<n;j++)dense.push({x:a.x+(b.x-a.x)*j/n,z:a.z+(b.z-a.z)*j/n,corner:j===0});}
-  for(const p of dense){p.cut=false;if(W.pit?.samples){const q=dc32PitNear(W,p);if(dc32PitPaved(W,q,2.5)||W.pitDistance(p.x,p.z)<7)p.cut=true;}}
-  const c2=dense.map(p=>p.cut);for(let i=0;i<dense.length;i++)if(dense[i].cut)for(let k=-1;k<=1;k++)c2[(i+k+dense.length)%dense.length]=true;dense.forEach((p,i)=>p.cut=c2[i]);
+  for(const p of dense){p.cut=false;if(W.pit?.samples){const q=dc32PitNear(W,p);if(dc32PitPaved(W,q,.5)||W.pitDistance(p.x,p.z)<4.7)p.cut=true;}}
   out.lines[side]=dense;}
+ // Pit road walls: both sides of the entry and exit roads, the track side of the whole pit
+ // lane; they stop where they would reach the racing surface, meeting the street walls.
+ out.pitLines=[];
+ if(W.pit?.samples){const pit=W.pit,gs=pit.bays?.[0]?.side||pit.side;
+  for(const s of [-1,1]){let run=[];const flush=()=>{if(run.length>1)out.pitLines.push(run);run=[];};
+   for(let k=0;k<=480;k++){const f=k/480;if(s===gs&&f>.18&&f<.82){flush();continue;}const q=dc32PitAt(W,f),x=q.p.x+q.n.x*s*4.6,z=q.p.z+q.n.z*s*4.6;
+    if(W.nearest({x,z}).distance<8.2){flush();continue;}run.push({x,z,ox:q.n.x*s,oz:q.n.z*s});}
+   flush();}}
  // Lane of the wall straight out from every sample (for run-off checks and scenery).
  const segs=ct48GcSegments(W,out);
  for(const side of [-1,1]){const L=new Float32Array(N);
@@ -72,6 +79,7 @@ function ct48GcSegments(W,data){
   for(let i=0;i<n;i++){const a=P[i],b=P[(i+1)%n];if(a.cut||b.cut)continue;const dx=b.x-a.x,dz=b.z-a.z,l=Math.hypot(dx,dz);if(l<.05)continue;
    const ox=side>0?-dz/l:dz/l,oz=side>0?dx/l:-dx/l,near=W.nearest({x:(a.x+b.x)/2,z:(a.z+b.z)/2}),v=W.samples[near.i%W.N].v,cross=Math.abs(dx/l*v.x+dz/l*v.z)<.55&&near.distance>CT48_GC.lane+2;
    segs.push({ax:a.x,az:a.z,bx:b.x,bz:b.z,ox,oz,l,side,cross});}}
+ for(const P of d.pitLines||[])for(let i=0;i<P.length-1;i++){const a=P[i],b=P[i+1],dx=b.x-a.x,dz=b.z-a.z,l=Math.hypot(dx,dz);if(l<.05)continue;let ox=-dz/l,oz=dx/l;if(ox*a.ox+oz*a.oz<0){ox=-ox;oz=-oz;}segs.push({ax:a.x,az:a.z,bx:b.x,bz:b.z,ox,oz,l,side:0,cross:false,pit:true});}
  segs.forEach((s,k)=>{for(let x=Math.floor((Math.min(s.ax,s.bx)-3)/cell);x<=Math.floor((Math.max(s.ax,s.bx)+3)/cell);x++)for(let z=Math.floor((Math.min(s.az,s.bz)-3)/cell);z<=Math.floor((Math.max(s.az,s.bz)+3)/cell);z++){const key=x+','+z;if(!grid.has(key))grid.set(key,[]);grid.get(key).push(k);}});
  return W.ct48GcSeg={segs,grid,cell};
 }
@@ -122,28 +130,63 @@ SC25World.prototype.makeTerrainGeometry=function(){
  g.computeVertexNormals();this.sc26Terrain=null;this.ct48GcGround=g;return g;
 };
 
+// City ground. Each block of the street grid gets its own surface from a small data texture
+// (lawn, garden beds, sandstone plaza, car park, gravel lot), with its own tint and paving
+// direction; footpaths line every block, kerbs and asphalt streets run between them, and
+// large-scale noise breaks up any tiling. The same block map tells the scenery where to put
+// trees and parked cars.
+function ct48GcBlockMap(W){
+ if(W.ct48GcBlocks)return W.ct48GcBlocks;const S=128,data=new Uint8Array(S*S*4);
+ for(let j=0;j<S;j++)for(let i=0;i<S;i++){const h=k=>ct48Hash(i-64,j-64,k),r=h(1),type=r<.30?0:r<.50?1:r<.68?2:r<.85?3:4,k=(j*S+i)*4;data[k]=type*40;data[k+1]=Math.floor(h(2)*255);data[k+2]=Math.floor(h(3)*255);data[k+3]=255;}
+ const t=new THREE.DataTexture(data,S,S,THREE.RGBAFormat);t.magFilter=t.minFilter=THREE.NearestFilter;t.needsUpdate=true;
+ return W.ct48GcBlocks={tex:t,data,S,type:(bi,bj)=>{const i=bi+64,j=bj+64;if(i<0||j<0||i>=S||j>=S)return 2;return data[(j*S+i)*4]/40;},set:(bi,bj,type)=>{const i=bi+64,j=bj+64;if(i<0||j<0||i>=S||j>=S)return;data[(j*S+i)*4]=type*40;t.needsUpdate=true;}};
+}
+function ct48GcGroundTextures(W){
+ if(W.ct48GcGroundTex)return W.ct48GcGroundTex;const r=()=>W.rnd(),rep=t=>{t.wrapS=t.wrapT=THREE.RepeatWrapping;t.anisotropy=8;return t;};
+ // Small concrete pavers (0.4 m) with joints, chips and stains: 512 px covers 4 m.
+ const pavers=rep(W.texture(512,512,(c,w,h)=>{c.fillStyle='#8f8b84';c.fillRect(0,0,w,h);const n=10,s=w/n;
+  for(let y=0;y<n;y++)for(let x=0;x<n;x++){const v=168+Math.round((r()-.5)*26),o=(y%2)*s/2;c.fillStyle=`rgb(${v},${v-3},${v-9})`;c.fillRect(x*s+o+1.5,y*s+1.5,s-3,s-3);if(x===0&&o)c.fillRect(-s+o+1.5,y*s+1.5,s-3,s-3);}
+  for(let i=0;i<14000;i++){const v=r()<.5?50:235;c.fillStyle=`rgba(${v},${v},${v},${.03+r()*.06})`;c.fillRect(r()*w,r()*h,1+r()*2,1+r()*2);}
+  for(let i=0;i<10;i++){const g=c.createRadialGradient(0,0,0,0,0,8+r()*26),x=r()*w,y=r()*h;g.addColorStop(0,'rgba(60,55,48,.22)');g.addColorStop(1,'rgba(60,55,48,0)');c.save();c.translate(x,y);c.fillStyle=g;c.fillRect(-40,-40,80,80);c.restore();}}));
+ // Lawn: dense blades in several greens, clover and dry patches: 512 px covers 3 m.
+ const grass=rep(W.texture(512,512,(c,w,h)=>{c.fillStyle='#5f7d3c';c.fillRect(0,0,w,h);
+  for(let i=0;i<46000;i++){const g=[[74,104,48],[92,124,56],[110,138,64],[66,92,42],[128,140,78],[84,114,46]][Math.floor(r()*6)];c.strokeStyle=`rgba(${g[0]},${g[1]},${g[2]},.75)`;c.lineWidth=1+r();const x=r()*w,y=r()*h,a=-Math.PI/2+(r()-.5)*1.2,l=3+r()*7;c.beginPath();c.moveTo(x,y);c.lineTo(x+Math.cos(a)*l,y+Math.sin(a)*l);c.stroke();}
+  for(let i=0;i<30;i++){const g=c.createRadialGradient(0,0,0,0,0,20+r()*50),x=r()*w,y=r()*h;g.addColorStop(0,r()<.5?'rgba(150,140,80,.25)':'rgba(40,70,30,.25)');g.addColorStop(1,'rgba(0,0,0,0)');c.save();c.translate(x,y);c.fillStyle=g;c.fillRect(-80,-80,160,160);c.restore();}}));
+ // Garden beds: bark mulch with shrubs and flowers.
+ const beds=rep(W.texture(256,256,(c,w,h)=>{c.fillStyle='#5a4532';c.fillRect(0,0,w,h);for(let i=0;i<9000;i++){c.fillStyle=['#6b5139','#4a3826','#7a5e42','#3e2f22'][Math.floor(r()*4)];c.fillRect(r()*w,r()*h,2+r()*4,1+r()*2);}
+  for(let i=0;i<90;i++){const x=r()*w,y=r()*h,R=6+r()*14;c.fillStyle=['#3f6b2c','#4d7a33','#2f5a26','#6a8a3a'][Math.floor(r()*4)];c.beginPath();c.arc(x,y,R,0,7);c.fill();if(r()<.4){c.fillStyle=['#e94b6a','#f5d547','#ffffff','#b45fd1','#ff8c3a'][Math.floor(r()*5)];for(let k=0;k<8;k++){c.beginPath();c.arc(x+(r()-.5)*R*1.4,y+(r()-.5)*R*1.4,1.6,0,7);c.fill();}}}}));
+ // Macro noise for colour variation across hundreds of metres.
+ const noise=rep(W.texture(128,128,(c,w,h)=>{c.fillStyle='#808080';c.fillRect(0,0,w,h);for(let i=0;i<220;i++){const g=c.createRadialGradient(0,0,0,0,0,8+r()*30),x=r()*w,y=r()*h,v=Math.round(80+r()*100);g.addColorStop(0,`rgba(${v},${v},${v},.5)`);g.addColorStop(1,`rgba(${v},${v},${v},0)`);for(const [dx,dy] of [[0,0],[w,0],[-w,0],[0,h],[0,-h]]){c.save();c.translate(x+dx,y+dy);c.fillStyle=g;c.fillRect(-40,-40,80,80);c.restore();}}}));
+ return W.ct48GcGroundTex={pavers,grass,beds,noise};
+}
 function ct48GcGroundMaterial(W){
- // Concrete footpath pavers with stains; the city's street grid (asphalt, kerbs, centre lines)
- // is drawn in the shader once the grid is known. World-space so nothing smears.
- const tex=W.texture(512,512,(c,w,h)=>{c.fillStyle='#a9a69e';c.fillRect(0,0,w,h);const r=()=>W.rnd();
-  for(let y=0;y<8;y++)for(let x=0;x<8;x++){const v=138+Math.round((r()-.5)*22);c.fillStyle=`rgb(${v},${v-3},${v-10})`;c.fillRect(x*64+1,y*64+1,62,62);}
-  for(let i=0;i<9000;i++){const v=r()<.5?60:240;c.fillStyle=`rgba(${v},${v},${v},${.04+r()*.05})`;c.fillRect(r()*w,r()*h,1+r()*2,1+r()*2);}
-  for(let i=0;i<22;i++){const g=c.createRadialGradient(0,0,0,0,0,10+r()*30),x=r()*w,y=r()*h;g.addColorStop(0,'rgba(70,64,56,.18)');g.addColorStop(1,'rgba(70,64,56,0)');c.save();c.translate(x,y);c.fillStyle=g;c.fillRect(-40,-40,80,80);c.restore();}});
- tex.wrapS=tex.wrapT=THREE.RepeatWrapping;tex.anisotropy=8;
- W.ct48GcGridU={value:new THREE.Vector4(0,0,1,0)};
- const m=new THREE.MeshStandardMaterial({map:tex,roughness:.9,polygonOffset:true,polygonOffsetFactor:2,polygonOffsetUnits:4});
- m.onBeforeCompile=sh=>{sh.uniforms.gcGrid=W.ct48GcGridU;sh.uniforms.gcAsph={value:ct48GcAsphaltTexture(W)};
+ const T=ct48GcGroundTextures(W),B=ct48GcBlockMap(W);W.ct48GcGridU={value:new THREE.Vector4(0,0,1,0)};
+ const m=new THREE.MeshStandardMaterial({map:T.pavers,roughness:.92,polygonOffset:true,polygonOffsetFactor:2,polygonOffsetUnits:4});
+ m.onBeforeCompile=sh=>{Object.assign(sh.uniforms,{gcGrid:W.ct48GcGridU,gcAsph:{value:ct48GcAsphaltTexture(W)},gcGrass:{value:T.grass},gcBeds:{value:T.beds},gcNoise:{value:T.noise},gcBlocks:{value:B.tex}});
   sh.vertexShader='varying vec3 vGcW;\n'+sh.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvGcW=(modelMatrix*vec4(transformed,1.0)).xyz;');
-  sh.fragmentShader='uniform vec4 gcGrid;uniform sampler2D gcAsph;varying vec3 vGcW;\n'+sh.fragmentShader.replace('#include <map_fragment>',`float gcDist=distance(vGcW,cameraPosition);
-  vec4 sampledDiffuseColor=texture2D(map,vGcW.xz/9.0);vec3 base=mix(sampledDiffuseColor.rgb,texture2D(map,vGcW.xz/97.0).rgb,clamp(gcDist/420.0,0.0,.7));
-  vec2 rel=vGcW.xz-gcGrid.xy,A=gcGrid.zw,Bz=vec2(A.y,-A.x);float u=dot(rel,A),v=dot(rel,Bz),du=abs(mod(u,56.0)-28.0),dv=abs(mod(v,52.0)-26.0),aa=.05+gcDist*.002;
-  float roadU=1.0-smoothstep(6.3-aa,6.3+aa,du),roadV=1.0-smoothstep(6.3-aa,6.3+aa,dv),road=max(roadU,roadV);
-  float kerb=max((1.0-smoothstep(6.9-aa,6.9+aa,du))*(1.0-roadU),(1.0-smoothstep(6.9-aa,6.9+aa,dv))*(1.0-roadV));
-  vec3 asph=texture2D(gcAsph,vGcW.xz/6.0).rgb*texture2D(gcAsph,vGcW.xz/41.0).rgb*1.9;asph=mix(asph,vec3(.27,.28,.29),clamp(gcDist/600.0,0.0,.8));
-  float dash=(1.0-smoothstep(.09,.09+aa,du))*step(mod(v,7.0),3.5)*(1.0-roadV)+(1.0-smoothstep(.09,.09+aa,dv))*step(mod(u,7.0),3.5)*(1.0-roadU);
-  vec3 col=mix(base,vec3(.80,.79,.76),kerb);col=mix(col,asph,road);col=mix(col,vec3(.92,.92,.88),dash*road);
-  diffuseColor*=vec4(col,1.0);`);};
- m.customProgramCacheKey=()=> 'ct48GcGround2';return m;
+  sh.fragmentShader='uniform vec4 gcGrid;uniform sampler2D gcAsph,gcGrass,gcBeds,gcNoise,gcBlocks;varying vec3 vGcW;\nvec2 gcRot(vec2 p,float a){float c=cos(a),s=sin(a);return vec2(c*p.x-s*p.y,s*p.x+c*p.y);}\n'+sh.fragmentShader.replace('#include <map_fragment>',`
+  float gcD=distance(vGcW,cameraPosition),aa=.05+gcD*.002;vec2 rel=vGcW.xz-gcGrid.xy,A=gcGrid.zw,Bz=vec2(A.y,-A.x);float u=dot(rel,A),v=dot(rel,Bz);
+  float bi=floor((u+28.0)/56.0),bj=floor((v+26.0)/52.0),lu=u-bi*56.0,lv=v-bj*52.0;vec4 blk=texture2D(gcBlocks,(vec2(bi,bj)+64.5)/128.0);float type=floor(blk.r*255.0/40.0+.5),tv=blk.g,ang=blk.b*6.2832;
+  float eu=28.0-abs(lu),ev=26.0-abs(lv),edge=min(eu,ev);vec2 lp=vec2(lu,lv);
+  float macro=texture2D(gcNoise,vGcW.xz/260.0).r*.6+texture2D(gcNoise,vGcW.xz/61.0).g*.4;float mv=.82+macro*.36;
+  vec3 pav=texture2D(map,gcRot(vGcW.xz,ang)/4.0).rgb;pav=mix(pav,texture2D(map,vGcW.xz/37.0).rgb,clamp(gcD/300.0,0.0,.6));
+  vec3 grass=texture2D(gcGrass,vGcW.xz/3.0).rgb*mix(vec3(1.0),texture2D(gcGrass,vGcW.xz/29.0).rgb*1.6,.5);grass=mix(grass,vec3(.36,.47,.25),clamp(gcD/400.0,0.0,.7));grass*=mix(vec3(1.0),vec3(1.15,1.05,.8),smoothstep(.55,.8,macro));
+  vec3 asph=texture2D(gcAsph,vGcW.xz/6.0).rgb*texture2D(gcAsph,vGcW.xz/41.0).rgb*1.9;asph=mix(asph,vec3(.27,.28,.29),clamp(gcD/600.0,0.0,.8));
+  vec3 inner;
+  if(type<.5){inner=grass;float path=1.0-smoothstep(1.1,1.1+aa,abs(gcRot(lp,ang*.3).x));inner=mix(inner,pav*vec3(1.05,1.0,.92),path);}
+  else if(type<1.5){float bed=step(.55,texture2D(gcNoise,lp/38.0+tv*.01).r);inner=mix(grass,texture2D(gcBeds,vGcW.xz/5.0).rgb,bed*smoothstep(3.0,5.0,edge));}
+  else if(type<2.5){inner=pav*mix(vec3(1.08,1.0,.86),vec3(.92,.92,.94),tv);}
+  else if(type<3.5){inner=asph*1.05;vec2 bay=gcRot(lp,0.0);float lines=(1.0-smoothstep(.06,.06+aa,abs(mod(bay.x,2.6)-1.3)))*step(abs(mod(bay.y,12.0)-6.0),2.4);inner=mix(inner,vec3(.85,.85,.8),lines*.8);}
+  else{inner=mix(vec3(.62,.57,.48),vec3(.5,.47,.42),texture2D(gcBeds,vGcW.xz/9.0).r)*1.1;}
+  float foot=1.0-smoothstep(2.8,2.8+aa,edge-6.6);vec3 col=mix(inner*mv,pav*mv*1.04,foot);
+  float kerb=(1.0-smoothstep(6.6,6.6+aa,edge+6.6-6.6+0.0))*0.0;
+  float road=1.0-smoothstep(6.3-aa,6.3+aa,min(abs(abs(lu)-28.0),abs(abs(lv)-26.0)));
+  float kb=(1.0-smoothstep(6.6-aa,6.6+aa,min(abs(abs(lu)-28.0),abs(abs(lv)-26.0))))*(1.0-road);
+  float du=abs(abs(lu)-28.0),dv=abs(abs(lv)-26.0),inU=1.0-smoothstep(6.3-aa,6.3+aa,du),inV=1.0-smoothstep(6.3-aa,6.3+aa,dv);
+  float dash=(1.0-smoothstep(.09,.09+aa,du))*step(mod(v,7.0),3.5)*(1.0-inV)+(1.0-smoothstep(.09,.09+aa,dv))*step(mod(u,7.0),3.5)*(1.0-inU);
+  col=mix(col,vec3(.74,.73,.70)*mv,kb);col=mix(col,asph*mix(.92,1.06,macro),road);col=mix(col,vec3(.9,.9,.86),dash*road*.9);
+  vec4 sampledDiffuseColor=vec4(col,1.0);diffuseColor*=sampledDiffuseColor;`);};
+ m.customProgramCacheKey=()=> 'ct48GcGround3';return m;
 }
 
 // Run-off: asphalt from under the white line out to the wall on both sides, part of the
@@ -267,11 +310,13 @@ dc37AddBoard=function(W,rows,p,normal,width,height,brand,type){
 
 // ---------- City kit: CT48Kit with vertex tints and 300 m tiles for culling ----------
 class CT48GcKit extends CT48Kit{
- constructor(W){super(W);this.tint=[1,1,1];this.tile='0';}
+ constructor(W){super(W);this.tint=[1,1,1];this.tile='0';this.base=0;}
  begin(f){this.tile=Math.floor(f.x/520)+','+Math.floor(f.z/520);}
  bin(m){const key=m.uuid+'|'+this.tile;let b=this.bins.get(key);if(!b)this.bins.set(key,b={m,p:[],n:[],uv:[],c:[],ix:[]});return b;}
- quad(m,a,b,c,d,uv){super.quad(m,a,b,c,d,uv);const B=this.bin(m),t=this.tint;B.c.push(...t,...t,...t,...t);}
- tri(m,f,pts,out){const B=this.bin(m),n0=B.p.length;super.tri(m,f,pts,out);const t=this.tint;for(let i=n0;i<B.p.length;i+=3)B.c.push(...t);}
+ // Tint times a little ground-level occlusion (darker at the foot of every building).
+ ao(y){return .74+.26*Math.min(1,Math.max(0,(y-this.base)/10));}
+ quad(m,a,b,c,d,uv){super.quad(m,a,b,c,d,uv);const B=this.bin(m),t=this.tint;for(const p of [a,b,c,d]){const k=this.ao(p[1]);B.c.push(t[0]*k,t[1]*k,t[2]*k);}}
+ tri(m,f,pts,out){const B=this.bin(m),n0=B.p.length;super.tri(m,f,pts,out);const t=this.tint;for(let i=n0;i<B.p.length;i+=3){const k=this.ao(B.p[i+1]);B.c.push(t[0]*k,t[1]*k,t[2]*k);}}
  // Vertical prism over a plan polygon (local x,z, counter-clockwise seen from above).
  prism(m,f,plan,y0,y1,top,bottom){const n=plan.length;let u=0;
   for(let i=0;i<n;i++){const [ax,az]=plan[i],[bx,bz]=plan[(i+1)%n],l=Math.hypot(bx-ax,bz-az),mx=(ax+bx)/2,mz=(az+bz)/2;
@@ -300,43 +345,76 @@ function ct48GcGrow(plan,o){// Offset a convex-ish plan outward by o.
  return out;
 }
 
+
+// Environment for reflections: sky gradient, sun glow, clouds and a ring of city towers.
+function ct48GcEnv(W){
+ if(W.ct48GcEnvTex)return W.ct48GcEnvTex;const T=THREE,sc=new T.Scene();
+ const sky=new T.Mesh(new T.SphereGeometry(500,32,16),new T.ShaderMaterial({side:T.BackSide,depthWrite:false,vertexShader:'varying vec3 vP;void main(){vP=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',
+  fragmentShader:'varying vec3 vP;void main(){float h=normalize(vP).y;vec3 c=h>0.0?mix(vec3(.80,.88,.93),vec3(.33,.55,.82),pow(h,.6)):mix(vec3(.62,.64,.62),vec3(.35,.36,.35),pow(-h,.5));float sun=pow(max(0.0,dot(normalize(vP),normalize(vec3(-.4,.7,-.25)))),180.0);gl_FragColor=vec4(c+vec3(1.0,.95,.85)*sun*4.0,1.0);}'}));sc.add(sky);
+ for(let i=0;i<14;i++){const a=i/14*6.28+W.rnd(),cl=new T.Mesh(new T.SphereGeometry(30+W.rnd()*40,8,6),new T.MeshBasicMaterial({color:'#f4f7f9'}));cl.scale.y=.3;cl.position.set(Math.cos(a)*380,140+W.rnd()*120,Math.sin(a)*380);sc.add(cl);}
+ for(let i=0;i<70;i++){const a=i/70*6.28,h=30+W.rnd()*160,b=new T.Mesh(new T.BoxGeometry(18+W.rnd()*20,h,18+W.rnd()*20),new T.MeshBasicMaterial({color:new T.Color().setHSL(.56+W.rnd()*.08,.12,.45+W.rnd()*.35)}));b.position.set(Math.cos(a)*(260+W.rnd()*60),h/2-20,Math.sin(a)*(260+W.rnd()*60));sc.add(b);}
+ const pm=new T.PMREMGenerator(W.renderer),rt=pm.fromScene(sc,.02,1,1200);pm.dispose();sc.traverse(o=>{o.geometry?.dispose();o.material?.dispose();});
+ return W.ct48GcEnvTex=rt.texture;
+}
 // ---------- City materials (white-based textures, tinted per building by vertex colour) ----------
 function ct48GcMaterials(W){
  if(W.ct48GcMats)return W.ct48GcMats;const r=()=>W.rnd(),std=o=>new THREE.MeshStandardMaterial({vertexColors:true,...o});
  const tex=(w,h,draw,mx,my)=>{const t=ct48Tex(W,w,h,draw,mx,my);t.anisotropy=8;return t;};
- // Curtain wall: 1.6 m panes, one floor (3.3 m) per tile row, spandrel at the slab, sky gradient.
- const glass=tex(256,512,(c,w,h)=>{const g=c.createLinearGradient(0,0,w*.3,h);g.addColorStop(0,'#c9d6dd');g.addColorStop(.45,'#8fa3ae');g.addColorStop(1,'#b8c6cc');c.fillStyle=g;c.fillRect(0,0,w,h);
-  for(let k=0;k<4;k++){const y=k*h/2;c.fillStyle='rgba(255,255,255,.10)';c.beginPath();c.moveTo(r()*w,y);c.lineTo(w,y+h*.2);c.lineTo(w,y+h*.32);c.lineTo(0,y+h*.1);c.fill();}
-  for(let fl=0;fl<2;fl++){const y=fl*h/2;c.fillStyle='#5d666b';c.fillRect(0,y,w,h*.06);c.fillStyle='rgba(30,40,45,.35)';c.fillRect(0,y+h*.06,w,h*.04);for(let x=0;x<w;x+=w/2){c.fillStyle='#6e777c';c.fillRect(x,y,4,h/2);}
-   for(let x=0;x<w;x+=w/2)if(r()<.35){c.fillStyle=`rgba(${r()<.5?'240,236,226':'60,60,62'},.35)`;c.fillRect(x+5,y+h*.11,w/2-8,h*.36);}}},3.2,6.6);
- // Apartment balcony wall: floor-to-ceiling sliding doors with frames, curtains, dark interiors.
- const doors=tex(512,256,(c,w,h)=>{c.fillStyle='#f1efe9';c.fillRect(0,0,w,h);const bays=4,bw=w/bays;
-  for(let i=0;i<bays;i++){const x=i*bw;c.fillStyle='#e9e7e0';c.fillRect(x,0,bw,h);const g=c.createLinearGradient(0,h*.1,0,h*.92);g.addColorStop(0,'#3b4a52');g.addColorStop(1,'#6d828c');c.fillStyle=g;c.fillRect(x+bw*.06,h*.12,bw*.88,h*.80);
-   c.fillStyle='rgba(255,255,255,.14)';c.fillRect(x+bw*.1,h*.14,bw*.2,h*.76);c.fillStyle='#d8dadb';c.fillRect(x+bw*.49,h*.12,bw*.03,h*.8);c.fillRect(x+bw*.06,h*.12,bw*.88,h*.025);
-   const cur=r();if(cur<.55){c.fillStyle=['rgba(236,226,206,.85)','rgba(210,214,216,.85)','rgba(196,170,140,.8)','rgba(245,245,240,.9)'][Math.floor(r()*4)];const cw=bw*(.12+r()*.3);c.fillRect(x+bw*.08,h*.13,cw,h*.78);if(r()<.6)c.fillRect(x+bw*.92-cw*.8,h*.13,cw*.8,h*.78);}}
-  c.fillStyle='#cfccc4';c.fillRect(0,h*.93,w,h*.07);},14.4,3.2);
- // Punched windows in render (older hotels, motels, side walls): 3.6 m bays, 3.0 m floors.
- const punched=tex(256,256,(c,w,h)=>{c.fillStyle='#f3f1ec';c.fillRect(0,0,w,h);for(let i=0;i<1600;i++){c.fillStyle=`rgba(0,0,0,${r()*.04})`;c.fillRect(r()*w,r()*h,2,2);}
-  for(let row=0;row<2;row++)for(let col=0;col<2;col++){const x=col*w/2+w*.09,y=row*h/2+h*.12,ww=w*.32,hh=h*.28;c.fillStyle='#d6d3cb';c.fillRect(x-3,y-3,ww+6,hh+8);const g=c.createLinearGradient(0,y,0,y+hh);g.addColorStop(0,'#2f3d45');g.addColorStop(1,'#5d727c');c.fillStyle=g;c.fillRect(x,y,ww,hh);c.fillStyle='#e6e4de';c.fillRect(x+ww/2-1.5,y,3,hh);if(r()<.5){c.fillStyle='rgba(235,225,200,.7)';c.fillRect(x+2,y+2,ww*.3,hh-4);}}},7.2,6.0);
- // Shopfronts: 4.5 m tall, signage band, glazing, doors, columns.
- const shop=tex(512,128,(c,w,h)=>{c.fillStyle='#e9e6df';c.fillRect(0,0,w,h);const n=4,sw=w/n;
-  for(let i=0;i<n;i++){const x=i*sw,col=['#c3262f','#1f5f9e','#e0a020','#2f7d4f','#7a3e8e','#e86c2a','#203040','#d94f7a'][Math.floor(r()*8)];c.fillStyle=col;c.fillRect(x+4,4,sw-8,h*.2);c.fillStyle='rgba(255,255,255,.85)';for(let k=0;k<5;k++)c.fillRect(x+12+k*(sw-24)/5,10,(sw-24)/5-6,h*.08);
-   const g=c.createLinearGradient(0,h*.3,0,h);g.addColorStop(0,'#3a4850');g.addColorStop(1,'#8a9ba3');c.fillStyle=g;c.fillRect(x+6,h*.3,sw-12,h*.7);c.fillStyle='rgba(255,240,210,.35)';c.fillRect(x+10,h*.55,sw-20,h*.2);c.fillStyle='#bfc4c6';c.fillRect(x+sw/2-2,h*.3,4,h*.7);c.fillStyle='#9a9fa2';c.fillRect(x,0,6,h);}},16,4.5);
+ // Facade textures come with a mask of their glazing, turned into a roughness/metalness map:
+ // the glass reflects the sky and the city (environment map), frames and walls stay matte.
+ const texMR=(w,h,draw,mx,my)=>{const c=document.createElement('canvas'),k=document.createElement('canvas');c.width=k.width=w;c.height=k.height=h;const cx=c.getContext('2d'),kx=k.getContext('2d');kx.fillStyle='#000';kx.fillRect(0,0,w,h);draw(cx,kx,w,h);
+  const id=kx.getImageData(0,0,w,h),o=kx.createImageData(w,h);for(let i=0;i<id.data.length;i+=4){const g=id.data[i]/255;o.data[i]=255;o.data[i+1]=Math.round(235-g*215);o.data[i+2]=Math.round(g*150);o.data[i+3]=255;}kx.putImageData(o,0,0);
+  const t=new THREE.CanvasTexture(c),m=new THREE.CanvasTexture(k);t.colorSpace=THREE.SRGBColorSpace;for(const x of [t,m]){x.wrapS=x.wrapT=THREE.RepeatWrapping;x.repeat.set(1/mx,1/my);x.anisotropy=8;}return{map:t,mr:m};};
+ const pane=(c,k,x,y,w,h,opts={})=>{// One glazed opening: interior depth, ceiling light, furniture, curtains or blinds.
+  const g=c.createLinearGradient(0,y,0,y+h);g.addColorStop(0,opts.top||'#26313a');g.addColorStop(.5,opts.mid||'#3c4b55');g.addColorStop(1,opts.bot||'#58666e');c.fillStyle=g;c.fillRect(x,y,w,h);
+  c.fillStyle='rgba(255,244,220,.10)';c.fillRect(x,y,w,h*.06);if(r()<.35){c.fillStyle='rgba(250,235,200,.18)';c.fillRect(x+w*.1,y+h*.04,w*.8,h*.03);}
+  if(r()<.4){c.fillStyle='rgba(20,20,22,.35)';c.fillRect(x+w*(.15+r()*.4),y+h*.62,w*.35,h*.22);}if(r()<.25){c.fillStyle='rgba(30,30,30,.4)';c.fillRect(x+w*(.2+r()*.6),y+h*.3,2,h*.55);c.fillStyle='rgba(255,236,190,.35)';c.beginPath();c.arc(x+w*.5,y+h*.3,4,0,7);c.fill();}
+  const cur=r();if(cur<.3){c.fillStyle=['rgba(236,228,210,.82)','rgba(214,216,214,.82)','rgba(190,168,140,.8)'][Math.floor(r()*3)];const cw=w*(.15+r()*.25);c.fillRect(x,y,cw,h);c.fillRect(x+w-cw*.7,y,cw*.7,h);c.fillStyle='rgba(0,0,0,.08)';for(let q=x;q<x+cw;q+=4)c.fillRect(q,y,1,h);}
+  else if(cur<.5){const bh=h*(.2+r()*.7);c.fillStyle='rgba(222,220,212,.9)';c.fillRect(x,y,w,bh);c.fillStyle='rgba(0,0,0,.12)';for(let q=y;q<y+bh;q+=3)c.fillRect(x,q,w,1);}
+  else if(cur<.62){c.fillStyle='rgba(245,245,240,.35)';c.fillRect(x,y,w,h);}
+  k.fillStyle='#fff';k.fillRect(x,y,w,h);
+  // Frame with a little depth: light top/left edge, shadow bottom/right.
+  c.fillStyle=opts.frame||'#c9cdcf';c.fillRect(x-3,y-3,w+6,4);c.fillRect(x-3,y-3,4,h+6);c.fillStyle=opts.frameDark||'#8e9396';c.fillRect(x-3,y+h-1,w+6,4);c.fillRect(x+w-1,y-3,4,h+6);k.fillStyle='#000';k.fillRect(x-3,y-3,w+6,4);k.fillRect(x-3,y+h-1,w+6,4);};
+ // Curtain wall: two 1.6 m panes by two 3.3 m floors; vision glass over a dark spandrel.
+ const glass=texMR(512,1024,(c,k,w,h)=>{c.fillStyle='#4b555b';c.fillRect(0,0,w,h);
+  for(let fl=0;fl<2;fl++){const y=fl*h/2,sp=h*.13;const sg=c.createLinearGradient(0,y,0,y+sp);sg.addColorStop(0,'#3c4449');sg.addColorStop(1,'#596369');c.fillStyle=sg;c.fillRect(0,y,w,sp);k.fillStyle='#777';k.fillRect(0,y,w,sp);
+   for(let p=0;p<2;p++)pane(c,k,p*w/2+4,y+sp+4,w/2-8,h/2-sp-8,{frame:'#7f888d',frameDark:'#596165',top:'#27323a',mid:'#33424b',bot:'#4a5a63'});}},3.2,6.6);
+ // Apartment wall behind the balconies: column, full-height sliding doors (three panels), slab edge.
+ const doors=texMR(1024,256,(c,k,w,h)=>{c.fillStyle='#ecebe6';c.fillRect(0,0,w,h);for(let i=0;i<3000;i++){c.fillStyle=`rgba(0,0,0,${r()*.035})`;c.fillRect(r()*w,r()*h,2,2);}const bays=4,bw=w/bays;
+  for(let i=0;i<bays;i++){const x=i*bw;c.fillStyle='rgba(0,0,0,.10)';c.fillRect(x,0,bw*.07,h);const gx=x+bw*.09,gw=bw*.84,gy=h*.10,gh=h*.80;
+   for(let p=0;p<3;p++)pane(c,k,gx+p*gw/3+2,gy+2,gw/3-4,gh-4,{frame:'#d3d6d7',frameDark:'#9aa0a3'});
+   if(r()<.5){c.fillStyle=['#3e6b3a','#55803f','#6b4f3a'][Math.floor(r()*3)];c.beginPath();c.ellipse(x+bw*(.15+r()*.7),h*.84,10,14,0,0,7);c.fill();}}
+  c.fillStyle='#d9d7d0';c.fillRect(0,h*.92,w,h*.08);c.fillStyle='rgba(0,0,0,.18)';c.fillRect(0,0,w,h*.04);},14.4,3.2);
+ // Punched windows in render with recesses, sills and rain streaks: 2 x 2 per 7.2 x 6 m.
+ const punched=texMR(512,512,(c,k,w,h)=>{c.fillStyle='#efede7';c.fillRect(0,0,w,h);for(let i=0;i<5000;i++){c.fillStyle=`rgba(0,0,0,${r()*.035})`;c.fillRect(r()*w,r()*h,2,2);}
+  for(let row=0;row<2;row++)for(let col=0;col<2;col++){const x=col*w/2+w*.08,y=row*h/2+h*.1,ww=w*.34,hh=h*.3;
+   c.fillStyle='rgba(60,55,50,.07)';for(let s=0;s<6;s++)c.fillRect(x+r()*ww,y+hh+6,2+r()*3,h*.08+r()*h*.1);
+   c.fillStyle='rgba(0,0,0,.22)';c.fillRect(x-6,y-6,ww+12,8);c.fillRect(x-6,y-6,8,hh+12);pane(c,k,x,y,ww,hh,{frame:'#dcdcd6',frameDark:'#a7a9a6'});c.fillStyle='#f7f6f2';c.fillRect(x-8,y+hh+3,ww+16,6);c.fillStyle='rgba(0,0,0,.2)';c.fillRect(x-8,y+hh+9,ww+16,3);}},7.2,6.0);
+ // Shopfronts: signage band, glazing with displays, doors, columns.
+ const shop=texMR(1024,256,(c,k,w,h)=>{c.fillStyle='#e6e3dc';c.fillRect(0,0,w,h);const n=4,sw=w/n;
+  for(let i=0;i<n;i++){const x=i*sw,col=['#c3262f','#1f5f9e','#e0a020','#2f7d4f','#7a3e8e','#e86c2a','#203040','#d94f7a','#111111','#f4f4f0'][Math.floor(r()*10)];c.fillStyle=col;c.fillRect(x+8,8,sw-16,h*.2);c.fillStyle=col==='#f4f4f0'?'#203040':'rgba(255,255,255,.9)';c.font=`bold ${Math.round(h*.12)}px sans-serif`;c.textAlign='center';c.fillText(['CAFE','SURF','GELATO','PHARMACY','SUSHI','BAR','BOUTIQUE','NEWS','PIZZA','SWIMWEAR'][Math.floor(r()*10)],x+sw/2,8+h*.15);
+   pane(c,k,x+12,h*.3,sw*.62,h*.66,{frame:'#3a3f42',frameDark:'#222'});pane(c,k,x+sw*.68,h*.3,sw*.25,h*.66,{frame:'#3a3f42',frameDark:'#222',top:'#1b2228',mid:'#232c33',bot:'#2c363d'});
+   for(let q=0;q<6;q++){c.fillStyle=['#e94b3c','#f5d547','#ffffff','#3a78c3','#50b36a'][Math.floor(r()*5)];c.fillRect(x+20+q*sw*.09,h*.78,sw*.06,h*.1);}c.fillStyle='#a9a6a0';c.fillRect(x,0,8,h);}},16,4.5);
  const plain=tex(64,64,(c,w,h)=>{c.fillStyle='#f4f2ee';c.fillRect(0,0,w,h);for(let i=0;i<500;i++){c.fillStyle=`rgba(0,0,0,${r()*.05})`;c.fillRect(r()*w,r()*h,2,2);}},3,3);
  const awning=tex(64,64,(c,w,h)=>{for(let x=0;x<w;x+=16){c.fillStyle='#f4f4f0';c.fillRect(x,0,8,h);c.fillStyle='#c9c9c4';c.fillRect(x+8,0,8,h);}},1.2,1.2);
  const pool=tex(128,128,(c,w,h)=>{c.fillStyle='#3fb2c8';c.fillRect(0,0,w,h);for(let i=0;i<60;i++){c.strokeStyle='rgba(255,255,255,.35)';c.lineWidth=1.5;c.beginPath();const x=r()*w,y=r()*h;c.moveTo(x,y);c.quadraticCurveTo(x+8,y-6,x+16,y);c.stroke();}},4,4);
  const rail=tex(64,64,(c,w,h)=>{c.clearRect(0,0,w,h);c.fillStyle='rgba(200,215,220,.55)';c.fillRect(0,6,w,h-6);c.fillStyle='#e8eaea';c.fillRect(0,0,w,6);for(let x=0;x<w;x+=32)c.fillRect(x,0,3,h);},1.2,1.1);
  const pickets=tex(64,64,(c,w,h)=>{c.clearRect(0,0,w,h);c.fillStyle='#f0f0ec';c.fillRect(0,0,w,6);c.fillRect(0,h-5,w,5);for(let x=0;x<w;x+=8)c.fillRect(x,0,3,h);},.8,1.1);
+ // Glazing (the mask's metalness channel) gets a Fresnel-weighted sky and city reflection on
+ // top of the interior seen through it, instead of a metallic tint that would turn it black.
+ const glassy=m=>{const prev=m.onBeforeCompile;m.onBeforeCompile=(sh,rr)=>{prev?.call(m,sh,rr);sh.fragmentShader=sh.fragmentShader.replace('#include <metalnessmap_fragment>','#include <metalnessmap_fragment>\nfloat gcGlass=metalnessFactor;metalnessFactor*=.12;')
+  .replace('#include <opaque_fragment>','#ifdef USE_ENVMAP\n{float fr=pow(1.0-clamp(dot(geometryNormal,geometryViewDir),0.0,1.0),3.0);vec3 refl=getIBLRadiance(geometryViewDir,geometryNormal,.06)*envMapIntensity*vec3(.5,.58,.66);\n#ifdef USE_COLOR\nrefl*=mix(vec3(1.0),vColor.rgb,.7);\n#endif\noutgoingLight=mix(outgoingLight,refl,clamp(gcGlass*1.7,0.0,1.0)*(.3+.55*fr));}\n#endif\n#include <opaque_fragment>');};m.customProgramCacheKey=()=>'ct48GcGlassyNight';return m;};
+ const env=ct48GcEnv(W),mr=(t,o={})=>glassy(ct48Night(W,std({map:t.map,roughnessMap:t.mr,metalnessMap:t.mr,roughness:1,metalness:1,envMap:env,envMapIntensity:1.0,...o})));
  const M={
-  glass:ct48Night(W,std({map:glass,roughness:.08,metalness:.6,envMapIntensity:1.2})),
-  doors:ct48Night(W,std({map:doors,roughness:.35,metalness:.15})),
-  punched:ct48Night(W,std({map:punched,roughness:.8})),
-  shop:ct48Night(W,std({map:shop,roughness:.45,metalness:.1})),
+  glass:mr(glass),
+  doors:mr(doors),
+  punched:mr(punched),
+  shop:mr(shop),
   plain:std({map:plain,roughness:.85}),
-  metal:std({color:'#ffffff',roughness:.4,metalness:.6}),
+  metal:std({color:'#ffffff',roughness:.35,metalness:.7,envMap:env}),
   awning:std({map:awning,roughness:.8,side:THREE.DoubleSide}),
-  pool:std({map:pool,roughness:.1,metalness:.1}),
-  railGlass:std({map:rail,transparent:true,depthWrite:false,roughness:.1,metalness:.2,side:THREE.DoubleSide}),
+  pool:std({map:pool,roughness:.08,metalness:.2,envMap:env}),
+  railGlass:std({map:rail,transparent:true,depthWrite:false,roughness:.05,metalness:.5,envMap:env,side:THREE.DoubleSide}),
   railBar:std({map:pickets,alphaTest:.4,roughness:.5,metalness:.4,side:THREE.DoubleSide}),
   roof:std({map:plain,roughness:.95}),
  };
@@ -345,7 +423,7 @@ function ct48GcMaterials(W){
 // Colour palettes for tints (multiplied with the near-white textures).
 const CT48_GC_TINT={
  glass:[[.62,.80,.92],[.55,.72,.70],[.72,.78,.82],[.80,.70,.55],[.45,.55,.62],[.66,.86,.84],[.85,.86,.88],[.50,.62,.78]],
- render:[[1,1,.98],[.98,.93,.84],[.96,.86,.80],[.84,.92,.93],[.93,.90,.82],[.98,.82,.72],[.85,.88,.80],[.90,.90,.92],[.98,.96,.88]],
+ render:[[1,1,.98],[.97,.93,.85],[.93,.84,.76],[.84,.90,.92],[.90,.87,.80],[.95,.80,.70],[.82,.85,.78],[.78,.79,.80],[.96,.94,.86],[.70,.68,.64],[.88,.80,.66],[.60,.62,.64]],
  accent:[[.15,.35,.6],[.75,.25,.2],[.2,.55,.55],[.9,.6,.2],[.3,.3,.32],[.95,.95,.95],[.55,.75,.85]],
 };
 function ct48GcPick(list,v){return list[Math.floor(v*list.length)%list.length];}
@@ -459,7 +537,7 @@ function ct48GcPalmTex(W){
 function ct48GcPalms(W,spots){
  if(!spots.length)return;const T=THREE,tex=ct48GcPalmTex(W);
  // Trunk: gently curved, tapering, ringed bark (vertex colour bands).
- const tp=[],tc=[],ti=[],seg=6,sides=5;for(let k=0;k<=seg;k++){const t=k/seg,y=t*10,bend=t*t*.9,r=.24-.08*t,shade=(k%2?.82:1);for(let s=0;s<=sides;s++){const a=s/sides*Math.PI*2;tp.push(bend+Math.cos(a)*r,y,Math.sin(a)*r);tc.push(.62*shade,.55*shade,.45*shade);}}
+ const tp=[],tc=[],ti=[],seg=5,sides=4;for(let k=0;k<=seg;k++){const t=k/seg,y=t*10,bend=t*t*.9,r=.24-.08*t,shade=(k%2?.82:1);for(let s=0;s<=sides;s++){const a=s/sides*Math.PI*2;tp.push(bend+Math.cos(a)*r,y,Math.sin(a)*r);tc.push(.62*shade,.55*shade,.45*shade);}}
  for(let k=0;k<seg;k++)for(let s=0;s<sides;s++){const a=k*(sides+1)+s,b=a+sides+1;ti.push(a,b,a+1,a+1,b,b+1);}
  const trunk=new T.BufferGeometry();trunk.setAttribute('position',new T.Float32BufferAttribute(tp,3));trunk.setAttribute('color',new T.Float32BufferAttribute(tc,3));trunk.setIndex(ti);trunk.computeVertexNormals();
  // Crown: 11 arched fronds (3 segments each) radiating from the top of the trunk.
@@ -555,9 +633,6 @@ function ct48GcBuild(K,W,f,w,d,seed,M,people,near,far){
 // Pit wall between the pit lane and the apron, with the teams' timing stands behind it.
 function ct48GcPitWall(K,W,MB){
  const pit=W.pit;if(!pit?.samples||!pit.bays?.length)return;const side=pit.bays[0].side,seg=70;
- for(let k=0;k<seg;k++){const fa=.2+.6*k/seg,fb=.2+.6*(k+1)/seg,a=dc32PitAt(W,fa),b=dc32PitAt(W,fb),az={x:b.p.x-a.p.x,z:b.p.z-a.p.z},l=Math.hypot(az.x,az.z)||1;az.x/=l;az.z/=l;
-  const f={x:(a.p.x+b.p.x)/2-a.n.x*side*4.5,y:a.p.y-.2,z:(a.p.z+b.p.z)/2-a.n.z*side*4.5,ax:{x:-a.n.x*side,z:-a.n.z*side},az};K.begin(f);K.tint=[1,1,1];
-  K.box(f,.3,.65,0,.6,1.3,l+.03,{side:MB.concreteWarm,top:MB.concrete});K.lquad(MB.rail,f,[[.05,1.3,-l/2],[.05,1.3,l/2],[.05,3.6,l/2],[.05,3.6,-l/2]],[-1,0,0]);if(k%2===0)K.box(f,.05,2.45,-l/2,.08,2.3,.08,MB.steel);}
  for(const bay of pit.bays){const q=dc32PitAt(W,bay.f),f={x:q.p.x-q.n.x*side*7.2,y:q.p.y-.2,z:q.p.z-q.n.z*side*7.2,ax:{x:-q.n.x*side,z:-q.n.z*side},az:{x:q.v.x,z:q.v.z}};K.begin(f);
   // Timing stand: raised platform, screens bench, stools, shade roof.
   K.box(f,0,.9,0,2.4,.2,4.2,{side:MB.darkSteel,top:MB.concrete});K.box(f,-.9,1.45,0,.5,.9,3.8,{side:MB.black,top:MB.black});for(const z of [-1.5,1.5])for(const x of [-1.1,1.1])K.box(f,x,1.9,z,.1,3.6,.1,MB.steel);K.box(f,0,3.75,0,2.8,.15,4.6,{side:MB.white,top:MB.roof,bottom:MB.underside});K.box(f,1.3,.45,0,.3,.9,1,MB.steel);}
@@ -582,6 +657,44 @@ function ct48GcBeachLife(W,people){
  const cab=new T.Mesh(new T.BoxGeometry(3,2.2,3),new T.MeshStandardMaterial({color:'#f6cf1f',roughness:.6}));cab.position.y=4.3;tower.add(cab);const rf=new T.Mesh(new T.BoxGeometry(3.6,.2,3.6),W.mat('#d8262c'));rf.position.y=5.5;tower.add(rf);
  W.ct48GcStats.beach={umbrellas:um.length,towels:tw.length};
 }
+// Subtropical street and park trees: fig, poinciana (in flower), jacaranda and a dense
+// broadleaf, each a dark trunk with a full, sunlit crown.
+function ct48GcTreeTex(W){
+ if(W.ct48GcTreeT)return W.ct48GcTreeT;const r=()=>W.rnd();
+ const t=W.texture(512,256,(c,w,h)=>{c.clearRect(0,0,w,h);
+  const kinds=[[['#2c4a22','#3e6a2c','#5b8a3a','#7aa64a'],null],[['#2e4d20','#41692a','#5f8c36','#7ea248'],['#d8402a','#e8583a','#f07a4a']],[['#3a5a2a','#4f7236','#6c8e48'],['#7b68c8','#9580dc','#b09ae8']],[['#24421f','#355d29','#4a7a33','#669a44'],null]];
+  for(let v=0;v<4;v++){const cx=v*128+64,[greens,flowers]=kinds[v];
+   c.strokeStyle=['#5d5045','#6b5b4c','#54483e','#62574a'][v];c.lineCap='round';c.lineWidth=8;c.beginPath();c.moveTo(cx,h);c.lineTo(cx+(r()-.5)*6,h*.55);c.stroke();
+   c.lineWidth=4;for(let b=0;b<5;b++){const s=b%2?-1:1;c.beginPath();c.moveTo(cx,h*(.55+r()*.12));c.quadraticCurveTo(cx+s*14,h*.45,cx+s*(18+r()*24),h*(.3+r()*.12));c.stroke();}
+   const cy=h*.36,rx=56,ry=h*.3;
+   for(let k=0;k<260;k++){const a=r()*Math.PI*2,rad=Math.sqrt(r()),x=cx+Math.cos(a)*rad*rx,y=cy+Math.sin(a)*rad*ry,light=clamp(.5-(y-cy)/ry*.5+(cx-x)/rx*.15+(r()-.5)*.4,0,.999);
+    c.fillStyle=greens[Math.floor(light*greens.length)];c.globalAlpha=.95;c.beginPath();c.ellipse(x,y,5+r()*8,4+r()*6,r()*3,0,7);c.fill();}
+   if(flowers)for(let k=0;k<160;k++){const a=r()*Math.PI*2,rad=Math.sqrt(r())*.95,x=cx+Math.cos(a)*rad*rx,y=cy+Math.sin(a)*rad*ry*.9-4;c.fillStyle=flowers[Math.floor(r()*flowers.length)];c.beginPath();c.arc(x,y,2+r()*3,0,7);c.fill();}
+   c.globalAlpha=1;}});
+ return W.ct48GcTreeT=t;
+}
+// Shade trees as crossed billboards from the subtropical atlas.
+function ct48GcTrees(W,list){
+ if(!list.length)return;const T=THREE,mat=new T.MeshStandardMaterial({map:ct48GcTreeTex(W),color:'#ffffff',alphaTest:.45,side:T.DoubleSide,roughness:.9}),d=new T.Object3D(),c=new T.Color(),rows=[[],[],[],[]];
+ list.forEach(([x,z,h],k)=>rows[Math.floor(ct48Hash(x,z,3)*4)].push([x,z,h,k]));
+ rows.forEach((items,v)=>{if(!items.length)return;const m=new T.InstancedMesh(ct48Billboard(v/4+.002,(v+1)/4-.002),mat,items.length);m.name='Gold Coast trees '+v;
+  items.forEach(([x,z,h],i)=>{const r=ct48Hash(z,x,5);d.position.set(x,-.05,z);d.rotation.set(0,r*Math.PI,0);d.scale.set(h*(.75+r*.25),h,h*(.75+r*.25));d.updateMatrix();m.setMatrixAt(i,d.matrix);const s=.8+ct48Hash(x,z,7)*.3;m.setColorAt(i,c.setRGB(s,s,s*.95));});
+  m.computeBoundingSphere();W.world.add(m);});
+}
+// Parked cars: one instanced low-poly hatch/sedan body with glass and tyres, coloured per car.
+function ct48GcCars(W,list){
+ if(!list.length)return;const T=THREE,pos=[],col=[],ix=[];
+ const box=(x0,y0,z0,x1,y1,z1,c,top=0)=>{const b=pos.length/3,P=[[x0,y0,z0],[x1,y0,z0],[x1,y1,z0],[x0,y1,z0],[x0,y0,z1],[x1,y0,z1],[x1,y1,z1],[x0,y1,z1]];
+  for(const p of P){pos.push(p[0]*(p[1]===y1&&top?top:1),p[1],p[2]);col.push(...c);}for(const f of [[0,3,2,1],[4,5,6,7],[0,1,5,4],[3,7,6,2],[0,4,7,3],[1,2,6,5]])ix.push(b+f[0],b+f[1],b+f[2],b+f[0],b+f[2],b+f[3]);};
+ box(-.9,.32,-2.25,.9,.95,2.25,[1,1,1]);box(-.8,.95,-1.2,.8,1.42,1.0,[.16,.19,.22],.86);
+ for(const z of [-1.45,1.45])box(-.92,0,z-.34,.92,.62,z+.34,[.06,.06,.06]);
+ const g=new T.BufferGeometry();g.setAttribute('position',new T.Float32BufferAttribute(pos,3));g.setAttribute('color',new T.Float32BufferAttribute(col,3));g.setIndex(ix);
+ const ng=g.toNonIndexed();ng.computeVertexNormals();
+ const m=new T.InstancedMesh(ng,new T.MeshStandardMaterial({vertexColors:true,roughness:.35,metalness:.5,envMap:ct48GcEnv(W),envMapIntensity:.8}),list.length),d=new T.Object3D(),c=new T.Color();m.name='Gold Coast parked cars';
+ const paint=['#f2f2f0','#f2f2f0','#1b1d21','#8d9197','#c3c6ca','#5a6068','#7d1418','#1d3d6e','#2f5d3b','#b8b0a0','#d8d2c4','#e6e6e6'];
+ list.forEach(([x,z,yaw,k],i)=>{d.position.set(x,.01,z);d.rotation.set(0,yaw,0);d.scale.set(1,1,1);d.updateMatrix();m.setMatrixAt(i,d.matrix);m.setColorAt(i,c.set(paint[k%paint.length]));});
+ m.computeBoundingSphere();m.castShadow=false;W.world.add(m);
+}
 function ct48BuildGoldCoast(W){
  const K=new CT48GcKit(W),M=ct48GcMaterials(W),MB=ct48Materials(W),people=[],palms=[],bz=ct48GcBeachZ(W),walls=ct48GcWalls(W),streets=walls.streets;
  W.ct48GcStats={...(W.ct48GcStats||{})};W.ct48GcLots=[];W.ct48GcSigns=[];W.ct48GcPalmSpots=[];
@@ -591,7 +704,7 @@ function ct48BuildGoldCoast(W){
  try{ct48PitComplex(K,W,MB);}finally{W.sign=sign;}
  ct48GcPitWall(K,W,MB);
  // Grandstands behind the walls: the pit straight, the first chicane, the hairpin and the beach.
- const standAt=(ph,side,len,seat,brand)=>{const i=Math.floor(W.at(ph).t*W.N)%W.N,L=walls.lane[side][i];const f=ct48Find(W,ph,side,L+3.5,19,len+4,L+2,6,5);if(f){K.begin(f);ct48Grandstand(K,W,f,len,MB,MB.seats[seat],brand);W.ct48GcStats.stands=(W.ct48GcStats.stands||0)+1;}};
+ const standAt=(ph,side,len,seat,brand)=>{const i=Math.floor(W.at(ph).t*W.N)%W.N,L=walls.lane[side][i];const f=ct48Find(W,ph,side,L+3.5,19,len+4,L+2,6,5);if(f){K.begin(f);ct48Grandstand(K,W,f,len,MB,MB.seats[seat],brand);W.ct48GcLots.push({x:f.x+f.ax.x*9.5,z:f.z+f.ax.z*9.5,ax:f.ax,az:f.az,w:21,d:len+6,stand:true});W.ct48GcStats.stands=(W.ct48GcStats.stands||0)+1;}};
  const pitSide=W.pit?.side||-1;
  standAt(.985,-pitSide,60,'blue','Boost Mobile');standAt(.03,-pitSide,48,'red','Gold Coast 500');standAt(.10,1,44,'orange','Repco');standAt(.24,-1,40,'green','Supercheap Auto');standAt(.38,1,44,'blue','Dunlop');standAt(.62,1,40,'red','Shell');standAt(.80,-1,44,'orange','Penrite');
  // Markets: the beachfront esplanade and a closed street behind the back straight.
@@ -609,23 +722,36 @@ function ct48BuildGoldCoast(W){
    u+=d+(placed?2+ct48Hash(seed,3)*6:4);seed++;}}
  // The rest of the city on a grid aligned with the main streets; taller toward the beach.
  const main=streets.reduce((a,b)=>b.l>a.l?b:a),ax={x:main.nx,z:main.nz},az={x:main.vx,z:main.vz},R=Math.max(W.bounds.maxX-W.bounds.minX,W.bounds.maxZ-W.bounds.minZ)/2+600,cx=(W.bounds.minX+W.bounds.maxX)/2,cz=(W.bounds.minZ+W.bounds.maxZ)/2;
- W.ct48GcGrid={cx,cz,ax,az,su:56,sv:52};W.ct48GcGridU?.value.set(cx,cz,ax.x,ax.z);const parks=[];
+ W.ct48GcGrid={cx,cz,ax,az,su:56,sv:52};W.ct48GcGridU?.value.set(cx,cz,ax.x,ax.z);const parks=[],used=new Set(),B=ct48GcBlockMap(W);
+ // Block coordinates exactly as the ground shader computes them.
+ const Bz={x:ax.z,z:-ax.x},blockOf=(x,z)=>{const u=(x-cx)*ax.x+(z-cz)*ax.z,v=(x-cx)*Bz.x+(z-cz)*Bz.z;return [Math.floor((u+28)/56),Math.floor((v+26)/52)];},blockAt=(bi,bj,lu,lv)=>({x:cx+ax.x*(bi*56+lu)+Bz.x*(bj*52+lv),z:cz+ax.z*(bi*56+lu)+Bz.z*(bj*52+lv)});
  for(let i=-Math.ceil(R/56)*56;i<=R;i+=56)for(let j=-Math.ceil(R/52)*52;j<=R;j+=52){const jx=(ct48Hash(i,j)-.5)*5,jz=(ct48Hash(j,i)-.5)*5,x=cx+ax.x*(i+jx)+az.x*(j+jz),z=cz+ax.z*(i+jx)+az.z*(j+jz),w=20+ct48Hash(i,j,3)*14,d=22+ct48Hash(i,j,2)*14;
   const f={x,y:0,z,ax,az},dist=W.nearest({x,z}).distance;if(dist>620||dist>330&&ct48Hash(i,j,5)<.55)continue;
-  if(ct48Hash(i,j,4)<.11){const p={x:cx+ax.x*i+az.x*j,y:0,z:cz+ax.z*i+az.z*j,ax,az};if(ct48GcLotClear(W,p,40,36,0))parks.push(p);continue;}
-  if(ct48GcLotClear(W,f,w,d,4))ct48GcBuild(K,W,f,w,d,seed++,M,people,false,dist>330);}
+  if(ct48Hash(i,j,4)<.11){const p={x:cx+ax.x*i+az.x*j,y:0,z:cz+ax.z*i+az.z*j,ax,az};if(ct48GcLotClear(W,p,40,36,0)){parks.push(p);const [bi,bj]=blockOf(p.x,p.z);B.set(bi,bj,ct48Hash(i,j,6)<.6?0:1);used.add(bi+','+bj);}continue;}
+  if(ct48GcLotClear(W,f,w,d,4)){ct48GcBuild(K,W,f,w,d,seed++,M,people,false,dist>330);used.add(blockOf(x,z).join(','));}}
  // Parks: lawn, paths, palms and a few people in the empty blocks.
- for(const p of parks){K.begin(p);K.tint=[.55,.72,.42];K.lquad(M.plain,p,[[-21,.03,-19],[21,.03,-19],[21,.03,19],[-21,.03,19]],[0,1,0],[0,0,42,0,42,38,0,38]);K.tint=[.92,.88,.8];K.lquad(M.plain,p,[[-1.5,.05,-19],[1.5,.05,-19],[1.5,.05,19],[-1.5,.05,19]],[0,1,0]);
+ for(const p of parks){
   for(let k=0;k<7;k++)palms.push(K.at(p,(ct48Hash(p.x,k)-.5)*36,0,(ct48Hash(p.z,k)-.5)*32));for(let k=0;k<5;k++){const q=K.at(p,(ct48Hash(k,p.x)-.5)*30,0,(ct48Hash(k,p.z)-.5)*30);people.push([q[0],0,q[2],ct48Hash(q[0],q[2])*6.28,ct48Hash(q[2],q[0])]);}}
  W.ct48GcStats.parks=parks.length;
+ // Trees and parked cars from the block map: shade trees on the lawns and garden blocks, a
+ // row of street trees on the footpaths, and cars in the open-air car parks.
+ const trees=[],cars=[],clear=(x,z,r)=>z>bz+8&&!ct48GcInside(W,x,z,r+1)&&W.nearest({x,z}).distance>CT48_GC.lane+r+2&&!(W.pit?.samples&&(W.pitDistance(x,z)<14||ct48PitFloor(W,x,z,6)!==null))&&!(W.ct48Reserved||[]).some(q=>Math.hypot(q.x-x,q.z-z)<q.r+r)&&!W.ct48GcLots.some(o=>Math.abs((x-o.x)*o.ax.x+(z-o.z)*o.ax.z)<o.w/2+r&&Math.abs((x-o.x)*o.az.x+(z-o.z)*o.az.z)<o.d/2+r);
+ const nb=Math.ceil(R/56)+1;
+ for(let bi=-nb;bi<=nb;bi++)for(let bj=-nb;bj<=nb;bj++){const c=blockAt(bi,bj,0,0),dist=W.nearest(c).distance;if(dist>760)continue;const type=B.type(bi,bj),free=!used.has(bi+','+bj),h=k=>ct48Hash(bi*7+k,bj*13-k,9);
+  // Street trees on all four footpaths, closer to the circuit.
+  if(dist<520)for(const [su,sv,len] of [[1,0,52],[-1,0,52],[0,1,56],[0,-1,56]])for(let t=-len/2+5;t<len/2-4;t+=10+h(len+t)*5){if(h(t*3+su+sv*2)>.62)continue;const lu=su?su*19.6:t,lv=sv?sv*17.6:t,q=blockAt(bi,bj,lu,lv);if(clear(q.x,q.z,1.8))(h(t+5)<.18?palms.push([q.x,0,q.z]):trees.push([q.x,q.z,8+h(t+7)*5]));}
+  if(type<=1){const n=free?6+Math.floor(h(1)*8):2;for(let k=0;k<n;k++){const q=blockAt(bi,bj,(h(k+20)-.5)*36,(h(k+40)-.5)*32);if(clear(q.x,q.z,3))trees.push([q.x,q.z,9+h(k+60)*8]);}}
+  else if(type===3&&dist<480){for(const lv of [-6,6])for(let m=-7;m<=7;m++){if(h(m*5+lv)<.28)continue;const q=blockAt(bi,bj,m*2.6,lv+(h(m+lv*3)-.5)*.3);if(clear(q.x,q.z,2.6))cars.push([q.x,q.z,Math.atan2(Bz.x,Bz.z)+(h(m-lv)<.5?0:Math.PI),Math.floor(h(m*3+lv*7)*1000)]);}}
+  else if(type===2&&free&&dist<520){for(let k=0;k<4;k++){const q=blockAt(bi,bj,(k%2-.5)*22,(k>>1)*22-11);if(clear(q.x,q.z,2))palms.push([q.x,0,q.z]);}}}
+ W.ct48GcStats.trees=trees.length;W.ct48GcStats.cars=cars.length;
  // Esplanade: a row of palms along the sea wall and down the streets to the beach.
  for(let x=-R;x<R;x+=13)if(ct48Hash(x,3)<.85)palms.push([x+(ct48Hash(x,4)-.5)*3,0,bz+3+(ct48Hash(x,5)-.5)*1.5]);
  for(const p of W.ct48GcPalmSpots)palms.push(p);
  const okPalm=p=>!ct48GcInside(W,p[0],p[2],1.5)&&W.nearest({x:p[0],z:p[2]}).distance>11&&!(W.pit?.samples&&W.pitDistance(p[0],p[2])<12)&&!(W.ct48GcLots.some(o=>Math.abs((p[0]-o.x)*o.ax.x+(p[2]-o.z)*o.ax.z)<o.w/2+1.5&&Math.abs((p[0]-o.x)*o.az.x+(p[2]-o.z)*o.az.z)<o.d/2+1.5));
  ct48GcBeachLife(W,people);
  K.flush('Gold Coast city');
- ct48GcPalms(W,palms.filter(okPalm));ct48GcPeopleMeshes(W,people,'Gold Coast spectators');ct48GcStallMeshes(W);
- W.ct48GcStats.people=people.length;W.ct48GcStats.buildings=W.ct48GcLots.length;
+ ct48GcPalms(W,palms.filter(okPalm));ct48GcTrees(W,trees);ct48GcCars(W,cars);ct48GcPeopleMeshes(W,people,'Gold Coast spectators');ct48GcStallMeshes(W);
+ W.ct48GcStats.people=people.length;W.ct48GcStats.buildings=W.ct48GcLots.filter(o=>!o.stand).length;
  // Hotel names on rooftops and motel pole signs.
  for(const s of W.ct48GcSigns.slice(0,16)){const tex=W.sign(s.text,'#123247',1024,128),p=K.at(s.f,s.x,s.y,0);W.signPlane(tex,s.w,s.w/8,new THREE.Vector3(...p),Math.atan2(-s.f.ax.x,-s.f.ax.z));if(s.pole){const q=K.at(s.f,s.x,0,0),pole=new THREE.Mesh(new THREE.CylinderGeometry(.12,.12,s.y,6),MB.steel);pole.position.set(q[0],s.y/2-.4,q[2]);W.world.add(pole);}}
  ct48GcOcean(W);
