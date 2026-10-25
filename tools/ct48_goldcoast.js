@@ -61,7 +61,7 @@ function ct48GcWalls(W){
  for(const side of [-1,1]){const L=new Float32Array(N);
   for(let i=0;i<N;i++){const s=S[i],rx=s.n.x*side,rz=s.n.z*side;let best=Infinity;
    for(const g of segs.segs){if(g.side!==side)continue;const ex=g.bx-g.ax,ez=g.bz-g.az,den=rx*ez-rz*ex;if(Math.abs(den)<1e-6)continue;const qx=g.ax-s.p.x,qz=g.az-s.p.z,t=(qx*ez-qz*ex)/den,u=(qx*rz-qz*rx)/den;if(t>0&&u>=-.01&&u<=1.01&&t<best)best=t;}
-   L[i]=Number.isFinite(best)?Math.min(best,90):B;}
+   L[i]=Number.isFinite(best)&&best<E+B+12?best:B;}
   out.lane[side]=L;}
  return W.ct48GcWallData=out;
 }
@@ -126,7 +126,7 @@ function ct48GcGroundMaterial(W){
  // Concrete footpath pavers with stains; the city's street grid (asphalt, kerbs, centre lines)
  // is drawn in the shader once the grid is known. World-space so nothing smears.
  const tex=W.texture(512,512,(c,w,h)=>{c.fillStyle='#a9a69e';c.fillRect(0,0,w,h);const r=()=>W.rnd();
-  for(let y=0;y<8;y++)for(let x=0;x<8;x++){const v=160+Math.round((r()-.5)*22);c.fillStyle=`rgb(${v},${v-2},${v-8})`;c.fillRect(x*64+1,y*64+1,62,62);}
+  for(let y=0;y<8;y++)for(let x=0;x<8;x++){const v=138+Math.round((r()-.5)*22);c.fillStyle=`rgb(${v},${v-3},${v-10})`;c.fillRect(x*64+1,y*64+1,62,62);}
   for(let i=0;i<9000;i++){const v=r()<.5?60:240;c.fillStyle=`rgba(${v},${v},${v},${.04+r()*.05})`;c.fillRect(r()*w,r()*h,1+r()*2,1+r()*2);}
   for(let i=0;i<22;i++){const g=c.createRadialGradient(0,0,0,0,0,10+r()*30),x=r()*w,y=r()*h;g.addColorStop(0,'rgba(70,64,56,.18)');g.addColorStop(1,'rgba(70,64,56,0)');c.save();c.translate(x,y);c.fillStyle=g;c.fillRect(-40,-40,80,80);c.restore();}});
  tex.wrapS=tex.wrapT=THREE.RepeatWrapping;tex.anisotropy=8;
@@ -259,8 +259,8 @@ SC25World.prototype.flushBatches=function(){
 function ct48GcWallNear(W,x,z,r=1.5){const G=ct48GcSegments(W);for(const k of G.grid.get(Math.floor(x/G.cell)+','+Math.floor(z/G.cell))||[]){const g=G.segs[k],u=clamp(((x-g.ax)*(g.bx-g.ax)+(z-g.az)*(g.bz-g.az))/(g.l*g.l),0,1);if(Math.hypot(g.ax+(g.bx-g.ax)*u-x,g.az+(g.bz-g.az)*u-z)<r&&!g.cross)return true;}return false;}
 const ct48GcBoard=dc37AddBoard;
 dc37AddBoard=function(W,rows,p,normal,width,height,brand,type){
- if(ct48Gc(W)&&(type==='barrier'||type==='billboard')){const n=W.nearest(p),i=n.i%W.N,s=W.samples[i],side=((p.x-s.p.x)*s.n.x+(p.z-s.p.z)*s.n.z)>=0?1:-1,L=ct48GcWalls(W).lane[side][i];
-  const o=type==='barrier'?L+.15:L+3.4,x=s.p.x+s.n.x*side*o,z=s.p.z+s.n.z*side*o;if(!ct48GcWallNear(W,s.p.x+s.n.x*side*L,s.p.z+s.n.z*side*L,1.2))return;
+ if(ct48Gc(W)&&type==='billboard'){const n=W.nearest(p),i=n.i%W.N,s=W.samples[i],side=((p.x-s.p.x)*s.n.x+(p.z-s.p.z)*s.n.z)>=0?1:-1,L=ct48GcWalls(W).lane[side][i];
+  const o=L+3.4,x=s.p.x+s.n.x*side*o,z=s.p.z+s.n.z*side*o;if(!ct48GcWallNear(W,s.p.x+s.n.x*side*L,s.p.z+s.n.z*side*L,1.2))return;
   p.set(x,p.y,z);normal.copy(s.n).multiplyScalar(-side);if(type==='billboard')normal.addScaledVector(s.v,-.4).normalize();}
  return ct48GcBoard(W,rows,p,normal,width,height,brand,type);
 };
@@ -441,10 +441,9 @@ function ct48GcPeopleMeshes(W,list,name){
  const add=(g,c)=>{g=g.toNonIndexed();const n=g.attributes.position.count;for(let i=0;i<n;i++)col.push(...c);parts.push(g);};
  const legs=new T.BoxGeometry(.32,.82,.2);legs.translate(0,.41,0);add(legs,[.35,.35,.4]);
  const torso=new T.BoxGeometry(.44,.6,.25);torso.translate(0,1.13,0);add(torso,[1,1,1]);
- for(const s of [-1,1]){const arm=new T.BoxGeometry(.11,.55,.12);arm.translate(s*.28,1.12,0);add(arm,[1,1,1]);}
- const g=new T.BufferGeometry(),pos=[],nor=[];for(const p of parts){pos.push(...p.attributes.position.array);nor.push(...p.attributes.normal.array);}
+  const g=new T.BufferGeometry(),pos=[],nor=[];for(const p of parts){pos.push(...p.attributes.position.array);nor.push(...p.attributes.normal.array);}
  g.setAttribute('position',new T.Float32BufferAttribute(pos,3));g.setAttribute('normal',new T.Float32BufferAttribute(nor,3));g.setAttribute('color',new T.Float32BufferAttribute(col,3));
- const head=new T.SphereGeometry(.12,8,6);head.translate(0,1.58,0);
+ const head=new T.IcosahedronGeometry(.12,0);head.translate(0,1.58,0);
  const body=new T.InstancedMesh(g,new T.MeshStandardMaterial({vertexColors:true,roughness:.8}),list.length),heads=new T.InstancedMesh(head,new T.MeshStandardMaterial({roughness:.7}),list.length),d=new T.Object3D(),c=new T.Color();
  const shirts=['#e8e6df','#1c2a44','#c3262f','#f1c232','#2e5d9b','#3a3a3a','#1f6b3a','#e57b1f','#f2a7b8','#5bc0de','#ffffff','#7a3e8e'],skin=['#e2b48f','#c58e66','#8a5c3f','#f0c9a6','#d9a77c'];
  list.forEach(([x,y,z,yaw,v],i)=>{d.position.set(x,y,z);d.rotation.set(0,yaw,0);const s=.92+ct48Hash(x,z)*.16;d.scale.set(s,s,s);d.updateMatrix();body.setMatrixAt(i,d.matrix);heads.setMatrixAt(i,d.matrix);body.setColorAt(i,c.set(shirts[Math.floor(v*shirts.length)%shirts.length]));heads.setColorAt(i,c.set(skin[Math.floor(ct48Hash(z,x)*skin.length)]));});
@@ -460,7 +459,7 @@ function ct48GcPalmTex(W){
 function ct48GcPalms(W,spots){
  if(!spots.length)return;const T=THREE,tex=ct48GcPalmTex(W);
  // Trunk: gently curved, tapering, ringed bark (vertex colour bands).
- const tp=[],tc=[],ti=[],seg=9,sides=6;for(let k=0;k<=seg;k++){const t=k/seg,y=t*10,bend=t*t*.9,r=.24-.08*t,shade=(k%2?.82:1);for(let s=0;s<=sides;s++){const a=s/sides*Math.PI*2;tp.push(bend+Math.cos(a)*r,y,Math.sin(a)*r);tc.push(.62*shade,.55*shade,.45*shade);}}
+ const tp=[],tc=[],ti=[],seg=6,sides=5;for(let k=0;k<=seg;k++){const t=k/seg,y=t*10,bend=t*t*.9,r=.24-.08*t,shade=(k%2?.82:1);for(let s=0;s<=sides;s++){const a=s/sides*Math.PI*2;tp.push(bend+Math.cos(a)*r,y,Math.sin(a)*r);tc.push(.62*shade,.55*shade,.45*shade);}}
  for(let k=0;k<seg;k++)for(let s=0;s<sides;s++){const a=k*(sides+1)+s,b=a+sides+1;ti.push(a,b,a+1,a+1,b,b+1);}
  const trunk=new T.BufferGeometry();trunk.setAttribute('position',new T.Float32BufferAttribute(tp,3));trunk.setAttribute('color',new T.Float32BufferAttribute(tc,3));trunk.setIndex(ti);trunk.computeVertexNormals();
  // Crown: 11 arched fronds (3 segments each) radiating from the top of the trunk.
@@ -552,6 +551,37 @@ function ct48GcBuild(K,W,f,w,d,seed,M,people,near,far){
  else{type='slender';ct48GcSlender(K,W,f,w,d,tall(110,215),seed,M,people,near);}
  st[type]=(st[type]||0)+1;
 }
+
+// Pit wall between the pit lane and the apron, with the teams' timing stands behind it.
+function ct48GcPitWall(K,W,MB){
+ const pit=W.pit;if(!pit?.samples||!pit.bays?.length)return;const side=pit.bays[0].side,seg=70;
+ for(let k=0;k<seg;k++){const fa=.2+.6*k/seg,fb=.2+.6*(k+1)/seg,a=dc32PitAt(W,fa),b=dc32PitAt(W,fb),az={x:b.p.x-a.p.x,z:b.p.z-a.p.z},l=Math.hypot(az.x,az.z)||1;az.x/=l;az.z/=l;
+  const f={x:(a.p.x+b.p.x)/2-a.n.x*side*4.5,y:a.p.y-.2,z:(a.p.z+b.p.z)/2-a.n.z*side*4.5,ax:{x:-a.n.x*side,z:-a.n.z*side},az};K.begin(f);K.tint=[1,1,1];
+  K.box(f,.3,.65,0,.6,1.3,l+.03,{side:MB.concreteWarm,top:MB.concrete});K.lquad(MB.rail,f,[[.05,1.3,-l/2],[.05,1.3,l/2],[.05,3.6,l/2],[.05,3.6,-l/2]],[-1,0,0]);if(k%2===0)K.box(f,.05,2.45,-l/2,.08,2.3,.08,MB.steel);}
+ for(const bay of pit.bays){const q=dc32PitAt(W,bay.f),f={x:q.p.x-q.n.x*side*7.2,y:q.p.y-.2,z:q.p.z-q.n.z*side*7.2,ax:{x:-q.n.x*side,z:-q.n.z*side},az:{x:q.v.x,z:q.v.z}};K.begin(f);
+  // Timing stand: raised platform, screens bench, stools, shade roof.
+  K.box(f,0,.9,0,2.4,.2,4.2,{side:MB.darkSteel,top:MB.concrete});K.box(f,-.9,1.45,0,.5,.9,3.8,{side:MB.black,top:MB.black});for(const z of [-1.5,1.5])for(const x of [-1.1,1.1])K.box(f,x,1.9,z,.1,3.6,.1,MB.steel);K.box(f,0,3.75,0,2.8,.15,4.6,{side:MB.white,top:MB.roof,bottom:MB.underside});K.box(f,1.3,.45,0,.3,.9,1,MB.steel);}
+}
+
+// Beach life: umbrellas, towels, swimmers' gear, beachgoers and the lifesavers' flags and tower.
+function ct48GcBeachLife(W,people){
+ const T=THREE,bz=ct48GcBeachZ(W),size=W.span+2400,um=[],tw=[],d=new T.Object3D(),c=new T.Color();
+ for(let i=0;i<520;i++){const x=(ct48Hash(i,1)-.5)*size*.6,t=ct48Hash(i,2),z=bz-12-t*40,y=-1.05-(t*40+8)/90*.95;if(ct48Hash(i,3)<.45)um.push([x,y,z,ct48Hash(i,4)]);tw.push([x+1.5,y+.02,z+.8,ct48Hash(i,5)]);
+  for(let k=0;k<1+Math.floor(ct48Hash(i,6)*2);k++)people.push([x+(ct48Hash(i,k+7)-.5)*4,y,z+(ct48Hash(k,i)-.5)*4,ct48Hash(i,k)*6.28,ct48Hash(k,i,3)]);}
+ // Swimmers standing in the shallows between the flags.
+ for(let i=0;i<90;i++)people.push([(ct48Hash(i,9)-.5)*260+80,-2.6,bz-62-ct48Hash(i,10)*14,ct48Hash(i,11)*6.28,ct48Hash(i,12)]);
+ const cone=new T.ConeGeometry(1.25,.5,10,1,true);cone.translate(0,2.1,0);const pole=new T.CylinderGeometry(.025,.025,2.2,4);pole.translate(0,1.1,0);const towel=new T.BoxGeometry(.8,.02,1.8);
+ const mk=(g,list,mat,cols,name)=>{const m=new T.InstancedMesh(g,mat,list.length);list.forEach(([x,y,z,v],i)=>{d.position.set(x,y,z);d.rotation.set(0,v*6.28,0);d.updateMatrix();m.setMatrixAt(i,d.matrix);if(cols)m.setColorAt(i,c.set(cols[Math.floor(v*97)%cols.length]));});m.name=name;m.computeBoundingSphere();W.world.add(m);return m;};
+ mk(cone,um,new T.MeshStandardMaterial({roughness:.8,side:T.DoubleSide}),['#f4f4f0','#c3262f','#1f5f9e','#f2c230','#2f9d8f','#e86c2a','#d94f7a'],'Beach umbrellas').castShadow=true;
+ mk(pole,um,new T.MeshStandardMaterial({color:'#dcdcd6',roughness:.5}),null,'Beach umbrella poles');
+ mk(towel,tw,new T.MeshStandardMaterial({roughness:.9}),['#e94b3c','#3a78c3','#f5d547','#50b36a','#ffffff','#f28cb1','#7e57c2'],'Beach towels');
+ // Red and yellow flags and the lifesavers' tower.
+ const flag=W.texture(64,64,(cx,w,h)=>{cx.fillStyle='#d8262c';cx.fillRect(0,0,w,h/2);cx.fillStyle='#f6cf1f';cx.fillRect(0,h/2,w,h/2);});
+ for(const fx of [-50,210]){const y=-1.75;const p=new T.Mesh(new T.CylinderGeometry(.04,.04,4,5),W.mat('#d0d0d0',.5,.4));p.position.set(fx,y+2,bz-55);W.world.add(p);const fl=new T.Mesh(new T.PlaneGeometry(1.4,1),new T.MeshStandardMaterial({map:flag,side:T.DoubleSide}));fl.position.set(fx+.7,y+3.4,bz-55);W.world.add(fl);}
+ const tower=new T.Group();tower.position.set(80,-1.3,bz-30);W.world.add(tower);for(const [x,z] of [[-1.2,-1.2],[1.2,-1.2],[-1.2,1.2],[1.2,1.2]]){const l=new T.Mesh(new T.CylinderGeometry(.08,.08,3.2,5),W.mat('#e8e8e2'));l.position.set(x,1.6,z);tower.add(l);}
+ const cab=new T.Mesh(new T.BoxGeometry(3,2.2,3),new T.MeshStandardMaterial({color:'#f6cf1f',roughness:.6}));cab.position.y=4.3;tower.add(cab);const rf=new T.Mesh(new T.BoxGeometry(3.6,.2,3.6),W.mat('#d8262c'));rf.position.y=5.5;tower.add(rf);
+ W.ct48GcStats.beach={umbrellas:um.length,towels:tw.length};
+}
 function ct48BuildGoldCoast(W){
  const K=new CT48GcKit(W),M=ct48GcMaterials(W),MB=ct48Materials(W),people=[],palms=[],bz=ct48GcBeachZ(W),walls=ct48GcWalls(W),streets=walls.streets;
  W.ct48GcStats={...(W.ct48GcStats||{})};W.ct48GcLots=[];W.ct48GcSigns=[];W.ct48GcPalmSpots=[];
@@ -559,6 +589,7 @@ function ct48BuildGoldCoast(W){
  K.tint=[1,1,1];K.begin({x:W.pit?.samples?.[120]?.p.x||0,z:W.pit?.samples?.[120]?.p.z||0});
  const sign=W.sign;W.sign=function(t,...a){return sign.call(this,t==='MOUNT PANORAMA  ·  BATHURST'?'GOLD COAST 500  ·  SURFERS PARADISE':t,...a);};
  try{ct48PitComplex(K,W,MB);}finally{W.sign=sign;}
+ ct48GcPitWall(K,W,MB);
  // Grandstands behind the walls: the pit straight, the first chicane, the hairpin and the beach.
  const standAt=(ph,side,len,seat,brand)=>{const i=Math.floor(W.at(ph).t*W.N)%W.N,L=walls.lane[side][i];const f=ct48Find(W,ph,side,L+3.5,19,len+4,L+2,6,5);if(f){K.begin(f);ct48Grandstand(K,W,f,len,MB,MB.seats[seat],brand);W.ct48GcStats.stands=(W.ct48GcStats.stands||0)+1;}};
  const pitSide=W.pit?.side||-1;
@@ -591,6 +622,7 @@ function ct48BuildGoldCoast(W){
  for(let x=-R;x<R;x+=13)if(ct48Hash(x,3)<.85)palms.push([x+(ct48Hash(x,4)-.5)*3,0,bz+3+(ct48Hash(x,5)-.5)*1.5]);
  for(const p of W.ct48GcPalmSpots)palms.push(p);
  const okPalm=p=>!ct48GcInside(W,p[0],p[2],1.5)&&W.nearest({x:p[0],z:p[2]}).distance>11&&!(W.pit?.samples&&W.pitDistance(p[0],p[2])<12)&&!(W.ct48GcLots.some(o=>Math.abs((p[0]-o.x)*o.ax.x+(p[2]-o.z)*o.ax.z)<o.w/2+1.5&&Math.abs((p[0]-o.x)*o.az.x+(p[2]-o.z)*o.az.z)<o.d/2+1.5));
+ ct48GcBeachLife(W,people);
  K.flush('Gold Coast city');
  ct48GcPalms(W,palms.filter(okPalm));ct48GcPeopleMeshes(W,people,'Gold Coast spectators');ct48GcStallMeshes(W);
  W.ct48GcStats.people=people.length;W.ct48GcStats.buildings=W.ct48GcLots.length;
@@ -598,3 +630,19 @@ function ct48BuildGoldCoast(W){
  for(const s of W.ct48GcSigns.slice(0,16)){const tex=W.sign(s.text,'#123247',1024,128),p=K.at(s.f,s.x,s.y,0);W.signPlane(tex,s.w,s.w/8,new THREE.Vector3(...p),Math.atan2(-s.f.ax.x,-s.f.ax.z));if(s.pole){const q=K.at(s.f,s.x,0,0),pole=new THREE.Mesh(new THREE.CylinderGeometry(.12,.12,s.y,6),MB.steel);pole.position.set(q[0],s.y/2-.4,q[2]);W.world.add(pole);}}
  ct48GcOcean(W);
 }
+
+// Full-face sponsor logos on every wall block and banners on the debris fence, laid along
+// the street walls themselves (the generic wall rows are not used at the Gold Coast).
+const ct48GcBoards=ct48WallBoards;
+ct48WallBoards=function(W,brand,add){
+ if(!ct48Gc(W))return ct48GcBoards(W,brand,add);
+ const d=ct48GcWalls(W),y0=W.samples[0].p.y-.2,bh=.74,bw=bh*4,H=1.3;let n=0;
+ for(const side of [-1,1]){const P=d.lines[side],m=P.length;let run=0,since=0;
+  for(let i=0;i<m;i++){const a=P[i],b=P[(i+1)%m];if(a.corner)since=0;if(a.cut||b.cut){run=0;since=0;continue;}
+   const dx=b.x-a.x,dz=b.z-a.z,l=Math.hypot(dx,dz);if(l<.05)continue;const ox=side>0?-dz/l:dz/l,oz=side>0?dx/l:-dx/l,normal=new THREE.Vector3(-ox,0,-oz);
+   const near=W.nearest({x:a.x,z:a.z}),v=W.samples[near.i%W.N].v;if(Math.abs(dx/l*v.x+dz/l*v.z)<.55&&near.distance>CT48_GC.lane+2){run=0;continue;}
+   for(let t=0;t<l;t+=.25){run+=.25;since+=.25;
+    if(run>=bw+.12){run=0;const x=a.x+dx/l*(t-bw/2-.06)-ox*.14,z=a.z+dz/l*(t-bw/2-.06)-oz*.14;add(new THREE.Vector3(x,y0+.71,z),normal,bw,bh,brand(n++),'barrier');}
+    if(since>=H*4+1&&(n%4===1)&&t+.25<l){since=0;const x=a.x+dx/l*(t-H*2)-ox*.38,z=a.z+dz/l*(t-H*2)-oz*.38;add(new THREE.Vector3(x,y0+1.3+H/2,z),normal,H*4,H,brand(n+5),'fence');}}
+  }}
+};
