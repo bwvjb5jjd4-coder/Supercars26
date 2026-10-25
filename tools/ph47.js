@@ -140,7 +140,7 @@ function ph47Walls(W,L,x,s,near,mass,Iz,dt){
   const tx=-oz,tz=ox,crossT=rz*tx-rx*tz,vt=(Vx+r*rz)*tx+(Vz-r*rx)*tz,jt=clamp(-vt/(1/mass+crossT*crossT/Iz),-.5*j,.5*j);
   Vx+=tx*jt/mass;Vz+=tz*jt/mass;r+=crossT*jt/Iz;
   const hit=vn;x.v=Vx*fx+Vz*fz;x.latV=Vx*gx+Vz*gz;s.r=clamp(r,-6,6);
-  if(hit>2.5){const amount=clamp((hit-2.5)*1.5,1,60);dcDamage(x,amount,Math.sign(cw)||1,Math.sign(cl)||1);ph47Impact(L,x,x.pos.x+rx,x.pos.y+.35,x.pos.z+rz,hit,ox,oz);
+  if(hit>2.5){const amount=clamp((hit-2.5)*1.5,1,60);dcDamage(x,amount,Math.sign(cw)||1,(Math.sign(cl)||1)*(Math.abs(ox*fx+oz*fz)>.45?1:.5));ph47Impact(L,x,x.pos.x+rx,x.pos.y+.35,x.pos.z+rz,hit,ox,oz);
    if(hit>24&&Math.abs(ox*gx+oz*gz)>.75&&!s.tumble)ph47StartTumble(x,s,(ox*gx+oz*gz)*Math.min(9,hit*.2));}
  }else{const vt=Math.abs((Vx+r*rz)*-oz+(Vz-r*rx)*ox);if(vt>6){s.scrape=Math.min(1,vt/30);x.v*=Math.exp(-dt*.35);if(Math.random()<dt*14)ph47Sparks(sc25Engine,x.pos.x+rx,x.pos.y+.3,x.pos.z+rz,Vx*.6,Vz*.6,4);}}
 }
@@ -299,4 +299,50 @@ const ph47Settings=dcSettingsFields;
 dcSettingsFields=function(...args){
  const level=D.settings.ph47Assist||'standard';
  return ph47Settings(...args)+`<div class="dc-card" style="margin-top:18px"><h3>Handling</h3><div class="dc-field"><label>Driving assists</label><select onchange="D.settings.ph47Assist=this.value;dcSave()">${Object.entries(PH47_ASSISTS).map(([k,v])=>`<option value="${k}" ${k===level?'selected':''}>${v.label}</option>`).join('')}</select><p class="dc-muted">Full: traction and stability control, no lock-ups, steering held at peak grip. Standard: traction control and anti-lock, light countersteer help. Off: wheelspin, lock-ups and slides are all yours.</p></div><label class="dc-checkbox"><input type="checkbox" ${D.settings.ph47Classic?'checked':''} onchange="D.settings.ph47Classic=this.checked;dcSave()">Classic handling (the old on-rails model)</label></div>`;
+};
+
+// Crumple zones: the nose and tail fold in on the GPU across every body part (panels,
+// bumpers, grille, lights, bonnet, boot), with bent normals so the creases catch the light.
+// Crush depth builds from front and rear impacts and resets when the crew repairs the car.
+const PH47_CRUSH_GLSL=`uniform vec4 ph47C;uniform vec2 ph47N;
+vec3 ph47Deform(vec3 p){vec3 q=p;const float zone=1.3;
+ float sF=ph47N.x-p.z,cF=clamp(ph47C.x*(1.0+ph47C.z*clamp(p.x/.95,-1.0,1.0)*.8),0.0,.68),wF=1.0-smoothstep(0.0,zone,sF),tF=sin(3.14159*clamp(sF/zone,0.0,1.0)),hood=smoothstep(.55,.82,p.y);
+ q.z-=cF*wF;q.y+=cF*(tF*(hood*.30-(1.0-hood)*.07)+wF*.05*sin(p.x*13.0+p.z*9.0));q.x+=cF*wF*(.045*sin(p.z*17.0+p.y*7.0)-p.x*.11);float lip=wF*wF*(1.0-smoothstep(.1,.26,p.y));q.z-=cF*lip*.3;q.y-=cF*lip*.09;
+ float sR=p.z-ph47N.y,cR=clamp(ph47C.y*(1.0+ph47C.w*clamp(p.x/.95,-1.0,1.0)*.8),0.0,.68),wR=1.0-smoothstep(0.0,zone,sR),tR=sin(3.14159*clamp(sR/zone,0.0,1.0)),boot=smoothstep(.62,.9,p.y);
+ q.z+=cR*wR;q.y+=cR*(tR*(boot*.22-(1.0-boot)*.06)+wR*.05*sin(p.x*12.0-p.z*10.0));q.x+=cR*wR*(.045*sin(p.z*15.0-p.y*8.0)-p.x*.10);
+ return q;}
+`;
+function ph47CrushShader(sh,U){
+ sh.uniforms.ph47C=U.c;sh.uniforms.ph47N=U.n;sh.vertexShader=PH47_CRUSH_GLSL+sh.vertexShader;
+ sh.vertexShader=sh.vertexShader.replace('#include <beginnormal_vertex>',`#include <beginnormal_vertex>
+  if(ph47C.x+ph47C.y>.001){vec3 t1=normalize(cross(objectNormal,abs(objectNormal.y)<.9?vec3(0.0,1.0,0.0):vec3(1.0,0.0,0.0))),t2=cross(objectNormal,t1),a=ph47Deform(position),n=normalize(cross(ph47Deform(position+t1*.03)-a,ph47Deform(position+t2*.03)-a));objectNormal=dot(n,objectNormal)<0.0?-n:n;}`);
+ sh.vertexShader=sh.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\n  if(ph47C.x+ph47C.y>.001)transformed=ph47Deform(transformed);');
+}
+function ph47PatchCrush(car){
+ const u=car.userData;if(u.ph47Crush)return u.ph47Crush;const U=u.ph47Crush={c:{value:new THREE.Vector4()},n:{value:new THREE.Vector2(2.6,-2.6)}},m=new THREE.Matrix4(),box=new THREE.Box3(),seen=new Set();
+ car.updateMatrixWorld(true);const inv=car.matrixWorld.clone().invert();let nose=-Infinity,tail=Infinity;
+ car.traverse(o=>{if(!o.isMesh||!o.material)return;m.multiplyMatrices(inv,o.matrixWorld);const e=m.elements;if(Math.abs(e[0]-1)+Math.abs(e[5]-1)+Math.abs(e[10]-1)+Math.abs(e[12])+Math.abs(e[13])+Math.abs(e[14])>.01)return;
+  if(!o.geometry.boundingBox)o.geometry.computeBoundingBox();box.copy(o.geometry.boundingBox);if(box.max.z-box.min.z>3.5){nose=Math.max(nose,box.max.z);tail=Math.min(tail,box.min.z);}
+  for(const mat of Array.isArray(o.material)?o.material:[o.material]){if(seen.has(mat)||mat.userData.ph47Crush)continue;seen.add(mat);mat.userData.ph47Crush=U;const before=mat.onBeforeCompile,key=mat.customProgramCacheKey();
+   mat.onBeforeCompile=function(sh,r){before?.call(this,sh,r);ph47CrushShader(sh,U);};mat.customProgramCacheKey=()=>key+'|ph47crush1';mat.needsUpdate=true;}
+  // The cast shadow folds with the panels, so a crushed nose doesn't leave its old outline on the road.
+  const mats=Array.isArray(o.material)?o.material:[o.material];
+  if(o.castShadow&&!o.customDepthMaterial&&!mats.some(t=>t.transparent||t.alphaTest>0||t.alphaMap)){if(!U.depth){U.depth=new THREE.MeshDepthMaterial({depthPacking:THREE.RGBADepthPacking});U.depth.onBeforeCompile=sh=>ph47CrushShader(sh,U);U.depth.customProgramCacheKey=()=>'ph47crushDepth';}o.customDepthMaterial=U.depth;}});
+ if(Number.isFinite(nose))U.n.value.set(nose,tail);return U;
+}
+const ph47CrushDamage=dcDamage;
+dcDamage=function(x,amount,side=1,z=1){
+ const before=x.bodyDamage;ph47CrushDamage(x,amount,side,z);if(!(x.bodyDamage>before)||Math.abs(z)<.8)return;
+ const add=clamp(amount*.014,.02,.42),front=z>0,k=front?'ph47CrushF':'ph47CrushR',b=front?'ph47SideF':'ph47SideR',old=x[k]||0;x[k]=Math.min(.62,old+add);x[b]=clamp(((x[b]||0)*old+clamp(side,-1,1)*add*.8)/Math.max(.01,x[k]),-1,1);
+ // Panels fold in place; only a nose or tail crushed past half a metre sheds its bumper or bonnet.
+ if((x.ph47CrushF||0)<.5){x.rf41FrontLost=false;x.sc30BonnetLost=x.rf41BonnetDetached=false;}
+ if((x.ph47CrushR||0)<.5)x.rf41RearLost=false;
+};
+if(Array.isArray(DC_SNAPSHOT_KEYS))DC_SNAPSHOT_KEYS.push('ph47CrushF','ph47CrushR','ph47SideF','ph47SideR');
+const ph47CrushPresent=dc35Present;
+dc35Present=function(W,L,dt){
+ ph47CrushPresent(W,L,dt);
+ for(const x of L.entrants){const car=W.carNodes.get(x.d.id);if(!car?.userData.dc35Car)continue;const U=ph47PatchCrush(car);
+  if(!x.bodyDamage)x.ph47CrushF=x.ph47CrushR=x.ph47SideF=x.ph47SideR=0;const c=U.c.value,f=dt>0?1-Math.exp(-dt*18):1;
+  c.x+=((x.ph47CrushF||0)-c.x)*f;c.y+=((x.ph47CrushR||0)-c.y)*f;c.z=x.ph47SideF||0;c.w=x.ph47SideR||0;}
 };
