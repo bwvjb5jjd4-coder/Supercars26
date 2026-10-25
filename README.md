@@ -1,0 +1,20 @@
+# Supercars 26 (unofficial fan game)
+
+An unofficial, fan-made Supercars 2026 browser game: driver career, instant races and test days, with Xbox controller support.
+
+## Play
+
+Open the hosted site (GitHub Pages) in any modern browser, including Microsoft Edge on Xbox. The game needs to be served from a website or local web server; opening `index.html` straight from disk won't load the 3D models and liveries.
+
+To run it locally: `python3 -m http.server` in this folder, then open http://localhost:8000.
+
+## Layout
+
+- `index.html` — the game (code, UI and data)
+- `assets/img/` — logos, sponsor and driver images
+- `assets/fonts/` — UI fonts
+- `assets/liveries/` — car livery textures (`.dds.gz.bin` for GPUs with S3TC, `.webp` fallback)
+- `assets/models.json.gz.bin` — gzipped 3D model pack
+- `tools/split.py` — turns an all-in-one HTML build into this layout: `python3 tools/split.py Game.html out/`
+
+Saves live in the browser's local storage for the site you play on. Use the in-game career export to move a save between sites or devices.
