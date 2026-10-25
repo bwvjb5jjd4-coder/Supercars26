@@ -44,7 +44,7 @@ old_models = "const bytes=Uint8Array.from(atob(document.getElementById('dc35-ass
 new_models = "const res=await fetch('assets/models.json.gz.bin');if(!res.ok)throw Error('3D asset pack failed to load ('+res.status+')');const stream=new Blob([await res.arrayBuffer()]).stream()"
 assert s.count(old_models) == 1; s = s.replace(old_models, new_models)
 old_loop = " for(const [key,row]of Object.entries(data)){\n  let tex;\n  if(compressed){\n   const buf=Uint8Array.from(atob(row.dds),c=>c.charCodeAt(0));"
-new_loop = (" const files=new Map(Object.entries(data).map(([key,row])=>[key,fetch(compressed?row.dds:row.webp).then(r=>{if(!r.ok)throw Error('Livery '+key+' failed to load ('+r.status+')');return r.arrayBuffer()})]));\n"
+new_loop = (" const files=new Map(Object.entries(data).map(([key,row])=>[key,fetch(compressed?row.dds:row.webp,{cache:'no-cache'}).then(r=>{if(!r.ok)throw Error('Livery '+key+' failed to load ('+r.status+')');return r.arrayBuffer()})]));\n"
             " for(const [key,row]of Object.entries(data)){\n  let tex;\n  if(compressed){\n   const buf=new Uint8Array(await files.get(key));")
 assert s.count(old_loop) == 1; s = s.replace(old_loop, new_loop)
 old_webp = "new Blob([Uint8Array.from(atob(row.webp),c=>c.charCodeAt(0))],{type:'image/webp'})"
