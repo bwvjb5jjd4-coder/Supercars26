@@ -252,3 +252,33 @@ dc37FlushBoards=function(W,rows){
    rows.push({corners,index,brand:b,type,center:p.clone(),width,height});});}
  return ct48FlushBoards(W,rows);
 };
+
+// ---------- Pit lane meets the circuit ----------
+// The pit road ribbons start and finish on the track centreline, so their lighter grey surface
+// and lines were painted across the racing road at the pit entry and exit. Clip every pit ribbon
+// at the track edge so it stops where it reaches the circuit. Physics keeps the full pit surface.
+const CT48_ROAD_EDGE=7.2;
+function ct48ClipRibbon(W,g){
+ const P=g.attributes.position,U=g.attributes.uv,Nm=g.attributes.normal,ix=g.index,n=P.count,d=new Float32Array(n);let any=false;
+ for(let i=0;i<n;i++){d[i]=W.nearest({x:P.getX(i),z:P.getZ(i)}).distance-CT48_ROAD_EDGE;if(d[i]<0)any=true;}
+ if(!any)return null;
+ const pos=[],uv=[],nor=[],v=i=>({d:d[i],p:[P.getX(i),P.getY(i),P.getZ(i)],u:U?[U.getX(i),U.getY(i)]:[0,0],n:Nm?[Nm.getX(i),Nm.getY(i),Nm.getZ(i)]:[0,1,0]}),
+  mix=(a,b,t)=>({d:0,p:a.p.map((x,k)=>x+(b.p[k]-x)*t),u:a.u.map((x,k)=>x+(b.u[k]-x)*t),n:a.n.map((x,k)=>x+(b.n[k]-x)*t)}),
+  put=q=>{pos.push(...q.p);uv.push(...q.u);nor.push(...q.n);};
+ const count=ix?ix.count:n;
+ for(let j=0;j<count;j+=3){const tri=[0,1,2].map(k=>v(ix?ix.getX(j+k):j+k));if(tri.every(q=>q.d>=0)){tri.forEach(put);continue;}if(tri.every(q=>q.d<0))continue;
+  const poly=[];for(let k=0;k<3;k++){const a=tri[k],b=tri[(k+1)%3];if(a.d>=0)poly.push(a);if((a.d>=0)!==(b.d>=0))poly.push(mix(a,b,a.d/(a.d-b.d)));}
+  for(let k=1;k<poly.length-1;k++){put(poly[0]);put(poly[k]);put(poly[k+1]);}}
+ const out=new THREE.BufferGeometry();out.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));out.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));out.setAttribute('normal',new THREE.Float32BufferAttribute(nor,3));return out;
+}
+const ct48PitRibbon=SC25World.prototype.ribbon;
+SC25World.prototype.ribbon=function(...a){const mesh=ct48PitRibbon.apply(this,a);if(this.ct48PitRibbons&&mesh?.isMesh)this.ct48PitRibbons.push(mesh);return mesh;};
+const ct48MakePit=SC25World.prototype.makePit;
+SC25World.prototype.makePit=function(...a){
+ this.ct48PitRibbons=[];let out;try{out=ct48MakePit.apply(this,a);}finally{const list=this.ct48PitRibbons;this.ct48PitRibbons=null;
+  const physics=new Set((this.gr27Pavement||[]).map(r=>r.mesh));
+  for(const m of list){const g=ct48ClipRibbon(this,m.geometry);if(!g)continue;
+   if(physics.has(m)){const vis=new THREE.Mesh(g,m.material);vis.position.copy(m.position);vis.quaternion.copy(m.quaternion);vis.renderOrder=m.renderOrder;vis.receiveShadow=m.receiveShadow;vis.name=(m.name||'pit road')+' (visible)';m.parent?.add(vis);m.visible=false;}
+   else{m.geometry.dispose();m.geometry=g;}}}
+ return out;
+};
