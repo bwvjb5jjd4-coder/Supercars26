@@ -53,6 +53,9 @@ function ct48GcWalls(W){
   }
   // Densify to ≤3 m pieces so walls can be cut at the pit roads and indexed for physics.
   const dense=[];for(let k=0;k<pts.length;k++){const a=pts[k],b=pts[(k+1)%pts.length],l=Math.hypot(b.x-a.x,b.z-a.z),n=Math.max(1,Math.ceil(l/3));for(let j=0;j<n;j++)dense.push({x:a.x+(b.x-a.x)*j/n,z:a.z+(b.z-a.z)*j/n,corner:j===0});}
+  // Where the track rounds a sharp inside corner tighter than the street edges, the apex cut
+  // would cross the racing surface: hold every wall point at least 8 m off the centreline.
+  for(const p of dense){const n=W.nearest(p);if(n.distance<8){const q=S[n.i%N];p.x=q.p.x+q.n.x*side*8;p.z=q.p.z+q.n.z*side*8;}}
   for(const p of dense){p.cut=false;if(W.pit?.samples){const q=dc32PitNear(W,p);if(dc32PitPaved(W,q,.5)||W.pitDistance(p.x,p.z)<4.7)p.cut=true;}}
   out.lines[side]=dense;}
  // Pit road walls: both sides of the entry and exit roads, the track side of the whole pit
