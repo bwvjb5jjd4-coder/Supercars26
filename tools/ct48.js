@@ -11,6 +11,8 @@ const CT48_LANES=[7.0,8.45,10,12,14,16.5,19.5,24];
 const CT48_DROP=[-.025,-.045,-.07,-.1,-.14,-.2];
 function ct48Street(W){return CT48_STREET.includes(W.e.key);}
 function ct48Smooth(t){t=clamp(t,0,1);return t*t*(3-2*t);}
+// Ground ribbons must face up; flip the winding if a strip came out upside down.
+function ct48Upright(g){g.computeVertexNormals();const n=g.attributes.normal;let y=0;for(let i=0;i<n.count;i++)y+=n.getY(i);if(y<0){const ix=g.index.array;for(let i=0;i<ix.length;i+=3){const t=ix[i+1];ix[i+1]=ix[i+2];ix[i+2]=t;}g.index.needsUpdate=true;g.computeVertexNormals();}return g;}
 
 // Corners: signed heading change over ±8 samples (the same test the kerbs always used).
 function ct48Turn(W,i){const N=W.N,a=W.samples[((i-8)%N+N)%N].v,b=W.samples[((i+8)%N+N)%N].v;return Math.atan2(a.x*b.z-a.z*b.x,clamp(a.x*b.x+a.z*b.z,-1,1));}
@@ -84,7 +86,7 @@ function ct48Kerbs(W){
    i=j;}
  }
  if(!ix.length)return null;
- const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));g.setIndex(ix);g.computeVertexNormals();
+ const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));g.setIndex(ix);ct48Upright(g);
  const mesh=W.mesh(g,ct48KerbMaterial(W));mesh.name='Flush kerbs';mesh.castShadow=false;mesh.receiveShadow=true;
  (W.gr27Pavement||=[]).push({mesh,route:'track'});W.gr27SurfaceIndex=null;return mesh;
 }
@@ -110,7 +112,7 @@ function ct48Shoulders(W){
   }
   for(let i=0;i<N;i++)for(let k=0;k<M-1;k++){const a=base+i*M+k,b=a+M;if(side>0)ix.push(a,b,a+1,a+1,b,b+1);else ix.push(a,a+1,b,a+1,b+1,b);}
  }
- const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));g.setAttribute('color',new THREE.Float32BufferAttribute(col,3));g.setIndex(ix);g.computeVertexNormals();
+ const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));g.setAttribute('color',new THREE.Float32BufferAttribute(col,3));g.setIndex(ix);ct48Upright(g);
  const mat=terrain?.material||new THREE.MeshStandardMaterial({color:'#6e7a4b',roughness:1});
  const mesh=W.mesh(g,mat);mesh.name='Grass shoulders';mesh.receiveShadow=true;mesh.castShadow=false;
  return mesh;
@@ -144,7 +146,7 @@ function ct48Gravel(W,shoulder){
    i=j;}
  }
  if(!ix.length)return null;
- const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));g.setAttribute('ct48Across',new THREE.Float32BufferAttribute(across,2));g.setIndex(ix);g.computeVertexNormals();
+ const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));g.setAttribute('ct48Across',new THREE.Float32BufferAttribute(across,2));g.setIndex(ix);ct48Upright(g);
  const mesh=W.mesh(g,ct48GravelMaterial(W));mesh.name='Gravel traps';mesh.receiveShadow=true;mesh.renderOrder=1;return mesh;
 }
 
