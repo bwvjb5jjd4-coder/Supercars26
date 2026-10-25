@@ -18,6 +18,7 @@ To run it locally on a Mac, double-click `Play on Mac.command` (the first time, 
 - `tools/ph47.js` — driving physics (tyre grip, weight transfer, crashes, rollovers, skid marks and smoke). Edit it, then run `python3 tools/build_ph47.py` to embed it in `index.html`
 - `tools/ct48.js`, `tools/ct48_bathurst.js` — circuits: flush kerbs, grass shoulders and gravel traps that match the driving surface, plus Bathurst's mountain, walls and buildings. Edit them, then run `python3 tools/build_ct48.py` (run it after `build_ph47.py` if you rebuild both)
 - `tools/ct49_tracks.js` — Queensland Raceway, Sydney Motorsport Park, The Bend and Taupo on the Bathurst system: regional terrain and paddock colours, horizon hills, bush (gums, mallee, pine plantations), pit buildings, stands, venue buildings, farms and Sydney's industrial estate and suburb. Built by `build_ct48.py`
+- `tools/ct50_streets.js` — Adelaide and Townsville street circuits on the Gold Coast city system, tuned per city: Victoria Park parkland and East Terrace terraces with the CBD to the west (Adelaide), a low tropical city with Queenslanders, motels and Castle Hill (Townsville). Also straightens the Reid Park pit lane and keeps the start gantry off the track. Built by `build_ct48.py`
 - `tools/split.py` — turns an all-in-one HTML build into this layout: `python3 tools/split.py Game.html out/`
 
 Saves live in the browser's local storage for the site you play on. Use the in-game career export to move a save between sites or devices.
