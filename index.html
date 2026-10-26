@@ -7994,7 +7994,8 @@ dcRenderWorld=function(W,L,dt){
    bodywork from every camera. It is replaced by a depth-tested screen set into the middle
    of the ZB and Falcon dashboards, inside a gloss-black housing angled toward the driver.
    Above it, a subtle print of the car's main sponsor sits on the dash plastic
-   (Triple Eight cars carry Holden). T (or the controller View button) hides or shows the
+   (Triple Eight cars carry Holden). The B-pillar between the doors is kept plain black.
+   T (or the controller View button) hides or shows the
    on-screen speed HUD; the choice is kept in settings. */
 
 // Measured from the dash surfaces of each model (car space: +Z forward, +X the car's left, driver at x .37).
@@ -8060,9 +8061,19 @@ function in55Interior(E,car,team,driver){
  }
 }
 
+// The B-pillar between the doors is always plain black, whatever the livery paints there.
+function in55PillarShader(m){
+ if(!m||m.userData.in55Pillar)return;m.userData.in55Pillar=true;const prev=m.onBeforeCompile,key=m.customProgramCacheKey;
+ m.onBeforeCompile=function(sh,r){prev?.call(this,sh,r);
+  sh.vertexShader='varying vec3 in55Local;\n'+sh.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nin55Local=position;');
+  sh.fragmentShader='varying vec3 in55Local;\n'+sh.fragmentShader.replace('#include <color_fragment>','#include <color_fragment>\n{vec3 q=in55Local;float lo=-0.345-0.03*(q.y-0.95),hi=-0.05-0.12*max(q.y-0.95,0.0);float pillar=step(0.5,abs(q.x))*(1.0-step(0.835,abs(q.x)))*step(0.884,q.y)*(1.0-step(1.315,q.y))*smoothstep(lo,lo+0.01,q.z)*(1.0-smoothstep(hi-0.01,hi,q.z));diffuseColor.rgb=mix(diffuseColor.rgb,vec3(0.018,0.019,0.021),pillar);}');};
+ m.customProgramCacheKey=()=>(key?key.call(m):'')+'|in55Pillar';m.needsUpdate=true;
+}
+
 const in55Car=sc25Car;
 sc25Car=function(E,team,driver){
  const car=in55Car(E,team,driver);
+ if(['Ford','Holden'].includes(car?.userData?.make))for(const b of ['paint','hood'])in55PillarShader(car.userData.dc35Mats?.[b]);
  if(driver?.id===D?.pid&&car?.userData?.dc35Chassis)try{in55Interior(E,car,team,driver);}catch(e){console.warn('IN55 interior',e);}
  return car;
 };
