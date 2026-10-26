@@ -114,15 +114,13 @@ amp.alpha_composite(recol(ampolW,(26,38,128)),(aA.width+120,(amp.height-ampolW.h
 amp=amp.crop(amp.getbbox());amp.save('ampol_lockup.png')
 tf.put(amp,0,-0.10,1.10)
 tr=Cv((0,1,0),(0,0,1),-1.0,1.0,-2.7,2.7,(y>0.6))
-tr.put(lion,0,-0.92,0.30)
+tr.put(lion,0,-0.90,0.56)
 tr.put(holden,0,-2.12,0.85)
 cvs+= [tf,tr]
 # ---- rear face ----
 rr=Cv((0,0,-1),(0,1,0),-1.0,1.0,0,1.3,(z<-1.8))
-rr.put(holden,0,0.665,0.92)
-rr.put(rbword,-0.08,0.40,0.52)
-rr.put(icon,-0.50,0.41,0.27,flip=True)
-rr.put(icon,0.34,0.41,0.27)
+rr.put(holden,0,0.875,0.60)
+rr.put(rbword,0,0.40,0.40)
 rr.put(recol(iveco,(23,33,76)),0.62,0.40,0.18)
 cvs.append(rr)
 # ---- front corners (oblique) ----
