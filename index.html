@@ -8083,4 +8083,31 @@ function sc54SafetyCar(E){
  return g;
 }
 if(typeof sc26Falcon==='function'){const sc54Falcon=sc26Falcon;sc26Falcon=function(E){try{return sc54SafetyCar(E);}catch(e){console.warn(e);return sc54Falcon(E);}};}
+
+/* Driveable: Instant race can put you in the M4 safety car. Your chosen team's seat, pace and timing stay; only the body changes. */
+// The game's own car node keeps driving the cameras, physics and lights; its meshes move to a hidden layer
+// and the M4 rides on its chassis. The onboard cockpit swaps layers on the whole car, so the hiding is re-applied each frame.
+const SC54_HIDDEN_LAYER=31,SC54_HIDDEN_MASK=(1<<31)>>>0;
+function sc54PlayerBody(W,L){
+ const want=typeof IR!=='undefined'&&IR.active&&!!IR.config?.sc54,car=W.carNodes?.get(L.player?.d?.id);if(!car)return;
+ let m4=car.userData.sc54Body;
+ if(want&&!m4){
+  const host=car.userData.dc35Chassis?.[0]||car;m4=sc54SafetyCar(W);m4.name='BMW M4 CSL safety car (player)';m4.userData.sc54Own=[];
+  if(host!==car){m4.position.copy(host.position).negate();m4.quaternion.copy(host.quaternion).invert();m4.position.applyQuaternion(m4.quaternion);}
+  host.add(m4);car.userData.sc54Body=m4;car.userData.sc54Brake=car.userData.brake;
+  const hook=()=>{g:for(const o of m4.children)for(const c of o.children||[])if(c.userData.sc54Part==='tail'){car.userData.brake=c;break g;}};if(m4.userData.sc54Built)hook();else SC54_READY.then(()=>setTimeout(hook,0));
+ }
+ if(!m4)return;
+ m4.visible=want;
+ // Parts of the game's car can be built after the swap (LOD levels, damage), so collect them every frame.
+ if(want){const own=m4.userData.sc54Own;own.length=0;const walk=o=>{if(o===m4)return;if(o.isMesh||o.isSprite||o.isPoints||o.isLine)own.push(o);for(const c of o.children)walk(c);};walk(car);}
+ if(want){if(W.sc30HiddenCar!==car)for(const o of m4.userData.sc54Own)if(o.layers.mask!==SC54_HIDDEN_MASK)o.layers.set(SC54_HIDDEN_LAYER);}
+ else{for(const o of m4.userData.sc54Own)if(o.layers.mask===SC54_HIDDEN_MASK)o.layers.set(0);m4.parent?.remove(m4);W.disposeTree?.(m4);car.userData.brake=car.userData.sc54Brake;delete car.userData.sc54Body;}
+}
+// Car-part instancing ignores layers, so keep the hidden parts out of it for the frame.
+if(typeof rf41CarBatches==='function'){const sc54Batches=rf41CarBatches;rf41CarBatches=function(W,L){const held=[];for(const car of W.carNodes?.values()||[]){const own=car.userData.sc54Body?.visible&&car.userData.sc54Body.userData.sc54Own;if(own)for(const o of own)if(o.visible&&o.layers.mask===SC54_HIDDEN_MASK){o.visible=false;held.push(o);}}try{return sc54Batches.apply(this,arguments);}finally{for(const o of held)o.visible=true;}};}
+if(typeof dcRenderWorld==='function'){const sc54Render=dcRenderWorld;dcRenderWorld=function(W,L,dt){try{if(L?.player)sc54PlayerBody(W,L);}catch(e){console.warn(e);}return sc54Render.apply(this,arguments);};}
+if(typeof irSetupPage==='function'){const sc54Setup=irSetupPage;irSetupPage=function(){const html=sc54Setup.apply(this,arguments),on=!!IR.config?.sc54;
+ return html.replace('<div class="dc-field"><label for="ir-event">',`<div class="dc-field"><label for="ir-body">Body</label><select id="ir-body" name="sc54body"><option value="race" ${on?'':'selected'}>Race car</option><option value="m4" ${on?'selected':''}>Safety car · BMW M4 CSL</option></select><p class="dc-muted">The safety car keeps your chosen car's seat, pace and timing.</p></div><div class="dc-field"><label for="ir-event">`);};}
+if(typeof irStart==='function'){const sc54Start=irStart;irStart=function(form){const on=form?.elements?.namedItem('sc54body')?.value==='m4';sc54Start.apply(this,arguments);if(IR.active&&IR.config){IR.config.sc54=on;irSave();}};}
 </script></body></html>
