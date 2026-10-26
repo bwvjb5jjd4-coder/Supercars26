@@ -9398,7 +9398,7 @@ function rnPatchComposite(m){
    col=mix(col,vec3(lum)*.85+rnFog*.4,f*f*.62);
    float rim=smoothstep(.0,.22,th)*(1.0-smoothstep(.3,.75,th));
    vec2 dir=rnW.xy/max(length(rnW.xy),1e-6);
-   col*=1.0-rim*.3;col+=rnFog*pow(max(0.0,dot(dir,vec2(.45,-.89))),6.0)*rim*.9;
+   col*=1.0-rim*.32;col+=rnFog*pow(max(0.0,dot(dir,vec2(.45,-.89))),10.0)*rim*.3;
   }
   col+=texture2D(tBloom,vUv).rgb*bloom;`);
  if(!f.includes('rnW.w')){console.warn('rn59: composite patch did not apply');return;}
