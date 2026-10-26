@@ -114,7 +114,7 @@ dc32FreeDrive=function(x,dt,input){
  x.v=vx;x.latV=vy;x.steer=-s.delta;x.loadTransfer=clamp(Math.abs(s.ay)/9.81*.085,0,.16);
  const after=dcNearestPose(x);let delta=after.t-(((x.progress%1)+1)%1);if(delta<-.5)delta++;if(delta>.5)delta--;if(Math.abs(delta)<.05)x.progress+=delta;x.lane=after.lane;
  const ground=after.pit||Math.abs(after.lane)<7.1?after.p.y:gr27Surface(W,x.pos.x,x.pos.z,x.pos.y,false).y;x.pos.y=Math.abs(ground-x.pos.y)>1.5?ground:x.pos.y+(ground-x.pos.y)*Math.min(1,dt*14);
- if(!after.pit&&Math.abs(after.lane)>7.5&&Math.abs(x.v)>10&&L.elapsed-(x.cutAt||-20)>8){x.cutAt=L.elapsed;x.penalty+=2;dcRadio('Race control','Track limits. Two seconds added to this lap.');}
+ if(!after.pit&&Math.abs(after.lane)>7.5&&Math.abs(x.v)>10&&L.elapsed-(x.cutAt||-20)>8){x.cutAt=L.elapsed;if(window.pn57Ok?.()!==false){x.penalty+=2;dcRadio('Race control','Track limits. Two seconds added to this lap.')};}
  ph47Walls(W,L,x,s,after,mass,Iz,dt);ph47Tumble(W,L,x,s,dt,mass);
  x.speed=Math.hypot(x.v,x.latV)*3.6;
  if(!after.pit&&L.stage==='race'&&L.phase==='formation'&&x.progress>=x.formationTarget){x.progress=x.formationTarget;x.v=x.speed=0;x.latV=0;s.r=0;x.outlapHold=true;const q=W.at(x.progress);x.lane=x.formationLane;x.pos={x:q.p.x+q.n.x*x.lane,y:q.p.y,z:q.p.z+q.n.z*x.lane};x.yaw=Math.atan2(q.v.x,q.v.z);}
