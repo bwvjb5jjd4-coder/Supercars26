@@ -84,7 +84,8 @@ function tl54GrilleBacking(car,make){
  else{shape.moveTo(-.50,.63);shape.quadraticCurveTo(0,.69,.50,.63);shape.lineTo(.44,.33);shape.quadraticCurveTo(0,.25,-.44,.33);shape.closePath();}
  const geo=new T.ShapeGeometry(shape,10),mat=new T.MeshStandardMaterial({color:'#07090b',roughness:.9,metalness:.05,side:T.DoubleSide});
  const z=make==='Holden'?2.385:2.355;
- (car.userData.dc35Chassis||[]).forEach(level=>{const panel=new T.Mesh(geo,mat);panel.position.z=z;panel.name='Grille backing';level.add(panel);});
+ // Baked into the geometry (identity transform) so the ph47 crumple shader folds it with the nose.
+ geo.translate(0,0,z);(car.userData.dc35Chassis||[]).forEach(level=>{const panel=new T.Mesh(geo,mat);panel.name='Grille backing';level.add(panel);});
 }
 
 const tl54Car=sc25Car;
