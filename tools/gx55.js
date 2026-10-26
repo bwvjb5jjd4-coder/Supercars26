@@ -27,10 +27,10 @@ function gx55Post(W){
   P=W.gx55P={quad,scene,cam:new T.OrthographicCamera(-1,1,1,-1,0,1),w:0,h:0,lvl:-1,prevVP:new T.Matrix4(),prevEye:new T.Vector3(1e9,0,0),bloom:[],mats:gx55Materials()};
  }
  // Cap the internal 3D resolution (High ~0.75x 1080p, Balanced ~0.45x of 1080p pixels) before the dynamic scale.
- const cap=Math.min(1,Math.sqrt((lvl===2?1.5e6:9e5)/Math.max(1,buf.x*buf.y))),s=(GX55.fixedScale||GX55.scale)*cap,w=Math.max(16,Math.round(buf.x*s)),h=Math.max(16,Math.round(buf.y*s));
+ const css=Math.max(1,r.domElement.clientWidth*r.domElement.clientHeight),cap=Math.min(1,Math.sqrt(Math.max(css*(lvl===2?1.6:1.1),lvl===2?2.2e6:1.5e6)/Math.max(1,buf.x*buf.y))),s=(GX55.fixedScale||GX55.scale)*cap,w=Math.max(16,Math.round(buf.x*s)),h=Math.max(16,Math.round(buf.y*s));
  if(P.w!==w||P.h!==h||P.lvl!==lvl){
   P.rt?.dispose();P.rt?.depthTexture?.dispose();P.ao?.dispose();for(const b of P.bloom)b.dispose();P.bloom=[];
-  const samples=lvl===2?Math.min(2,r.capabilities.maxSamples||0):0,half=T.HalfFloatType;
+  const samples=Math.min(lvl===2?4:2,r.capabilities.maxSamples||0),half=T.HalfFloatType;
   P.rt=new T.WebGLRenderTarget(w,h,{type:half,samples,minFilter:T.LinearFilter,magFilter:T.LinearFilter,depthBuffer:true});
   P.rt.depthTexture=new T.DepthTexture(w,h);P.rt.depthTexture.type=T.UnsignedIntType;
   P.ao=lvl===2?new T.WebGLRenderTarget(w>>1,h>>1,{minFilter:T.LinearFilter,magFilter:T.LinearFilter,depthBuffer:false}):null;
@@ -80,7 +80,7 @@ function gx55Materials(){
    if(dbg>3.5){gl_FragColor=vec4(dbg<4.5?toSRGB(gxAces(col)):dbg<5.5?toSRGB(texture2D(tAO,vUv).rrr):toSRGB(gxAces(col*texture2D(tAO,vUv).r)),1.0);return;}
    if(blur>0.0){float dd=min(d,.99995);vec4 wp=invViewProj*vec4(vUv*2.0-1.0,dd*2.0-1.0,1.0);wp/=wp.w;vec4 pp=prevViewProj*wp;vec2 puv=pp.xy/max(pp.w,1e-4)*.5+.5;vec2 vel=(vUv-puv)*blur;
     float lv=length(vel);if(lv>.035)vel*=.035/lv;vel*=smoothstep(.2,.45,base.a)*smoothstep(2.5,7.0,dist);
-    if(dot(vel,vel)>texel.x*texel.x*.25){vec3 acc=col;float wsum=1.0;float j=gxHash(gl_FragCoord.xy+time)-.5;for(int i=1;i<6;i++){float t=(float(i)+j)/5.0-.5;vec4 s=texture2D(tScene,uv+vel*t);float w=smoothstep(.2,.45,s.a)*step(dot(s.rgb,vec3(1.0)),1e5);s.rgb*=w;acc+=s.rgb*w;wsum+=w;}col=acc/wsum;}}
+    if(dot(vel,vel)>texel.x*texel.x*.25){vec3 acc=col;float wsum=1.0;float j=0.0;for(int i=1;i<6;i++){float t=(float(i)+j)/5.0-.5;vec4 s=texture2D(tScene,uv+vel*t);float w=smoothstep(.2,.45,s.a)*step(dot(s.rgb,vec3(1.0)),1e5);s.rgb*=w;acc+=s.rgb*w;wsum+=w;}col=acc/wsum;}}
    if(useAO>0.0){float a=0.0;for(int i=0;i<8;i++){float t=float(i)*.785398+.39;a+=texture2D(tAO,vUv+aoTexel*vec2(cos(t),sin(t))*(1.5+mod(float(i),2.0)*1.5)).r;}a=a/8.0*.75+texture2D(tAO,vUv).r*.25;col*=mix(1.0,a,useAO);}
    col+=texture2D(tBloom,vUv).rgb*bloom;
    col=gxAces(col);
@@ -159,7 +159,7 @@ function gx55Frame(W,L){
  // Hold 60 fps on Xbox: render the 3D view at a lower internal resolution when frames run long,
  // and climb back once there is headroom. The HUD and the final image stay full resolution.
  if(!GX55.fixedScale&&now>GX55.checkAt&&!L.paused){GX55.checkAt=now+500;
-  if(GX55.ema>18.2&&GX55.scale>.5){GX55.scale=Math.max(.5,GX55.scale-.1);GX55.holdUntil=now+4000;}
+  if(GX55.ema>19.5&&GX55.scale>.8){GX55.scale=Math.max(.8,GX55.scale-.05);GX55.holdUntil=now+4000;}
   else if(GX55.ema<17.0&&GX55.scale<1&&now>GX55.holdUntil){GX55.scale=Math.min(1,GX55.scale+.04);GX55.holdUntil=now+1500;}}
  if(W.gx55World!==W.world){W.gx55World=W.world;gx55UpgradeWorld(W);}
  gx55UpgradeCars(W);
