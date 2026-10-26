@@ -55,10 +55,10 @@ function ph47WheelSurface(W,L,x,lane,ground,pit){
 const ph47Classic=dc32FreeDrive;
 dc32FreeDrive=function(x,dt,input){
  const W=sc25Engine,L=live;if(!L||!W||x.outlapHold)return;
- if(D.settings.ph47Classic||(x.releaseDelay||0)>0||x.rf40Reverse||x!==L.player){x.ph47On=false;if(x.ph47){x.ph47.r=0;x.ph47.tumble=0;x.ph47.phi=0;}return ph47Classic(x,dt,input);}
- x.ph47On=true;const P=PH47,A=ph47Assist(),s=ph47State(x),near=dcNearestPose(x),wet=L.weather!=='Dry';
+ if(D.settings.ph47Classic||(x.releaseDelay||0)>0||x.rf40Reverse||(x!==L.player&&!x.ai62)){x.ph47On=false;if(x.ph47){x.ph47.r=0;x.ph47.tumble=0;x.ph47.phi=0;}return ph47Classic(x,dt,input);}
+ x.ph47On=true;const P=PH47,A=x.ai62?.assist||ph47Assist(),s=ph47State(x),near=dcNearestPose(x),wet=L.weather!=='Dry';
  let throttle=clamp(+input.throttle||0,0,1),brake=clamp(+input.brake||0,0,1),steerIn=clamp(+input.steer||0,-1,1);
- if(L.pad)steerIn=Math.sign(steerIn)*Math.pow(Math.abs(steerIn),1.35);
+ if(L.pad&&!x.ai62)steerIn=Math.sign(steerIn)*Math.pow(Math.abs(steerIn),1.35);
  if(L.stage==='race'&&L.phase==='formation'&&Number.isFinite(x.formationTarget)){const remaining=Math.max(0,(x.formationTarget-x.progress)*L.e.lengthKm*1000),cap=Math.sqrt(Math.max(0,2*2.7*remaining));if(x.v>cap+1){throttle=0;brake=Math.max(brake,.8);}}
  if(s.tumble){throttle=0;brake=0;steerIn=0;}
  x.braking=brake>.1;x.throttle=throttle;
@@ -75,14 +75,14 @@ dc32FreeDrive=function(x,dt,input){
   const sp=Math.abs(vx),sgn=vx>=0?1:-1,v2=vx*vx+vy*vy,den=Math.max(2.5,sp);
   // Steering: speed-sensitive lock, self-aligning wheels when released, assisted countersteer.
   const dmax=.58/(1+sp*.11),betaF=Math.atan2(vy+P.a*r,den)*sgn,betaR=Math.atan2(vy-P.b*r,den)*sgn,free=1-Math.min(1,Math.abs(steerIn)*1.6);
-  let target=steerIn*dmax*(D.settings.sensitivity||1)+free*betaF*A.align+fault;
+  let target=steerIn*dmax*(x.ai62?1:D.settings.sensitivity||1)+free*betaF*A.align+fault;
   if(A.counter&&Math.abs(betaR)>P.peakR*.6)target+=A.counter*(betaR-Math.sign(betaR)*P.peakR*.6);
   if(A.steer&&sp>4){const lim=A.steer*P.peakF;target=clamp(target,betaF-lim,betaF+lim);}
   s.delta+=(clamp(target,-.62,.62)-s.delta)*(1-Math.exp(-h*(L.pad?12:8)));const delta=s.delta,sinD=Math.sin(delta),cosD=Math.cos(delta);
   // Normal loads: static split, downforce, lagged pitch and roll transfer.
   const down=kd*v2,FzF=mass*P.g*P.b/Lw+down*.45-mass*s.ax*P.h/Lw,FzR=mass*P.g*P.a/Lw+down*.55+mass*s.ax*P.h/Lw,lat=mass*s.ay*P.h/P.track,nom=(mass*P.g+down)/4;
   const Fz=[FzF/2-lat*P.rollFront,FzF/2+lat*P.rollFront,FzR/2-lat*(1-P.rollFront),FzR/2+lat*(1-P.rollFront)];let Df=0,Dr=0,drag=0,yawDrag=0;
-  for(let i=0;i<4;i++){const z=Math.max(0,Fz[i]),w=wheels[i],mu=P.mu*grip*w.mu*clamp(1-.10*(z/nom-1),.55,1.12),d=mu*z;if(i<2)Df+=d;else Dr+=d;if(w.drag){const f=w.drag*z*(1+sp*.02)*sgn;drag+=f;yawDrag+=w.lat*f;}}
+  for(let i=0;i<4;i++){const z=Math.max(0,Fz[i]),w=wheels[i],mu=P.mu*grip*w.mu*(i>1?x.ai62?.rear??1:1)*clamp(1-.10*(z/nom-1),.55,1.12),d=mu*z;if(i<2)Df+=d;else Dr+=d;if(w.drag){const f=w.drag*z*(1+sp*.02)*sgn;drag+=f;yawDrag+=w.lat*f;}}
   // Longitudinal: rear drive, front-biased brakes, engine braking. Assists cap at the tyre limit.
   const drive=throttle*Math.min(P.drive,P.power/Math.max(4,sp))*engine*(x.fuel>0?1:0),engineBrake=throttle<.05&&sp>4?(700+sp*14):0,brakeF=brake*P.brake;
   let Fxf=-brakeF*P.bias*sgn,Fxr=drive-(brakeF*(1-P.bias)+engineBrake)*sgn;
@@ -114,11 +114,11 @@ dc32FreeDrive=function(x,dt,input){
  x.v=vx;x.latV=vy;x.steer=-s.delta;x.loadTransfer=clamp(Math.abs(s.ay)/9.81*.085,0,.16);
  const after=dcNearestPose(x);let delta=after.t-(((x.progress%1)+1)%1);if(delta<-.5)delta++;if(delta>.5)delta--;if(Math.abs(delta)<.05)x.progress+=delta;x.lane=after.lane;
  const ground=after.pit||Math.abs(after.lane)<7.1?after.p.y:gr27Surface(W,x.pos.x,x.pos.z,x.pos.y,false).y;x.pos.y=Math.abs(ground-x.pos.y)>1.5?ground:x.pos.y+(ground-x.pos.y)*Math.min(1,dt*14);
- if(!after.pit&&Math.abs(after.lane)>7.5&&Math.abs(x.v)>10&&L.elapsed-(x.cutAt||-20)>8){x.cutAt=L.elapsed;if(window.pn57Ok?.()!==false){x.penalty+=2;dcRadio('Race control','Track limits. Two seconds added to this lap.')};}
+ if(x===L.player&&!after.pit&&Math.abs(after.lane)>7.5&&Math.abs(x.v)>10&&L.elapsed-(x.cutAt||-20)>8){x.cutAt=L.elapsed;if(window.pn57Ok?.()!==false){x.penalty+=2;dcRadio('Race control','Track limits. Two seconds added to this lap.')};}
  ph47Walls(W,L,x,s,after,mass,Iz,dt);ph47Tumble(W,L,x,s,dt,mass);
  x.speed=Math.hypot(x.v,x.latV)*3.6;
  if(!after.pit&&L.stage==='race'&&L.phase==='formation'&&x.progress>=x.formationTarget){x.progress=x.formationTarget;x.v=x.speed=0;x.latV=0;s.r=0;x.outlapHold=true;const q=W.at(x.progress);x.lane=x.formationLane;x.pos={x:q.p.x+q.n.x*x.lane,y:q.p.y,z:q.p.z+q.n.z*x.lane};x.yaw=Math.atan2(q.v.x,q.v.z);}
- ph47Feedback(L,x,s);
+ if(x===L.player)ph47Feedback(L,x,s);
 };
 
 // Rigid-body wall contact on the deepest corner: restitution, wall friction and a yaw kick.
@@ -168,10 +168,12 @@ function ph47Feedback(L,x,s){
 // solver's velocity and yaw rate in step with car-to-car impulses.
 const ph47Collisions=dcCollisions;
 dcCollisions=function(dt){
- ph47Collisions(dt);const L=live,p=L?.player;if(!p?.ph47On||L.dc33Auto)return;
- const ix=p.dc33ImpactX||0,iz=p.dc33ImpactZ||0,w=p.dc33Angular||0;if(Math.abs(ix)+Math.abs(iz)+Math.abs(w)<1e-6)return;
- const fx=Math.sin(p.yaw),fz=Math.cos(p.yaw),gx=Math.cos(p.yaw),gz=-Math.sin(p.yaw),Vx=fx*p.v+gx*(p.latV||0)+ix,Vz=fz*p.v+gz*(p.latV||0)+iz;
- p.v=Vx*fx+Vz*fz;p.latV=Vx*gx+Vz*gz;ph47State(p).r=clamp((p.ph47.r||0)+w,-6,6);p.dc33ImpactX=p.dc33ImpactZ=p.dc33Angular=0;
+ ph47Collisions(dt);const L=live;if(!L)return;
+ // Every car on the solver (the player and nearby AI) takes the impulse as real velocity and yaw rate.
+ for(const p of L.entrants){if(!p.ph47On||(p===L.player?L.dc33Auto:!p.ai62))continue;
+  const ix=p.dc33ImpactX||0,iz=p.dc33ImpactZ||0,w=p.dc33Angular||0;p.dc33YawOffset=0;if(Math.abs(ix)+Math.abs(iz)+Math.abs(w)<1e-6)continue;
+  const fx=Math.sin(p.yaw),fz=Math.cos(p.yaw),gx=Math.cos(p.yaw),gz=-Math.sin(p.yaw),Vx=fx*p.v+gx*(p.latV||0)+ix,Vz=fz*p.v+gz*(p.latV||0)+iz;
+  p.v=Vx*fx+Vz*fz;p.latV=Vx*gx+Vz*gz;ph47State(p).r=clamp((p.ph47.r||0)+w,-6,6);p.dc33ImpactX=p.dc33ImpactZ=p.dc33Angular=0;}
 };
 const ph47Resolve=dc33Resolve;
 dc33Resolve=function(a,b,hit,damage){
@@ -217,14 +219,16 @@ function ph47Sparks(W,X,Y,Z,vx,vz,count){
  if(!W)return;const F=ph47Fx(W);for(let n=0;n<count;n++){const q=F.bits[F.bitAt];F.bitAt=(F.bitAt+1)%F.SPARKS;const a=Math.random()*Math.PI*2,s=2+Math.random()*7;Object.assign(q,{x:X,y:Y,z:Z,vx:vx+Math.cos(a)*s,vy:1+Math.random()*4.5,vz:vz+Math.sin(a)*s,life:.25+Math.random()*.55});q.max=q.life;}
 }
 function ph47FxStep(W,L,dt){
- const F=ph47Fx(W),p=L.player,s=p?.ph47;
- if(s&&p.ph47On&&dt>0&&!p.garage){
-  const speed=Math.hypot(p.v,p.latV||0),wet=L.weather!=='Dry';
+ const F=ph47Fx(W),cam=W.camera?.position;
+ // Skid marks and smoke for the player and for AI cars on the solver within 160 m of the camera.
+ for(const p of L.entrants){const s=p.ph47;if(!s||!p.ph47On||!(dt>0)||p.garage||!p.pos)continue;
+  if(p!==L.player&&(!p.ai62||!cam||Math.hypot(p.pos.x-cam.x,p.pos.z-cam.z)>160)){s.fxLast=null;continue;}
+  const speed=Math.hypot(p.v,p.latV||0),wet=L.weather!=='Dry',lastRow=p===L.player?F.last:(s.fxLast||=[null,null,null,null]);
   for(let i=0;i<4;i++){const w=s.wheels[i];if(!w)continue;const front=i<2,slide=front?s.slideF*6+s.lockF:s.slideR*6+Math.max(s.lockR,s.spin),onRoad=w.kind==='road'||w.kind==='kerb',now={x:w.x,y:w.y+.012,z:w.z,f:1};
    let mark=null;if(s.tumble&&Math.abs(s.phi)>.35)mark=null;else if(onRoad&&slide>.18&&speed>3)mark={c:[.03,.03,.03],a:clamp(slide*.55,.15,.62),wd:.27};else if(w.kind==='grass'&&speed>4)mark={c:[.19,.15,.09],a:clamp(speed/40,.15,.55),wd:.3};
-   const last=F.last[i];if(mark&&last&&Math.hypot(now.x-last.x,now.z-last.z)<4){if(Math.hypot(now.x-last.x,now.z-last.z)>.35){ph47Mark(F,last,now,mark.wd,mark.c,mark.a);F.last[i]=now;}}else F.last[i]=mark?now:null;
+   const last=lastRow[i];if(mark&&last&&Math.hypot(now.x-last.x,now.z-last.z)<4){if(Math.hypot(now.x-last.x,now.z-last.z)>.35){ph47Mark(F,last,now,mark.wd,mark.c,mark.a);lastRow[i]=now;}}else lastRow[i]=mark?now:null;
    if(onRoad&&slide>.25&&speed>4&&!wet&&Math.random()<dt*clamp(slide*40,0,60))ph47Puff(W,w.x,w.y+.25,w.z,1,'#e9e8e4',p.v*Math.sin(p.yaw),p.v*Math.cos(p.yaw),1.2+slide*.8);
-   if(onRoad&&wet&&speed>12&&Math.random()<dt*speed*.4)ph47Puff(W,w.x,w.y+.2,w.z,1,'#d4dbde',0,0,.7);
+   if(onRoad&&wet&&speed>12&&Math.random()<dt*speed*(p===L.player?.4:.15))ph47Puff(W,w.x,w.y+.2,w.z,1,'#d4dbde',0,0,.7);
    if(w.kind==='grass'&&speed>5&&Math.random()<dt*speed*.9)ph47Puff(W,w.x,w.y+.2,w.z,1,i%2?'#7d6a4c':'#8a7a55',p.v*Math.sin(p.yaw),p.v*Math.cos(p.yaw),.9);
   }
   if(s.tumble&&Math.abs(s.phi)>.6&&speed>3&&Math.random()<dt*30)ph47Sparks(W,p.pos.x,p.pos.y+.1,p.pos.z,p.v*Math.sin(p.yaw)*.7,p.v*Math.cos(p.yaw)*.7,3);
@@ -237,7 +241,7 @@ function ph47FxStep(W,L,dt){
  sg.attributes.position.needsUpdate=sg.attributes.size.needsUpdate=sg.attributes.alpha.needsUpdate=sg.attributes.tint.needsUpdate=true;
  F.smoke.material.uniforms.scale.value=W.renderer.domElement.height/(2*Math.tan(THREE.MathUtils.degToRad(W.camera.fov)/2));
  const kg=F.sparks.geometry,kp=kg.attributes.position.array,kc=kg.attributes.color.array;
- for(let i=0;i<F.SPARKS;i++){const q=F.bits[i];if(q.life>0&&dt>0){q.life-=dt;q.vy-=9.81*dt;q.x+=q.vx*dt;q.y+=q.vy*dt;q.z+=q.vz*dt;if(q.y<(p?.pos.y??0)+.02&&q.vy<0){q.vy*=-.35;q.vx*=.7;q.vz*=.7;}}
+ for(let i=0;i<F.SPARKS;i++){const q=F.bits[i];if(q.life>0&&dt>0){q.life-=dt;q.vy-=9.81*dt;q.x+=q.vx*dt;q.y+=q.vy*dt;q.z+=q.vz*dt;if(q.y<(L.player?.pos?.y??0)+.02&&q.vy<0){q.vy*=-.35;q.vx*=.7;q.vz*=.7;}}
   const o=i*6;if(q.life>0){const k=q.life/q.max;kp.set([q.x,q.y,q.z,q.x-q.vx*.035,q.y-q.vy*.035,q.z-q.vz*.035],o);kc.set([1.6*k+.4,.9*k+.2,.35*k,.9*k,.3*k,.05*k],o);}else{kp.fill(0,o,o+6);kc.fill(0,o,o+6);}}
  kg.attributes.position.needsUpdate=kg.attributes.color.needsUpdate=true;
  for(const o of [F.marks,F.smoke,F.sparks])o.updateMatrixWorld(true);
