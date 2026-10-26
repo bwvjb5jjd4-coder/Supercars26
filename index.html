@@ -2908,7 +2908,7 @@ SC25World.prototype.makeCockpit=function(){if(this.dc35Cockpit)return;const T=TH
  this.sc30RainTex=this.texture(768,432,c=>c.clearRect(0,0,768,432));const mat=new T.MeshBasicMaterial({map:this.sc30RainTex,transparent:true,depthWrite:false,depthTest:false,toneMapped:false});this.sc30RainPlane=new T.Mesh(new T.PlaneGeometry(3.5,2.05),mat);this.sc30RainPlane.position.z=-1.10;this.sc30RainPlane.renderOrder=100;g.add(this.sc30RainPlane);
  this.sc30Wiper=new T.Group();this.sc30Wiper.position.set(-.08,-.26,-1.04);g.add(this.sc30Wiper);const black=new T.MeshStandardMaterial({color:'#131a1d',roughness:.55,metalness:.22,depthTest:false});for(const [a,b,r]of [[[0,0,0],[0,.81,0],.008],[[-.012,.36,.004],[-.012,.86,.004],.013]]){const p=new T.Vector3(...a),q=new T.Vector3(...b),rod=new T.Mesh(new T.CylinderGeometry(r,r,p.distanceTo(q),10),black);rod.position.copy(p).add(q).multiplyScalar(.5);rod.quaternion.setFromUnitVectors(new T.Vector3(0,1,0),q.sub(p).normalize());rod.renderOrder=105;this.sc30Wiper.add(rod);}g.traverse(o=>o.layers.set(1));g.visible=false;};
 const dc35Cockpit=dcCockpit;
-dcCockpit=function(W,L,dt){dc35Cockpit(W,L,dt);const car=W.carNodes.get(L.player.d.id);if(!L.wipers&&W.sc30Wiper)W.sc30Wiper.rotation.z=-1.53;if(car?.userData.dc35Car){car.visible=!L.player.garage;if(sc25Camera==='onboard'&&W.camera.near!==.025){W.camera.near=.025;W.camera.updateProjectionMatrix();}for(const steering of car.userData.dc35Steering)steering.rotation.z=-(L.player.steer||0)*4;}};
+dcCockpit=function(W,L,dt){dc35Cockpit(W,L,dt);const car=W.carNodes.get(L.player.d.id);if(!L.wipers&&W.sc30Wiper)W.sc30Wiper.rotation.z=-1.53;if(car?.userData.dc35Car){car.visible=!L.player.garage;if(sc25Camera==='onboard'&&W.camera.near!==.025){W.camera.near=.025;W.camera.updateProjectionMatrix();}for(const steering of car.userData.dc35Steering)steering.rotation.z=(L.player.steer||0)*4;}};
 // Auxiliary views must never change the main view's target, viewport or shadow map.
 function rf46AuxRender(W,draw){
  const r=W.renderer,T=THREE,target=r.getRenderTarget(),face=r.getActiveCubeFace(),mip=r.getActiveMipmapLevel(),viewport=r.getViewport(new T.Vector4()),scissor=r.getScissor(new T.Vector4()),test=r.getScissorTest(),auto=r.shadowMap.autoUpdate,needs=r.shadowMap.needsUpdate;
@@ -2979,7 +2979,7 @@ function dc35RearView(W,L){
  catch(_){W.dc35MirrorReady=false;}finally{if(car)car.visible=visible;}
 }
 function dc35Present(W,L,dt){const T=THREE,wet=L.weather==='Dry'?0:L.weather==='Extremely Wet'?1:.78;W.dc35Frame=(W.dc35Frame||0)+1;W.dc35Sky.uniforms.wet.value=wet;W.dc35Sky.uniforms.time.value=L.elapsed;W.dc35Sky.mesh.position.copy(W.camera.position);W.scene.fog.color.set(wet?'#a2afb3':'#c6d5d7');W.scene.fog.density=L.weather==='Extremely Wet'?.0028:wet?.0008:.00018;W.sun.color.set(wet?'#e1eaee':'#fff2db');W.sun.intensity=wet?.55:3.1;W.hemi.intensity=wet?1.2:.85;W.hemi.color.set(wet?'#c5d2da':'#c8e0ec');W.hemi.groundColor.set('#746b55');W.renderer.toneMappingExposure=wet?1.0:1.03;W.roadMaterial.color.set('#868b8c');W.pitMaterial.color.set('#929696');for(const m of [W.roadMaterial,W.pitMaterial]){m.metalness=.015;m.clearcoat=wet?.85:.12;m.clearcoatRoughness=wet?.15:.38;}W.dc35RoadUniforms.wet.value=wet;if(W.puddles)W.puddles.visible=false;if(W.dc35LeafMaterial)W.dc35LeafMaterial.color.set(wet?'#929c86':'#b4bca3');
- const active=L.paused||dcSimBusy?0:Math.min(.06,Math.max(0,dt||1/60));for(const x of L.entrants){const car=W.carNodes.get(x.d.id);if(!car?.userData.dc35Car)continue;const state=car.userData.dc35State;state.wet.value=wet;state.wear.value=clamp((x.rdWear||0)/100*.7+Math.max(0,x.progress)*.002,0,1);state.damage.value=(x.bodyDamage||0)/100;state.tyreWet.value=x.tyre==='Wet'?1:0;const motion=car.userData.dc35Motion||={v:x.v,pitch:0,roll:0,bump:0},accel=active?(x.v-motion.v)/Math.max(.016,active):0,desiredPitch=clamp(-accel*.0035,-.024,.029),desiredRoll=clamp(-(x.steer||0)*x.v*x.v*.00024,-.032,.032),f=1-Math.exp(-active*9);motion.pitch+=(desiredPitch-motion.pitch)*f;motion.roll+=(desiredRoll-motion.roll)*f;motion.v=x.v;gr27RoadPose(W,L,x,car);const heave=-Math.min(.015,x.v*x.v*.000003)+((Math.abs(x.lane)>6.6&&!x.pitStage)?Math.sin(L.elapsed*48)*.008:0);motion.heave=heave;for(const body of car.userData.dc35Chassis){body.rotation.x=motion.pitch;body.rotation.z=motion.roll;body.position.y=heave;}for(const wheel of car.userData.dc35Steering)wheel.rotation.z=-(x.steer||0)*4;car.userData.dc35Contact.material.opacity=wet?.45:.7;car.userData.dc35LOD.update(W.camera);if(sc25Quality==='performance'&&car!==W.carNodes.get(L.player.d.id)){car.userData.dc35LOD.levels[0].object.visible=false;const dist=car.position.distanceTo(W.camera.position);car.userData.dc35LOD.levels[1].object.visible=dist<90;car.userData.dc35LOD.levels[2].object.visible=dist>=90;}if(car.userData.dc35Mats.led)car.userData.dc35Mats.led.emissiveIntensity=.2+clamp((x.speed%48)/48,.1,1)*1.3;}
+ const active=L.paused||dcSimBusy?0:Math.min(.06,Math.max(0,dt||1/60));for(const x of L.entrants){const car=W.carNodes.get(x.d.id);if(!car?.userData.dc35Car)continue;const state=car.userData.dc35State;state.wet.value=wet;state.wear.value=clamp((x.rdWear||0)/100*.7+Math.max(0,x.progress)*.002,0,1);state.damage.value=(x.bodyDamage||0)/100;state.tyreWet.value=x.tyre==='Wet'?1:0;const motion=car.userData.dc35Motion||={v:x.v,pitch:0,roll:0,bump:0},accel=active?(x.v-motion.v)/Math.max(.016,active):0,desiredPitch=clamp(-accel*.0035,-.024,.029),desiredRoll=clamp(-(x.steer||0)*x.v*x.v*.00024,-.032,.032),f=1-Math.exp(-active*9);motion.pitch+=(desiredPitch-motion.pitch)*f;motion.roll+=(desiredRoll-motion.roll)*f;motion.v=x.v;gr27RoadPose(W,L,x,car);const heave=-Math.min(.015,x.v*x.v*.000003)+((Math.abs(x.lane)>6.6&&!x.pitStage)?Math.sin(L.elapsed*48)*.008:0);motion.heave=heave;for(const body of car.userData.dc35Chassis){body.rotation.x=motion.pitch;body.rotation.z=motion.roll;body.position.y=heave;}for(const wheel of car.userData.dc35Steering)wheel.rotation.z=(x.steer||0)*4;car.userData.dc35Contact.material.opacity=wet?.45:.7;car.userData.dc35LOD.update(W.camera);if(sc25Quality==='performance'&&car!==W.carNodes.get(L.player.d.id)){car.userData.dc35LOD.levels[0].object.visible=false;const dist=car.position.distanceTo(W.camera.position);car.userData.dc35LOD.levels[1].object.visible=dist<90;car.userData.dc35LOD.levels[2].object.visible=dist>=90;}if(car.userData.dc35Mats.led)car.userData.dc35Mats.led.emissiveIntensity=.2+clamp((x.speed%48)/48,.1,1)*1.3;}
 }
 function dc35UnusedInstallRenderer(renderer){if(renderer.dc35RenderBase)return;const original=renderer.render;renderer.dc35RenderBase=original;renderer.render=function(scene,camera){const W=sc25Engine,L=live;if(W?.dc35Sky&&L?.dc&&scene===W.scene&&camera===W.camera&&!W.dc35Aux){W.dc35Aux=true;try{dc35Present(W,L,W.dc35FrameDt||1/60);const target=this.getRenderTarget();dc35CaptureEnvironment(W,L);this.setRenderTarget(target);dc35RearView(W,L);dc35Reflection(W,L);}finally{W.dc35Aux=false;}}return original.call(this,scene,camera);};}
 const dc35WorldRender=dcRenderWorld;
@@ -4706,7 +4706,7 @@ dc35Present=function(W,L,dt){
    const pitch=clamp(s.ax*.0042,-.045,.04),roll=clamp(s.ay*.0036,-.06,.06),bump=s.kerb&&Math.abs(x.v)>5?Math.sin(L.elapsed*61)*.012*s.kerb/2:0,grassBump=s.grass&&Math.abs(x.v)>4?Math.sin(L.elapsed*23+1.3)*.01*s.grass/2:0;
    const m=u.dc35Motion;if(m){m.pitch+=(pitch-m.pitch)*(1-Math.exp(-dt*10));m.roll+=(roll-m.roll)*(1-Math.exp(-dt*10));}
    for(const body of u.dc35Chassis||[]){body.rotation.x=m?m.pitch:pitch;body.rotation.z=(m?m.roll:roll)+bump*.6;body.position.y=(m?.heave||0)+bump+grassBump;}
-   for(const wheel of u.dc35Steering||[])wheel.rotation.z=clamp(s.delta*9,-2.7,2.7);
+   for(const wheel of u.dc35Steering||[])wheel.rotation.z=clamp(-s.delta*9,-2.7,2.7);
    if(s.tumble||s.hop){const lift=s.tumble?PH47.width*Math.abs(Math.sin(s.phi))+PH47.height*Math.abs(Math.cos(s.phi))-PH47.height:0,forward=PH47_TMP.fwd.set(Math.sin(x.yaw),0,Math.cos(x.yaw));car.quaternion.premultiply(PH47_TMP.roll.setFromAxisAngle(forward,-s.phi));
     // Roll about the body's centre, not the ground-level origin, so a car on its roof sits on the road instead of inside it.
     const c=PH47_TMP.centre||(PH47_TMP.centre=new THREE.Vector3());c.set(0,PH47.height,0).applyQuaternion(PH47_TMP.roll);car.position.x-=c.x;car.position.z-=c.z;car.position.y+=PH47.height-c.y+lift+s.hop;}
@@ -9450,4 +9450,61 @@ function rnInstall(){
 }
 if(document.readyState==='complete')rnInstall();else window.addEventListener('load',rnInstall);
 })();
+</script><script id="sw60-steering">
+/* SW60: cockpit steering wheel clean-up for the ZB and the Falcon.
+   The white glove meshes are no longer drawn. Only the wheel rim, spokes and hub turn:
+   the ZB model's column and shroud stay fixed to the dash, and the ZB wheel now turns
+   about its own tilted column axis instead of the car's forward axis.
+   The steering direction is flipped where it is applied (dc35, ph47) so steering left
+   turns the wheel anticlockwise from the driver's seat. */
+
+// Car space (+Z forward). rim: the Falcon's rim was cut where the gloves gripped it, so a full rim ring [radius, tube, z] is added.
+// Car space (+Z forward). keepMaxZ: parts of the steering model that end nearer the driver than this turn.
+const SW60_WHEEL={
+ Holden:{centre:[.399,.8715,.454],tilt:Math.asin(.503),keepMaxZ:.575},
+ Ford:{centre:[.37,.91,.56],tilt:0,keepMaxZ:9,rim:[.1645,.0225,0]}
+};
+
+const sw60Bucket=dc35Bucket;
+dc35Bucket=function(role,level,player){return role==='glove'?null:sw60Bucket(role,level,player);};
+
+function sw60Split(geo,oldPivot,spec){
+ const p=geo.attributes.position,ix=geo.index.array,n=p.count,par=new Int32Array(n);for(let i=0;i<n;i++)par[i]=i;
+ const find=a=>{while(par[a]!==a){par[a]=par[par[a]];a=par[a];}return a;};
+ for(let t=0;t<ix.length;t+=3){const a=find(ix[t]),b=find(ix[t+1]),c=find(ix[t+2]);par[b]=a;par[find(c)]=a;}
+ const maxZ=new Map();for(let i=0;i<n;i++){const r=find(i),z=p.getZ(i)+oldPivot[2];maxZ.set(r,Math.max(maxZ.get(r)??-9,z));}
+ const turns=i=>maxZ.get(find(i))<spec.keepMaxZ;
+ const T=THREE,cos=Math.cos(-spec.tilt),sin=Math.sin(-spec.tilt),c=spec.centre;
+ function build(tris,local){
+  const map=new Map(),pos=[],nor=[],uv=[],col=[],ids=[],N=geo.attributes.normal,U=geo.attributes.uv,C=geo.attributes.color;
+  for(const v of tris){if(!map.has(v)){map.set(v,map.size);let x=p.getX(v)+oldPivot[0],y=p.getY(v)+oldPivot[1],z=p.getZ(v)+oldPivot[2],nx=N.getX(v),ny=N.getY(v),nz=N.getZ(v);
+    if(local){x-=c[0];y-=c[1];z-=c[2];[y,z]=[y*cos-z*sin,y*sin+z*cos];[ny,nz]=[ny*cos-nz*sin,ny*sin+nz*cos];}
+    pos.push(x,y,z);nor.push(nx,ny,nz);uv.push(U?U.getX(v):0,U?U.getY(v):0);col.push(C?C.getX(v):1,C?C.getY(v):1,C?C.getZ(v):1);}
+   ids.push(map.get(v));}
+  const g=new T.BufferGeometry();g.setAttribute('position',new T.Float32BufferAttribute(pos,3));g.setAttribute('normal',new T.Float32BufferAttribute(nor,3));g.setAttribute('uv',new T.Float32BufferAttribute(uv,2));g.setAttribute('color',new T.Float32BufferAttribute(col,3));g.setIndex(ids);g.computeBoundingSphere();return g;}
+ const wheel=[],fixed=[];for(let t=0;t<ix.length;t+=3){const list=turns(ix[t])?wheel:fixed;list.push(ix[t],ix[t+1],ix[t+2]);}
+ return{wheel:wheel.length?build(wheel,true):null,fixed:fixed.length?build(fixed,false):null};
+}
+
+const sw60MakeGeometry=dc35MakeGeometry;
+dc35MakeGeometry=function(make,level,player){
+ const key=make+':'+level+':'+player;if(DC35_GEOMETRY.has(key))return DC35_GEOMETRY.get(key);
+ const out=sw60MakeGeometry(make,level,player),spec=SW60_WHEEL[make];if(!spec)return out;
+ const result=[];
+ for(const row of out){
+  if(row.group!=='steering'){result.push(row);continue;}
+  const parts=sw60Split(row.g,row.pivot,spec);row.g.dispose();
+  if(parts.wheel)result.push({...row,pivot:[...spec.centre],g:parts.wheel});
+  if(spec.rim){const ring=new THREE.TorusGeometry(spec.rim[0],spec.rim[1],10,64);ring.translate(0,0,spec.rim[2]);const c=new THREE.Color(DC35_ROLE_COLOURS.steering),n=ring.attributes.position.count;ring.setAttribute('color',new THREE.Float32BufferAttribute(Array.from({length:n*3},(_,i)=>[c.r,c.g,c.b][i%3]),3));result.push({...row,pivot:[...spec.centre],g:ring});}
+  if(parts.fixed)result.push({...row,group:'body',pivot:null,g:parts.fixed});
+ }
+ DC35_GEOMETRY.set(key,result);return result;
+};
+
+const sw60Car=sc25Car;
+sc25Car=function(E,team,driver){
+ const g=sw60Car(E,team,driver),spec=SW60_WHEEL[g?.userData?.make];
+ if(spec)for(const pivot of g.userData.dc35Steering||[])pivot.rotation.x=spec.tilt;
+ return g;
+};
 </script></body></html>

@@ -260,7 +260,7 @@ dc35Present=function(W,L,dt){
    const pitch=clamp(s.ax*.0042,-.045,.04),roll=clamp(s.ay*.0036,-.06,.06),bump=s.kerb&&Math.abs(x.v)>5?Math.sin(L.elapsed*61)*.012*s.kerb/2:0,grassBump=s.grass&&Math.abs(x.v)>4?Math.sin(L.elapsed*23+1.3)*.01*s.grass/2:0;
    const m=u.dc35Motion;if(m){m.pitch+=(pitch-m.pitch)*(1-Math.exp(-dt*10));m.roll+=(roll-m.roll)*(1-Math.exp(-dt*10));}
    for(const body of u.dc35Chassis||[]){body.rotation.x=m?m.pitch:pitch;body.rotation.z=(m?m.roll:roll)+bump*.6;body.position.y=(m?.heave||0)+bump+grassBump;}
-   for(const wheel of u.dc35Steering||[])wheel.rotation.z=clamp(s.delta*9,-2.7,2.7);
+   for(const wheel of u.dc35Steering||[])wheel.rotation.z=clamp(-s.delta*9,-2.7,2.7);
    if(s.tumble||s.hop){const lift=s.tumble?PH47.width*Math.abs(Math.sin(s.phi))+PH47.height*Math.abs(Math.cos(s.phi))-PH47.height:0,forward=PH47_TMP.fwd.set(Math.sin(x.yaw),0,Math.cos(x.yaw));car.quaternion.premultiply(PH47_TMP.roll.setFromAxisAngle(forward,-s.phi));
     // Roll about the body's centre, not the ground-level origin, so a car on its roof sits on the road instead of inside it.
     const c=PH47_TMP.centre||(PH47_TMP.centre=new THREE.Vector3());c.set(0,PH47.height,0).applyQuaternion(PH47_TMP.roll);car.position.x-=c.x;car.position.z-=c.z;car.position.y+=PH47.height-c.y+lift+s.hop;}
