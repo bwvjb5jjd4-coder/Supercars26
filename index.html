@@ -8496,7 +8496,7 @@ function gx55Frame(W,L){
  GX55.time.value=W.clock||0;
  // Hold 60 fps on Xbox: render the 3D view at a lower internal resolution when frames run long,
  // and climb back once there is headroom. The HUD and the final image stay full resolution.
- if(!GX55.fixedScale&&now>GX55.checkAt&&!L.paused){GX55.checkAt=now+500;
+ if(false&&!GX55.fixedScale&&now>GX55.checkAt&&!L.paused){GX55.checkAt=now+500;
   if(GX55.ema>19.5&&GX55.scale>.8){GX55.scale=Math.max(.8,GX55.scale-.05);GX55.holdUntil=now+4000;}
   else if(GX55.ema<17.0&&GX55.scale<1&&now>GX55.holdUntil){GX55.scale=Math.min(1,GX55.scale+.04);GX55.holdUntil=now+1500;}}
  if(W.gx55World!==W.world){W.gx55World=W.world;gx55UpgradeWorld(W);}
@@ -8737,4 +8737,25 @@ SC25World.prototype.dispose=function(){
  this.gx55Spray=this.gx55Marks=this.gx55Line=null;this.gx55Asphalt?.dispose();this.gx55Asphalt=null;
  return gx55Dispose.call(this);
 };
+
+// --- Frame pacing ------------------------------------------------------------------------
+// The base loop ran physics in fixed 1/60 s steps but rendered once per display frame, so any
+// timing jitter gave 0 or 2 steps in a frame and the car visibly jumped. Physics now advances
+// by the real frame time each frame (split into steps no longer than 1/60 s), so every rendered
+// frame moves exactly as far as time has passed. The autosave also runs every 15 s, not 5 s,
+// since serialising the save mid-race was a regular hitch.
+(function(){
+ try{
+  const src=String(rf41DriveFrame),from='dcAccumulator+=dt;let n=0;while(dcAccumulator>=1/60&&n++<5&&live===L){dcPhysics(1/60,input,false);dcAccumulator-=1/60}';
+  if(!src.includes(from)||!src.includes('L.clockSave>5'))return;
+  const next=(0,eval)('('+src.replace(from,'dcAccumulator=0;{const k=Math.max(1,Math.ceil(dt*60-.2));for(let i=0;i<k&&live===L;i++)dcPhysics(dt/k,input,false);}').replace('L.clockSave>5','L.clockSave>15')+')');
+  const outer=dcDriveFrame;
+  dcDriveFrame=function(now){if(live?.rf41Loading&&sc25Engine&&!sc25Engine.dead){dcLastTick=now;sc25Engine.raf=requestAnimationFrame(dcDriveFrame);return;}return next(now);};
+  GX55.paced=true;
+ }catch(e){console.warn('GX55 frame pacing unavailable',e);}
+})();
+// The High-quality car reflection cube was re-captured (6 scene renders + PMREM) every 10 s of
+// driving, a visible hitch each time. Reuse it for 45 s instead.
+const gx55EnvBase=dc35CaptureEnvironment;
+dc35CaptureEnvironment=function(W,L){const env=L.weather==='Dry'&&W.dc35Environments?.dry;if(env&&W.clock-(W.dc35EnvTime||0)<45){W.scene.environment=env.texture;return;}return gx55EnvBase(W,L);};
 </script></body></html>
