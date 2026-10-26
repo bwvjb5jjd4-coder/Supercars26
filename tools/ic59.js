@@ -129,22 +129,23 @@ dcRenderWorld=function(W,L,dt){baseRender(W,L,dt);const sc=L?.ic59Sc,m=W?.safety
 
 /* ---------- MFD ---------- */
 const css=document.createElement('style');css.textContent=`
-#ic59-mfd{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:60;width:min(420px,88vw);background:#05080cdd;color:#fff;font-family:'UI Rajdhani','Arial Narrow',sans-serif;border:1px solid #ffffff22;border-radius:6px;overflow:hidden;box-shadow:0 18px 60px #000a;backdrop-filter:blur(8px)}
+#ic59-mfd{position:fixed;left:22px;bottom:22px;z-index:60;width:250px;background:#05080cdd;color:#fff;font-family:'UI Rajdhani','Arial Narrow',sans-serif;border:1px solid #ffffff22;border-radius:5px;overflow:hidden;box-shadow:0 10px 30px #0008;backdrop-filter:blur(8px)}
 #ic59-mfd[hidden]{display:none}
-#ic59-mfd .hd{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:linear-gradient(100deg,#e10600,#a30d16);font:700 17px 'UI Rajdhani',sans-serif;letter-spacing:.16em}
-#ic59-mfd .hd small{font:600 11px 'UI Inter',sans-serif;letter-spacing:.06em;opacity:.9}
-#ic59-mfd button{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:12px;width:100%;padding:12px 14px;border-bottom:1px solid #ffffff14;font:700 19px 'UI Rajdhani',sans-serif;letter-spacing:.06em;cursor:pointer}
-#ic59-mfd button:last-child{border:0}
-#ic59-mfd button i{font-style:normal;display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:#ffffff1a;font:800 14px 'UI Inter',sans-serif}
-#ic59-mfd button b{margin-left:auto;font:600 14px 'UI Inter',sans-serif;color:#c9d1dc}
-#ic59-mfd button.on{background:linear-gradient(90deg,#e1060055,#e1060010);box-shadow:inset 4px 0 #e10600}
-#ic59-mfd .ft{padding:7px 14px;font:600 11px 'UI Inter',sans-serif;color:#9aa6b4;letter-spacing:.05em;background:#ffffff08}`;
+#ic59-mfd .hd{display:flex;justify-content:space-between;align-items:center;padding:5px 9px;background:linear-gradient(100deg,#e10600,#a30d16);font:700 12px 'UI Rajdhani',sans-serif;letter-spacing:.14em}
+#ic59-mfd .hd small{font:600 9px 'UI Inter',sans-serif;letter-spacing:.05em;opacity:.9}
+#ic59-mfd button{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:7px;width:100%;padding:5px 9px;border-bottom:1px solid #ffffff14;font:700 13px 'UI Rajdhani',sans-serif;letter-spacing:.05em;cursor:pointer}
+#ic59-mfd button:last-of-type{border:0}
+#ic59-mfd button i{font-style:normal;display:grid;place-items:center;width:17px;height:17px;flex:none;border-radius:50%;background:#ffffff1a;font:800 9px 'UI Inter',sans-serif}
+#ic59-mfd button b{margin-left:auto;font:600 10px 'UI Inter',sans-serif;color:#c9d1dc;white-space:nowrap}
+#ic59-mfd button.on{background:linear-gradient(90deg,#e1060055,#e1060010);box-shadow:inset 3px 0 #e10600}
+#ic59-mfd .ft{padding:4px 9px;font:600 9px 'UI Inter',sans-serif;color:#9aa6b4;letter-spacing:.04em;background:#ffffff08}
+body:has(#ic59-mfd:not([hidden])) .dc-radio{bottom:196px!important}`;
 document.head.appendChild(css);
 function detail(k){const L=live,p=L?.player;if(!p)return'';
  if(k==='pit')return p.pitNow?'BOXING · cancel':'Box this lap';
- if(k==='incident')return (p.bodyDamage||0)>=99.5?'Retire (DNF)':L.stage==='race'&&L.started?'SC + pits · lose a lap':'Back to the pits';
+ if(k==='incident')return (p.bodyDamage||0)>=99.5?'Retire (DNF)':L.stage==='race'&&L.started?'SC · lose a lap':'Back to the pits';
  if(k==='tyre')return (L.pitPlan?.tyre||'—')+' ›';return'Close';}
-function paint(){if(!M.el)return;M.el.innerHTML=`<div class="hd">RACE MFD<small>${live?.player?.pitNow?'PIT REQUESTED':'B / P CLOSE'}</small></div>${OPTS.map((o,i)=>`<button type="button" data-i="${i}" class="${i===M.sel?'on':''}"><i>${'ABCD'[i]}</i>${o.t}<b>${esc(detail(o.k))}</b></button>`).join('')}<div class="ft">D-pad ▲▼ select · A confirm · B close · keys 1-4</div>`;
+function paint(){if(!M.el)return;M.el.innerHTML=`<div class="hd">RACE MFD<small>${live?.player?.pitNow?'PIT REQUESTED':'B / P CLOSE'}</small></div>${OPTS.map((o,i)=>`<button type="button" data-i="${i}" class="${i===M.sel?'on':''}"><i>${'ABCD'[i]}</i>${o.t}<b>${esc(detail(o.k))}</b></button>`).join('')}<div class="ft">▲▼ select · A confirm · B close</div>`;
  M.el.querySelectorAll('button').forEach(b=>b.onclick=()=>{M.sel=+b.dataset.i;choose();});}
 function host(){const h=document.querySelector('.dc-driving')||document.body;if(!M.el||!M.el.isConnected){M.el=document.createElement('div');M.el.id='ic59-mfd';M.el.hidden=true;M.el.setAttribute('role','menu');M.el.setAttribute('aria-label','Race MFD');h.appendChild(M.el);}return M.el;}
 function openMfd(){if(!live?.dc||live.paused)return;host();M.open=true;M.sel=0;M.el.hidden=false;paint();maskHeld();}
