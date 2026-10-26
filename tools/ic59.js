@@ -1,6 +1,7 @@
 /* ic59 · Race incidents.
-   - The pit button (Xbox B / P) opens an incident MFD: Request pit, Report incident, Tyre choice, Cancel.
-     D-pad up/down moves, A selects, B closes (keyboard: P, 1-4, Enter, arrows while open).
+   - The pit button (Xbox B / P) opens a race MFD: Request pit, Fuel, Tyres, Repairs, Report incident, Cancel.
+     D-pad up/down moves, left/right changes fuel/tyres/repairs, A selects, B closes
+     (keyboard: P, 1-6, Enter, arrows while open). The header shows pt61's predicted stop time.
    - Report incident: safety car out, you are taken to your pit box, repaired, held until the train
      passes pit exit and lose a lap. At 100% damage it retires the car (DNF).
    - Wrecks never block the track: retired AI cars are recovered almost at once, and an AI car that
@@ -9,9 +10,10 @@
      at least one lap at a slower pace, pits once the track is clear and racing resumes at the line. */
 (()=>{
 'use strict';
-const SC_PACE=24,FORM_PACE=44,QUEUE_HEAD=8,QUEUE_GAP=12,TYRES=['Soft','Hard','Wet'];
-const OPTS=[{k:'pit',t:'Request pit'},{k:'incident',t:'Report incident'},{k:'tyre',t:'Tyre choice'},{k:'cancel',t:'Cancel'}];
+const SC_PACE=24,FORM_PACE=44,QUEUE_HEAD=8,QUEUE_GAP=12,TYRES=['Soft','Hard','Wet','None'];
+const OPTS=[{k:'pit',t:'Request pit'},{k:'fuel',t:'Fuel',adj:1},{k:'tyre',t:'Tyres',adj:1},{k:'repair',t:'Repairs',adj:1},{k:'swap',t:'Driver swap',adj:1,when:()=>!!window.PT61?.swapAvailable?.()},{k:'incident',t:'Report incident'},{k:'cancel',t:'Cancel'}];
 const M={open:false,sel:0,el:null,masked:new Set()};
+const opts=()=>OPTS.filter(o=>!o.when||o.when());
 const lenM=L=>L.e.lengthKm*1000,frac=p=>((p%1)+1)%1;
 const toLine=(L,x)=>{const f=frac(x.progress);return (f<1e-6?0:1-f)*lenM(L);};
 const running=L=>L.entrants.filter(x=>!x.retired&&!x.finished&&!x.garage&&!x.pitStage&&x.pos);
@@ -129,7 +131,7 @@ dcRenderWorld=function(W,L,dt){baseRender(W,L,dt);const sc=L?.ic59Sc,m=W?.safety
 
 /* ---------- MFD ---------- */
 const css=document.createElement('style');css.textContent=`
-#ic59-mfd{position:fixed;left:22px;bottom:22px;z-index:60;width:250px;background:#05080cdd;color:#fff;font-family:'UI Rajdhani','Arial Narrow',sans-serif;border:1px solid #ffffff22;border-radius:5px;overflow:hidden;box-shadow:0 10px 30px #0008;backdrop-filter:blur(8px)}
+#ic59-mfd{position:fixed;left:22px;bottom:22px;z-index:60;width:270px;background:#05080cdd;color:#fff;font-family:'UI Rajdhani','Arial Narrow',sans-serif;border:1px solid #ffffff22;border-radius:5px;overflow:hidden;box-shadow:0 10px 30px #0008;backdrop-filter:blur(8px)}
 #ic59-mfd[hidden]{display:none}
 #ic59-mfd .hd{display:flex;justify-content:space-between;align-items:center;padding:5px 9px;background:linear-gradient(100deg,#e10600,#a30d16);font:700 12px 'UI Rajdhani',sans-serif;letter-spacing:.14em}
 #ic59-mfd .hd small{font:600 9px 'UI Inter',sans-serif;letter-spacing:.05em;opacity:.9}
@@ -139,24 +141,37 @@ const css=document.createElement('style');css.textContent=`
 #ic59-mfd button b{margin-left:auto;font:600 10px 'UI Inter',sans-serif;color:#c9d1dc;white-space:nowrap}
 #ic59-mfd button.on{background:linear-gradient(90deg,#e1060055,#e1060010);box-shadow:inset 3px 0 #e10600}
 #ic59-mfd .ft{padding:4px 9px;font:600 9px 'UI Inter',sans-serif;color:#9aa6b4;letter-spacing:.04em;background:#ffffff08}
-body:has(#ic59-mfd:not([hidden])) .dc-radio{bottom:196px!important}`;
+#ic59-mfd .est{display:flex;justify-content:space-between;gap:6px;padding:4px 9px;font:700 11px 'UI Rajdhani',sans-serif;letter-spacing:.05em;background:#ffffff0d;color:#dfe6ee}
+#ic59-mfd .est b{color:#ffd23f;font-variant-numeric:tabular-nums}
+body:has(#ic59-mfd:not([hidden])) .dc-radio{bottom:262px!important}`;
 document.head.appendChild(css);
-function detail(k){const L=live,p=L?.player;if(!p)return'';
+function detail(k){const L=live,p=L?.player;if(!p)return'';const plan=L.pitPlan||{};
  if(k==='pit')return p.pitNow?'BOXING · cancel':'Box this lap';
+ if(k==='fuel'){const need=window.PT61?.fuelNeed?.(p);return '‹ +'+(Math.round(+plan.fuel||0))+' L ›'+(Number.isFinite(need)?' · need '+need:'');}
+ if(k==='tyre')return '‹ '+(plan.tyre==='None'?'No change':(plan.tyre||'—'))+' ›';
+ if(k==='repair')return '‹ '+(plan.repair===false?'Skip':(p.bodyDamage||0)>.5?'Fix '+Math.round(p.bodyDamage)+'%':'Fix all')+' ›';
+ if(k==='swap')return window.PT61?.swapText?.()||'';
  if(k==='incident')return (p.bodyDamage||0)>=99.5?'Retire (DNF)':L.stage==='race'&&L.started?'SC · lose a lap':'Back to the pits';
- if(k==='tyre')return (L.pitPlan?.tyre||'—')+' ›';return'Close';}
-function paint(){if(!M.el)return;M.el.innerHTML=`<div class="hd">RACE MFD<small>${live?.player?.pitNow?'PIT REQUESTED':'B / P CLOSE'}</small></div>${OPTS.map((o,i)=>`<button type="button" data-i="${i}" class="${i===M.sel?'on':''}"><i>${'ABCD'[i]}</i>${o.t}<b>${esc(detail(o.k))}</b></button>`).join('')}<div class="ft">▲▼ select · A confirm · B close</div>`;
+ return'Close';}
+function paint(){if(!M.el)return;M.sel=Math.min(M.sel,opts().length-1);const est=window.PT61?.estimate?.(live?.player);M.el.innerHTML=`<div class="hd">RACE MFD<small>${live?.player?.pitNow?'PIT REQUESTED':'B / P CLOSE'}</small></div>${est?`<div class="est"><span>STOP ${esc(est.order)}</span><b>${est.total.toFixed(1)} s · lane +${Math.round(est.lane)} s</b></div>`:''}${opts().map((o,i)=>`<button type="button" data-i="${i}" class="${i===M.sel?'on':''}"><i>${i+1}</i>${o.t}<b>${esc(detail(o.k))}</b></button>`).join('')}<div class="ft">▲▼ select · ◀▶ change · A confirm · B close</div>`;
  M.el.querySelectorAll('button').forEach(b=>b.onclick=()=>{M.sel=+b.dataset.i;choose();});}
 function host(){const h=document.querySelector('.dc-driving')||document.body;if(!M.el||!M.el.isConnected){M.el=document.createElement('div');M.el.id='ic59-mfd';M.el.hidden=true;M.el.setAttribute('role','menu');M.el.setAttribute('aria-label','Race MFD');h.appendChild(M.el);}return M.el;}
 function openMfd(){if(!live?.dc||live.paused)return;host();M.open=true;M.sel=0;M.el.hidden=false;paint();maskHeld();}
 function closeMfd(){M.open=false;if(M.el)M.el.hidden=true;maskHeld();}
 window.ic59MfdOpen=()=>M.open;
-function choose(){const k=OPTS[M.sel].k,L=live;if(!L)return;
+function adjust(d){const k=opts()[M.sel].k,L=live;if(!L?.pitPlan||!opts()[M.sel].adj)return;const plan=L.pitPlan;
+ if(k==='fuel')plan.fuel=clamp(Math.round((+plan.fuel||0)/5)*5+d*5,0,110);
+ if(k==='tyre'){const i=TYRES.indexOf(plan.tyre);plan.tyre=TYRES[((i<0?0:i)+d+TYRES.length)%TYRES.length];}
+ if(k==='repair')plan.repair=plan.repair===false;
+ if(k==='swap')window.PT61?.toggleSwap?.();
+ clearTimeout(M.say);M.say=setTimeout(()=>{if(live!==L)return;const t=plan.tyre==='None'?'no tyre change':plan.tyre+' tyres',e=window.PT61?.estimate?.(L.player);dcRadio('Race engineer',`Copy. Plan is ${t}, ${Math.round(+plan.fuel||0)} litres${plan.repair===false?', no repairs':''}.${e?' About '+e.total.toFixed(1)+' seconds stationary.':''}`);},900);
+ paint();}
+function choose(){const k=opts()[M.sel].k,L=live;if(!L)return;
  if(k==='pit'){closeMfd();baseAction('pit');return;}
  if(k==='incident'){closeMfd();reportIncident();return;}
- if(k==='tyre'){const t=TYRES[(TYRES.indexOf(L.pitPlan.tyre)+1)%TYRES.length];L.pitPlan.tyre=t;dcRadio('Race engineer',t+' tyres ready for the next stop.');paint();return;}
+ if(opts()[M.sel].adj){adjust(1);return;}
  closeMfd();}
-function move(d){M.sel=(M.sel+d+OPTS.length)%OPTS.length;paint();}
+function move(d){const n=opts().length;M.sel=(M.sel+d+n)%n;paint();}
 const baseAction=dcAction;let keyCam=0;
 dcAction=function(action){const L=live;
  if(L?.dc&&action==='pit'){if(L.paused)return;if(M.open)closeMfd();else openMfd();return;}
@@ -171,13 +186,13 @@ if(rawPads)try{navigator.getGamepads=function(){const pads=rawPads();if(!M.maske
 let prev={};
 setInterval(()=>{const pad=getPad(),L=live;if(M.open&&(!L?.dc||L.paused||!document.contains(M.el)))closeMfd();
  if(!pad){prev={};return;}const b=i=>!!pad.buttons[i]?.pressed,edge=i=>b(i)&&!prev[i];
- if(M.open){if(edge(12))move(-1);if(edge(13))move(1);if(edge(0))choose();if(edge(14)||edge(15)){if(OPTS[M.sel].k==='tyre')choose();}}
+ if(M.open){if(edge(12))move(-1);if(edge(13))move(1);if(edge(0))choose();if(edge(14))adjust(-1);if(edge(15))adjust(1);}
  if(!M.open)for(const i of [...M.masked])if(!b(i))M.masked.delete(i);
  for(const i of [0,12,13,14,15])prev[i]=b(i);},32);
 window.addEventListener('keydown',e=>{if(e.code==='KeyC')keyCam=performance.now();if(!M.open)return;
- const n={Digit1:0,Digit2:1,Digit3:2,Digit4:3,Numpad1:0,Numpad2:1,Numpad3:2,Numpad4:3}[e.code];
- if(n!==undefined){M.sel=n;choose();}else if(e.code==='ArrowUp')move(-1);else if(e.code==='ArrowDown')move(1);else if(e.code==='Enter')choose();else if(e.code==='Escape'){closeMfd();}else return;
+ const n0={Digit1:0,Digit2:1,Digit3:2,Digit4:3,Digit5:4,Digit6:5,Digit7:6,Numpad1:0,Numpad2:1,Numpad3:2,Numpad4:3,Numpad5:4,Numpad6:5,Numpad7:6}[e.code],n=n0!==undefined&&n0<opts().length?n0:undefined;
+ if(n!==undefined){M.sel=n;choose();}else if(e.code==='ArrowUp')move(-1);else if(e.code==='ArrowDown')move(1);else if(e.code==='ArrowLeft')adjust(-1);else if(e.code==='ArrowRight')adjust(1);else if(e.code==='Enter')choose();else if(e.code==='Escape'){closeMfd();}else return;
  e.preventDefault();e.stopImmediatePropagation();},true);
 setInterval(()=>{if(M.open)paint();},500);
-window.IC59={reportIncident,openMfd,closeMfd,choose,move,state:M};
+window.IC59={reportIncident,openMfd,closeMfd,choose,move,adjust,state:M,opts:OPTS};
 })();
