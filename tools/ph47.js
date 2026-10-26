@@ -261,7 +261,9 @@ dc35Present=function(W,L,dt){
    const m=u.dc35Motion;if(m){m.pitch+=(pitch-m.pitch)*(1-Math.exp(-dt*10));m.roll+=(roll-m.roll)*(1-Math.exp(-dt*10));}
    for(const body of u.dc35Chassis||[]){body.rotation.x=m?m.pitch:pitch;body.rotation.z=(m?m.roll:roll)+bump*.6;body.position.y=(m?.heave||0)+bump+grassBump;}
    for(const wheel of u.dc35Steering||[])wheel.rotation.z=clamp(s.delta*9,-2.7,2.7);
-   if(s.tumble||s.hop){const lift=s.tumble?PH47.width*Math.abs(Math.sin(s.phi))+PH47.height*Math.abs(Math.cos(s.phi))-PH47.height:0,forward=PH47_TMP.fwd.set(Math.sin(x.yaw),0,Math.cos(x.yaw));car.quaternion.premultiply(PH47_TMP.roll.setFromAxisAngle(forward,-s.phi));car.position.y+=lift+s.hop;}
+   if(s.tumble||s.hop){const lift=s.tumble?PH47.width*Math.abs(Math.sin(s.phi))+PH47.height*Math.abs(Math.cos(s.phi))-PH47.height:0,forward=PH47_TMP.fwd.set(Math.sin(x.yaw),0,Math.cos(x.yaw));car.quaternion.premultiply(PH47_TMP.roll.setFromAxisAngle(forward,-s.phi));
+    // Roll about the body's centre, not the ground-level origin, so a car on its roof sits on the road instead of inside it.
+    const c=PH47_TMP.centre||(PH47_TMP.centre=new THREE.Vector3());c.set(0,PH47.height,0).applyQuaternion(PH47_TMP.roll);car.position.x-=c.x;car.position.z-=c.z;car.position.y+=PH47.height-c.y+lift+s.hop;}
   }
   car.updateMatrixWorld(true);
  }
@@ -270,8 +272,8 @@ dc35Present=function(W,L,dt){
 const ph47Camera=dc36Camera;
 dc36Camera=function(W,L,dt){
  const p=L.player,s=p?.ph47,car=W.carNodes.get(p?.d.id);let saved=null,mode=sc25Camera;
- if(s?.tumble&&car){saved={q:car.quaternion.clone(),y:car.position.y};car.quaternion.setFromAxisAngle(PH47_UP,p.yaw);car.position.y=p.pos.y;car.updateMatrixWorld(true);if(sc25Camera!=='chase'&&sc25Camera!=='orbit')sc25Camera='chase';}
- try{ph47Camera(W,L,dt);}finally{sc25Camera=mode;if(saved){car.quaternion.copy(saved.q);car.position.y=saved.y;car.updateMatrixWorld(true);}}
+ if(s?.tumble&&car){saved={q:car.quaternion.clone(),p:car.position.clone()};const c=PH47_TMP.centre;car.quaternion.setFromAxisAngle(PH47_UP,p.yaw);if(c){car.position.x+=c.x;car.position.z+=c.z;}car.position.y=p.pos.y;car.updateMatrixWorld(true);if(sc25Camera!=='chase'&&sc25Camera!=='orbit')sc25Camera='chase';}
+ try{ph47Camera(W,L,dt);}finally{sc25Camera=mode;if(saved){car.quaternion.copy(saved.q);car.position.copy(saved.p);car.updateMatrixWorld(true);}}
  if(!s||L.paused)return;const kerb=s.kerb&&Math.abs(p.v)>8?.008*s.kerb:0,amp=s.shake+kerb+(s.grass&&Math.abs(p.v)>6?.006*s.grass:0);s.shake*=Math.exp(-Math.max(0,dt)*6);
  if(amp>.002&&D.settings.cameraMotion!==false){const k=sc25Camera==='chase'?1:.3,c=W.camera;c.position.x+=(Math.random()-.5)*amp*.5*k;c.position.y+=(Math.random()-.5)*amp*.4*k;c.position.z+=(Math.random()-.5)*amp*.5*k;c.rotateZ((Math.random()-.5)*amp*.05);c.rotateX((Math.random()-.5)*amp*.03);c.updateMatrixWorld();}
 };
