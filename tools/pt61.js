@@ -65,6 +65,8 @@ dc32Service=function(x,dt,box){
   if(L.entrants.some(y=>y!==x&&y.dc32Servicing&&y.team.id===x.team.id))return;
   if(!x.dc32Servicing){
    x.dc32Servicing=true;x.rf41ServiceInitialDamage=x.bodyDamage;const e=estimate(x,plan,human?{long,lat}:null);
+   // AI crews are not perfect either: now and then a slow wheel nut or a car parked off its marks.
+   if(!human&&Math.random()<.14){const slip=.8+Math.random()*1.6;e.extra+=slip;e.total+=slip;}
    x.pt61Svc={t0:L.elapsed,litres:e.litres,tFuel:e.tFuel,tTyre:e.tTyre,tRep:e.tRep,tSwap:e.tSwap,extra:e.extra,total:e.total,tyres:e.tyres,repair:e.repair,swap:e.swap,done:false,doneAt:0};
    x.rf41ServiceDuration=x.pitClock=e.total;x.pt61Lift=0;
    if(human){const m=e.extra?`Off the marks by ${Math.abs(long).toFixed(1)} metres, crew dragging you back. `:'Good stop on the marks. ';
@@ -149,6 +151,15 @@ function rivalsAndCodrivers(L,dt){
   else if(x.pt61Co&&done>=req&&left>1.4&&x!==p){plan.swap=true;x.pitNow=true;}
   else if(x!==p)plan.swap=false;}
 }
+
+/* ---------- AI release: the lollipop holds them while a car comes down the lane ---------- */
+const basePitStep=dcPitStep;
+dcPitStep=function(x,dt,input){const L=live;
+ if(L?.dc&&(x!==L.player||L.dc33Auto)&&x.dc32Serviced&&x.pt61Mark&&!x.pt61Released&&x.pt61Svc?.done){
+  const wait=L.elapsed-x.pt61Svc.doneAt<.35||!!laneTraffic(x);x.pt61AiHold=wait;
+  if(wait){x.v=x.speed=0;x.braking=true;return;}
+  if(Math.hypot(x.pos.x-x.pt61Mark.x,x.pos.z-x.pt61Mark.z)>1.6)x.pt61Released=true;}
+ return basePitStep(x,dt,input);};
 
 /* ---------- Hooks ---------- */
 const basePhysics=dcPhysics;
@@ -253,7 +264,7 @@ function crewFor(W,L,x,Pc,C,now){
  if(k>.5){if(fuelOn){carPt(x,g*1.02,-1.05);bx(WX,B.y+1.18,WZ,0,yaw,-g*.85,.27,.8,.27,C.can);}else{bx(HX,HY-.25,HZ,0,yaw,0,.25,.7,.25,C.can);}}
  role(7,g*1.95,-2.15,g>0?-Math.PI/2-.5:Math.PI/2+.5,0,-.5,fuelOn?-1.3:-.4);if(k>.5)bx(HX,HY-.12,HZ,0,yaw,0,.17,.48,.17,C.ext);
  // Lollipop man in front of the box: waves the car in, board red until release, raised green on go.
- const go=s?.done&&(x!==L.player||L.dc33Auto||L.pt61?.board==='go'||x.pt61Released),stopped=x.dc32Servicing||s?.done&&!go;
+ const go=s?.done&&(x!==L.player||L.dc33Auto?!x.pt61AiHold:L.pt61?.board==='go'||x.pt61Released),stopped=x.dc32Servicing||s?.done&&!go;
  const approach=!x.dc32Servicing&&!s?.done,wave=approach?Math.sin(now*7)*.55:0;
  boxPt(B,4.1,0);const lx=WX,lz=WZ,ly=Math.atan2(-B.fx,-B.fz);person(lx,B.y+.04,lz,ly,0,-.2,go?-3.0:stopped?-1.55:-2.5+wave,suit,C);
  const pole=go?-2.95:stopped?-1.5:-2.5+wave,cl=Math.cos(ly),sl=Math.sin(ly),ph=.7,ox=0,oy=-ph*Math.cos(pole),oz=-ph*Math.sin(pole);
