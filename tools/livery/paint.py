@@ -134,6 +134,36 @@ for sgn in (-1,1):
     c.put(recol(holden,(255,255,255)),a0,0.44,0.31)
     c.put(ampolW,a0,0.362,0.26)
     cvs.append(c)
+# ---- extras: wing zebra, XFORCE, octane, small sponsor stickers ----
+FB='/usr/share/fonts/truetype/freefont/FreeSansBoldOblique.ttf'
+def txt(parts,size=200,font=FB):
+    f=ImageFont.truetype(font,size);W=sum(int(f.getlength(t)) for t,_ in parts)+40
+    im=Image.new('RGBA',(W,int(size*1.4)),(0,0,0,0));d=ImageDraw.Draw(im);X=10
+    for t,c in parts:d.text((X,size*0.1),t,font=f,fill=c);X+=int(f.getlength(t))
+    return im.crop(im.getbbox())
+xf_dark=txt([('X',(225,30,40,255)),('FORCE',(20,22,26,255))])
+xf_light=txt([('X',(225,30,40,255)),('FORCE',(255,255,255,255))])
+octn=txt([('octane',(255,255,255,255))],font='/usr/share/fonts/opentype/inter/Inter-Bold.otf')
+dunlop=L(IMG+'4e18d3dc8c.png');acd=L(IMG+'0f19a59240.png');acdp=Image.new('RGBA',(acd.width+160,acd.height+90),(0,0,0,0));ImageDraw.Draw(acdp).rounded_rectangle((0,0,acdp.width-1,acdp.height-1),radius=acdp.height//2,fill=(245,246,248,255));acdp.alpha_composite(acd,(80,45));acd=acdp
+tws=recol(L(IMG+'526bc2807a.png'),(23,33,76))
+
+
+zeb=Image.new('RGBA',(tr.W,tr.H),(0,0,0,0));dz=ImageDraw.Draw(zeb)
+for k in range(-30,30):
+    a=-0.66+k*0.085
+    pts=[tr.px(a,-2.62),tr.px(a+0.035,-2.62),tr.px(a+0.035+0.30,-2.32),tr.px(a+0.30,-2.32)]
+    dz.polygon(pts,fill=(240,242,245,255))
+m=Image.new('L',(tr.W,tr.H),0);ImageDraw.Draw(m).rectangle([tr.px(-0.64,-2.32),tr.px(0.64,-2.62)],fill=255)
+zz=Image.new('RGBA',(tr.W,tr.H),(0,0,0,0));zz.paste(zeb,(0,0),m);tr.im.alpha_composite(zz)
+tr.put(tws,0.42,-2.08,0.26)
+rr.put(octn,-0.42,1.345,0.20)
+rr.put(xf_light,0.42,1.345,0.22)
+for c,sgn in ((cvs[0],-1),(cvs[1],1)):
+    f=lambda zz,s=sgn:zz*(-s)
+    c.put(xf_dark,f(0.42),0.19,0.34)
+    c.put(dunlop,f(-1.97),0.56,0.15)
+    c.put(xf_dark,f(-2.05),0.34,0.24)
+    c.put(acd,f(0.42),0.905,0.20)
 for c in cvs:c.apply()
 out=np.zeros((N,N,3),np.float64);out[ys,xs]=col
 # dilate into empty texels so mipmaps don't bleed grey
