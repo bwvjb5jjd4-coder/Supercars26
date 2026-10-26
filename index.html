@@ -8765,4 +8765,11 @@ function pn57Level(){const v=D?.settings?.penaltyLevel;return Number.isInteger(v
 function pn57Ok(){const c=PN57_CHANCE[pn57Level()];return c>=1?true:Math.random()<c}
 const pn57Settings=dcSettingsFields;
 dcSettingsFields=function(...args){const lv=pn57Level();return pn57Settings(...args)+`<div class="dc-field" style="margin-top:18px"><label>Time penalties · ${PN57_LEVELS[lv]}</label><input type="range" min="0" max="4" step="1" value="${lv}" oninput="D.settings.penaltyLevel=+this.value;this.previousElementSibling.textContent='Time penalties · '+PN57_LEVELS[this.value]" onchange="dcSave()"><p class="dc-note">How often race control hands out time penalties (track limits, contact, missed stops). Full is the original behaviour.</p></div>`};
+</script><script id="wx57-graphics">
+// wx57: choose the weather for driver-career sessions (Forecast keeps the original weekend forecast).
+const WX57_OPTS=[['forecast','Forecast · weekend default'],['Dry','Dry'],['Wet','Wet'],['Extremely Wet','Ultra wet']];
+const wx57SessionWeather=dcSessionWeather;
+dcSessionWeather=function(...args){const v=D?.settings?.careerWeather;return v&&v!=='forecast'?v:wx57SessionWeather(...args)};
+const wx57Settings=dcSettingsFields;
+dcSettingsFields=function(...args){const cur=D.settings.careerWeather||'forecast';return wx57Settings(...args)+`<div class="dc-field" style="margin-top:18px"><label>Career weather</label><select onchange="D.settings.careerWeather=this.value;dcSave()">${WX57_OPTS.map(([v,l])=>`<option value="${v}" ${cur===v?'selected':''}>${l}</option>`).join('')}</select><p class="dc-note">Sets the conditions for every career practice, qualifying and race. Changes apply from the next session.</p></div>`};
 </script></body></html>
