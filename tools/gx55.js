@@ -116,7 +116,7 @@ function gx55Composite(W,L,P){
   u.invViewProj.value.copy(vp).invert();u.prevViewProj.value.copy(P.prevVP);u.invProj.value.copy(cam.projectionMatrixInverse);
   u.exposure.value=r.toneMappingExposure;u.time.value=W.clock||0;u.texel.value.set(1/P.w,1/P.h);u.aoTexel.value.set(P.ao?1/P.ao.width:0,P.ao?1/P.ao.height:0);
   u.bloom.value=(lvl===2?.075:.065)/Math.max(1,B.length*.5);
-  u.blur.value=D?.settings?.gx55Blur===false?0:lvl===2?.55:.45;
+  u.blur.value=D?.settings?.gx55Blur===false||sc25Camera==='onboard'?0:lvl===2?.55:.45;
   const g=gx55Grade(W,L);u.haze.value=g.haze;u.saturation.value=g.sat;u.contrast.value=g.contrast;u.vignette.value=g.vignette;u.lift.value.copy(g.lift);u.gain.value.copy(g.gain);
   u.dbg.value=GX55.debug||0;r.setRenderTarget(null);gx55Run(W,P,M.composite);
   P.prevVP.copy(vp);P.prevEye.copy(eye);W.gx55LastCam=sc25Camera;
@@ -152,7 +152,7 @@ rf41MainDraw=function(W,L){
 };
 
 // --- Per-frame bookkeeping: dynamic resolution, world upgrades, spray, AI skid marks ---------
-function gx55Frame(W,L){
+let gx55Frame=function(W,L){
  const now=performance.now(),dt=GX55.lastAt?Math.min(100,now-GX55.lastAt):16.7;GX55.lastAt=now;GX55.frame++;
  if(!L.paused&&!dcSimBusy)GX55.ema+=(dt-GX55.ema)*.06;
  GX55.time.value=W.clock||0;
@@ -420,3 +420,38 @@ SC25World.prototype.dispose=function(){
 // driving, a visible hitch each time. Reuse it for 45 s instead.
 const gx55EnvBase=dc35CaptureEnvironment;
 dc35CaptureEnvironment=function(W,L){const env=L.weather==='Dry'&&W.dc35Environments?.dry;if(env&&W.clock-(W.dc35EnvTime||0)<45){W.scene.environment=env.texture;return;}return gx55EnvBase(W,L);};
+
+// --- Hitch removal ---------------------------------------------------------------------
+// Headlights: the base game created its two headlight spot lights the first time the lights
+// were switched on, and switched them by toggling .visible. Every change in the number of
+// lights makes three.js recompile every lit material, a freeze of up to a second. The beams
+// now exist from the start and always count as visible; "off" just means zero intensity.
+function gx55SteadyLight(light){
+ if(light.userData.gx55Steady)return;light.userData.gx55Steady=true;let on=light.visible,level=light.intensity;
+ Object.defineProperty(light,'visible',{configurable:true,get:()=>true,set:v=>{on=!!v;}});
+ Object.defineProperty(light,'intensity',{configurable:true,get:()=>on?level:0,set:v=>{level=v;}});
+}
+function gx55Beams(W){
+ if(!W.dcBeams){W.dcBeams=[];for(const side of [-1,1]){const light=new THREE.SpotLight('#e4efff',30,130,Math.PI/7,.65,1),target=new THREE.Object3D();light.target=target;light.visible=false;W.scene.add(light,target);W.dcBeams.push({light,target,side});}}
+ for(const b of W.dcBeams)gx55SteadyLight(b.light);
+}
+// Shader warm-up: compile every material in the world once at the start, including things
+// that are hidden until later (headlight glow, pit crews, cockpit interior, far props), so
+// nothing compiles mid-drive when it first comes into view.
+function gx55Prewarm(W){
+ if(W.gx55Warm||!W.carNodes?.size)return;W.gx55Warm=true;
+ const r=W.renderer,hidden=[],mask=W.camera.layers.mask,prev=r.getRenderTarget();
+ try{
+  W.scene.traverse(o=>{if(!o.visible&&!o.isLight){hidden.push(o);o.visible=true;}});
+  W.camera.layers.enableAll();
+  const P=gx55PostWanted(W)?gx55Post(W):null;if(P)r.setRenderTarget(P.rt);
+  r.compile(W.scene,W.camera);
+ }catch(e){console.warn('GX55 prewarm skipped',e);}
+ finally{for(const o of hidden)o.visible=false;W.camera.layers.mask=mask;r.setRenderTarget(prev);}
+}
+// The cockpit dash screens redraw ~11 times a second; skip mipmap generation on each upload.
+function gx55Dash(W){
+ for(const t of [W.dc35DashTex,W.dc35TelemetryTex]){if(t&&t.generateMipmaps){t.generateMipmaps=false;t.minFilter=THREE.LinearFilter;t.needsUpdate=true;}}
+}
+const gx55FrameBase=gx55Frame;
+gx55Frame=function(W,L){gx55Beams(W);gx55Dash(W);gx55FrameBase(W,L);gx55Prewarm(W);};
