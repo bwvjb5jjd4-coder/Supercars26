@@ -3948,7 +3948,6 @@ function rf43Paint(m,skin,state,make,hood){const before=m.onBeforeCompile;
   if(skin.key==='subway'&&hood)code='diffuseColor.rgb=abs(dc35CarLocal.x)<.58?rf43Primary:vec3(1.0);';
   if(skin.key==='erebus18'){if(hood)code='diffuseColor.rgb=rf43Primary;';else code+='if(dc35CarLocal.y>1.20&&dc35CarLocal.z> -1.5&&dc35CarLocal.z<.5)diffuseColor.rgb=vec3(.002,.003,.004);if(dc35CarLocal.z>1.25&&abs(dc35CarLocal.x)>.45&&dc35CarLocal.y>.16&&dc35CarLocal.y<.62)diffuseColor.rgb=rf43Primary;if(dc35CarLocal.z>1.25&&abs(dc35CarLocal.x)>.45&&dc35CarLocal.y<.62&&diffuseColor.b>diffuseColor.r*1.4&&diffuseColor.g>diffuseColor.r*1.3)diffuseColor.rgb=rf43Primary;';}
   if(RF49_BAKED.includes(skin.key))code='';
-  if(make==='Holden')code+=`if(dc35CarLocal.z>2.25&&dc35CarLocal.y>.625&&dc35CarLocal.y<.775)diffuseColor.rgb=rf43Primary;`;
   sh.fragmentShader=sh.fragmentShader.replace('#include <color_fragment>','#include <color_fragment>\n'+code);
  };const key=m.customProgramCacheKey();m.customProgramCacheKey=()=>key+'-hd2repair-'+make+'-'+skin.key+'-'+hood;m.needsUpdate=true;
 }
