@@ -54,6 +54,7 @@ const css=document.createElement('style');css.textContent=`
 #co63 .slot.on svg{opacity:1;color:var(--c)}
 #co63 .slot strong{font-size:22px;font-weight:800}
 #co63 .slot small{color:#aab1bd;font-size:15px}
+#co63 .chk{display:grid;grid-template-columns:auto 160px;gap:6px 10px;align-items:center;font-size:12px;color:#aab1bd;margin-top:4px}#co63 .chk i{position:relative;height:8px;border-radius:4px;background:#232934;overflow:hidden}#co63 .chk b{position:absolute;top:0;bottom:0;background:var(--c)}
 #co63 .pulse{animation:co63p 1.2s ease-in-out infinite}
 @keyframes co63p{50%{opacity:.35}}
 #co63 .tracks{display:grid;grid-template-columns:repeat(5,1fr);gap:1.2vh 1vw;flex:1;min-height:0;align-content:start}
@@ -142,12 +143,13 @@ function close(toHub=true){CO.screen='';$id('co63')?.remove();hideMenus(false);i
 CO.open=open;
 function renderPair(){const pl=CO.players,el=overlay();
  el.innerHTML=head('Co-Op · Split screen','Pair controllers','Each player presses <i class="btn a">A</i> on their own controller. Keyboard: press Enter.')+
- `<div class="body"><div class="slots">${[0,1].map(i=>{const p=pl[i];return `<div class="slot ${p?'on':''}" style="--c:${COLORS[i]}"><div class="tag">P${i+1}</div>${PAD_SVG}${p?`<strong>${esc(p.name)}</strong><small>${p.dev==='kb'?'Keyboard · WASD / arrows':'Paired · press B to unpair'}</small>`:`<strong class="pulse">Press A</strong><small>${i?'on a second controller':'on any controller'}</small>`}</div>`;}).join('')}</div>
- <div class="sub" style="margin:2.4vh 0 0;text-align:center">${pl[0]&&pl[1]?'Both players paired. Get ready…':padList().length<2?`${padList().length} controller${padList().length===1?'':'s'} connected. Connect two controllers (or use the keyboard for one player).`:'Two controllers detected.'}</div></div>`+
- foot([['A','Pair'],['B','Unpair / back']]);
- if(pl[0]&&pl[1]){clearTimeout(CO.pairT);CO.pairT=setTimeout(()=>{if(CO.screen==='pair'&&CO.players[0]&&CO.players[1]){CO.screen='track';render();}},900);}}
+ `<div class="body"><div class="slots">${[0,1].map(i=>{const p=pl[i];return `<div class="slot ${p?'on':''}" style="--c:${COLORS[i]}"><div class="tag">P${i+1}</div>${PAD_SVG}${p?`<strong>${esc(p.name)}</strong><small>${p.dev==='kb'?'Keyboard · WASD / arrows':'Paired · controller slot '+(p.dev+1)+' · press B to unpair'}</small><div class="chk" data-p="${i}"><span>Steer</span><i class="st"><b></b></i><span>Throttle</span><i class="th"><b></b></i></div>`:`<strong class="pulse">Press A</strong><small>${i?'on a second controller':'on any controller'}</small>`}</div>`;}).join('')}</div>
+ <div class="sub" style="margin:2.4vh 0 0;text-align:center">${pl[0]&&pl[1]?'Both players paired. Check the bars, then press A to continue.':padList().length<2?`${padList().length} controller${padList().length===1?'':'s'} connected. Connect two controllers (or use the keyboard for one player).`:'Two controllers detected.'}${CO.twinNote?'<br><b style="color:#f2c200">That looks like the same controller showing up twice. Player 2: press A on the other controller.</b>':''}${pl[0]&&pl[1]?'':'<br>Test it: each player\'s steering and throttle bar should move only with their own controller.'}</div></div>`+
+ foot([['A',pl[0]&&pl[1]?'Continue':'Pair'],['B','Unpair / back']]);
+ }
+function mirrors(a,b){if(!a||!b||a.id!==b.id)return false;for(let i=0;i<Math.min(a.buttons.length,b.buttons.length);i++)if(!!a.buttons[i]?.pressed!==!!b.buttons[i]?.pressed)return false;for(let i=0;i<Math.min(a.axes.length,b.axes.length);i++)if(Math.abs((a.axes[i]||0)-(b.axes[i]||0))>.02)return false;return true;}
 function pairPress(dev,button){const pl=CO.players,slot=pl.findIndex(p=>p&&p.dev===dev);
- if(button==='a'){if(slot>=0)return;const free=pl.findIndex(p=>!p);if(free<0)return;const pad=dev==='kb'?null:padByIndex(dev);pl[free]={dev,name:dev==='kb'?'Keyboard':padName(pad)+' '+(dev+1)};try{pad?.vibrationActuator?.playEffect?.('dual-rumble',{duration:160,strongMagnitude:.5,weakMagnitude:.5})?.catch?.(()=>{});}catch(_){}render();}
+ if(button==='a'){if(slot>=0){if(pl[0]&&pl[1]){CO.twinNote=false;CO.screen='track';render();}return;}const free=pl.findIndex(p=>!p);if(free<0)return;const pad=dev==='kb'?null:padByIndex(dev);if(pad&&pl.some(p=>p&&p.dev!=='kb'&&mirrors(padByIndex(p.dev),pad))){CO.twinNote=true;render();return;}pl[free]={dev,name:dev==='kb'?'Keyboard':padName(pad)+' '+(dev+1)};try{pad?.vibrationActuator?.playEffect?.('dual-rumble',{duration:160,strongMagnitude:.5,weakMagnitude:.5})?.catch?.(()=>{});}catch(_){}render();}
  else if(button==='b'){if(slot>=0){pl[slot]=null;if(slot===0&&pl[1]){pl[0]=pl[1];pl[1]=null;}render();}else if(!pl[0]&&!pl[1])close();}}
 
 /* Circuit + race options ---------------------------------------------------- */
@@ -200,11 +202,18 @@ function dispatch(dev,kind,value){
  if(CO.screen==='cars'){if(p<0)return;if(kind==='dir')carMove(p,value);else carPress(p,value);return;}
  if(CO.screen==='shootout'){if(kind==='btn'&&value==='a')CO.shootoutGo?.();return;}
  if(CO.screen==='results'){if(kind==='btn')resultsPress(value);return;}}
-function pollMenus(){if(!CO.screen){stopPoll();return;}const now=performance.now();
- for(const pad of padList()){const st=CO.edge[pad.index]||(CO.edge[pad.index]={b:{},dir:'',rep:0});const pr=i=>!!pad.buttons[i]?.pressed;
+function pollMenus(){if(!CO.screen){stopPoll();return;}const now=performance.now(),pads=padList();
+ // One physical controller can show up twice in the browser (two gamepad slots that mirror each other).
+ // A button press that lands on two slots at once is one controller: only the first slot (or the one
+ // already paired) takes it, so a single controller can never pair as both players.
+ const downA=pads.filter(p=>p.buttons[0]?.pressed).map(p=>p.index);
+ for(const pad of pads){const st=CO.edge[pad.index]||(CO.edge[pad.index]={b:{},dir:'',rep:0});const pr=i=>!!pad.buttons[i]?.pressed;
+  if(CO.screen==='pair'&&pr(0)&&!st.b[0]&&downA.length>1){const paired=downA.find(i=>devPlayer(i)>=0);if(paired!==undefined?paired!==pad.index:downA[0]!==pad.index){st.b[0]=true;st.twin=now;}}
+  if(CO.screen==='pair'&&st.twin&&now-st.twin<400&&pr(0)){st.b[0]=true;}
   for(const [i,name]of [[0,'a'],[1,'b'],[2,'x'],[3,'y']]){const d=pr(i);if(d&&!st.b[i])dispatch(pad.index,'btn',name);st.b[i]=d;}
   const ax=Number(pad.axes[0])||0,ay=Number(pad.axes[1])||0;let dir='';for(const [i,n]of DIRS)if(pr(i))dir=n;if(!dir&&Math.max(Math.abs(ax),Math.abs(ay))>.6)dir=Math.abs(ax)>Math.abs(ay)?(ax>0?'right':'left'):(ay>0?'down':'up');
-  if(dir&&(dir!==st.dir||now>=st.rep)){dispatch(pad.index,'dir',dir);st.rep=now+(dir===st.dir?140:380);}st.dir=dir;}}
+  if(dir&&(dir!==st.dir||now>=st.rep)){dispatch(pad.index,'dir',dir);st.rep=now+(dir===st.dir?140:380);}st.dir=dir;}
+ if(CO.screen==='pair')for(const el of document.querySelectorAll('#co63 .chk')){const p=CO.players[+el.dataset.p],pad=p&&p.dev!=='kb'?padByIndex(p.dev):null;const ax=Number(pad?.axes[0])||0,th=Number(pad?.buttons[7]?.value)||0;el.querySelector('.st b').style.cssText=`left:${50+Math.min(0,ax)*50}%;width:${Math.abs(ax)*50}%`;el.querySelector('.th b').style.cssText=`left:0;width:${th*100}%`;}}
 document.addEventListener('keydown',e=>{if(!CO.screen)return;const map={Enter:['btn','a'],Space:['btn','a'],Escape:['btn','b'],Backspace:['btn','b'],KeyX:['btn','x'],KeyY:['btn','y'],ArrowUp:['dir','up'],ArrowDown:['dir','down'],ArrowLeft:['dir','left'],ArrowRight:['dir','right'],KeyW:['dir','up'],KeyS:['dir','down'],KeyA:['dir','left'],KeyD:['dir','right']}[e.code];
  e.preventDefault();e.stopImmediatePropagation();if(!map||e.repeat&&map[0]==='btn')return;dispatch('kb',map[0],map[1]);},true);
 
