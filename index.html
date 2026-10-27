@@ -2823,7 +2823,7 @@ const dc33Style=document.createElement('style');dc33Style.textContent=`
 /* Original Blender assets and physically based circuit presentation, revision 35. */
 let DC35_ASSETS=null;
 const DC35_GEOMETRY=new Map();
-async function dc35LoadModels(){const res=await fetch('assets/models.json.gz.bin');if(!res.ok)throw Error('3D asset pack failed to load ('+res.status+')');const stream=new Blob([await res.arrayBuffer()]).stream().pipeThrough(new DecompressionStream('gzip'));DC35_ASSETS=JSON.parse(await new Response(stream).text());}
+async function dc35LoadModels(){const res=await fetch('assets/models.json.gz.bin',{cache:'no-cache'});if(!res.ok)throw Error('3D asset pack failed to load ('+res.status+')');const stream=new Blob([await res.arrayBuffer()]).stream().pipeThrough(new DecompressionStream('gzip'));DC35_ASSETS=JSON.parse(await new Response(stream).text());}
 function dc35Array(data,Type){const bytes=Uint8Array.from(atob(data),c=>c.charCodeAt(0));return new Type(bytes.buffer);}
 function dc35RawGeometry(row){const g=new THREE.BufferGeometry();if(row.q){const p=dc35Array(row.p,Int16Array),n=dc35Array(row.n,Int16Array),u=dc35Array(row.u,Uint16Array);g.setAttribute('position',new THREE.Float32BufferAttribute(Array.from(p,v=>v/10000),3));g.setAttribute('normal',new THREE.BufferAttribute(n,3,true));g.setAttribute('uv',new THREE.BufferAttribute(u,2,true));}else{g.setAttribute('position',new THREE.BufferAttribute(dc35Array(row.p,Float32Array),3));g.setAttribute('normal',new THREE.BufferAttribute(dc35Array(row.n,Float32Array),3));g.setAttribute('uv',new THREE.BufferAttribute(dc35Array(row.u,Float32Array),2));}g.setIndex(new THREE.BufferAttribute(dc35Array(row.i,row.i16?Uint16Array:Uint32Array),1));
  const uv=g.attributes.uv,p=g.attributes.position;

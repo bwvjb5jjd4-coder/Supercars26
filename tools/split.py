@@ -41,7 +41,7 @@ s = re.sub(r'data:([a-z/+.-]+);base64,([A-Za-z0-9+/=]+)', rep, s)
 
 # 4. loader patches (fetch the split files instead of decoding inline base64)
 old_models = "const bytes=Uint8Array.from(atob(document.getElementById('dc35-asset-pack').textContent.trim()),c=>c.charCodeAt(0));const stream=new Blob([bytes]).stream()"
-new_models = "const res=await fetch('assets/models.json.gz.bin');if(!res.ok)throw Error('3D asset pack failed to load ('+res.status+')');const stream=new Blob([await res.arrayBuffer()]).stream()"
+new_models = "const res=await fetch('assets/models.json.gz.bin',{cache:'no-cache'});if(!res.ok)throw Error('3D asset pack failed to load ('+res.status+')');const stream=new Blob([await res.arrayBuffer()]).stream()"
 assert s.count(old_models) == 1; s = s.replace(old_models, new_models)
 old_loop = " for(const [key,row]of Object.entries(data)){\n  let tex;\n  if(compressed){\n   const buf=Uint8Array.from(atob(row.dds),c=>c.charCodeAt(0));"
 new_loop = (" const files=new Map(Object.entries(data).map(([key,row])=>[key,fetch(compressed?row.dds:row.webp,{cache:'no-cache'}).then(r=>{if(!r.ok)throw Error('Livery '+key+' failed to load ('+r.status+')');return r.arrayBuffer()})]));\n"
