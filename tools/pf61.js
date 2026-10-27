@@ -110,7 +110,11 @@ function pfAuxInstall(){
   try{
    for(const car of W.carNodes?.values()||[])if(car.visible&&car.position.distanceTo(eye)>lim.car){car.visible=false;hidden.push(car);}
    for(const o of W.world?.children||[]){if(!o.visible||o.isInstancedMesh||o.userData.pf61Merged)continue;const s=pfSphere(W,o);if(s&&s.radius<60&&s.distanceToPoint(eye)>lim.world){o.visible=false;hidden.push(o);}}
-   return base.call(this,W,cam,opts,draw);
+   // The first aux view of a frame updates the scene's matrices; nothing moves before the second
+   // (mirror after wet reflection), so it skips the full-scene update.
+   const sc=W.scene,again=W.pf61AuxFrame===PF.frame,auto=sc.matrixWorldAutoUpdate;W.pf61AuxFrame=PF.frame;
+   if(again)sc.matrixWorldAutoUpdate=false;
+   try{return base.call(this,W,cam,opts,draw);}finally{sc.matrixWorldAutoUpdate=auto;}
   }finally{for(const o of hidden)o.visible=true;}
  };
  fx52AuxDetail.pf61=true;
@@ -141,6 +145,20 @@ body.pf61-race .dc-pause,body.pf61-race .dc-pause *,body.pf61-race .dc-modal,bod
 #pf61-stats b{font-size:18px}#pf61-stats .bad{color:#ff6b5c}#pf61-stats .ok{color:#7fe08a}#pf61-stats .meh{color:#ffd35c}`;
 document.head.appendChild(css);
 
+// --- HUD: skip DOM writes that change nothing ---------------------------------------------
+// dcPaintHUD (every 120 ms) rewrote ~100 HUD nodes and attributes with identical values, and each
+// write makes the browser restyle and re-lay-out the page over the 3D view. While driving, a
+// write of the value an element already has is skipped (the DOM ends up exactly the same).
+{
+ const racing=()=>document.body?.classList.contains('pf61-race');
+ const guard=(proto,prop,same)=>{const d=Object.getOwnPropertyDescriptor(proto,prop);if(!d?.set||!d.get)return;
+  Object.defineProperty(proto,prop,{...d,set(v){if(racing()&&this.isConnected){try{if(same(d.get.call(this),v))return;}catch(_){}}d.set.call(this,v);}});};
+ guard(Node.prototype,'textContent',(a,v)=>a===String(v??''));
+ guard(Element.prototype,'innerHTML',(a,v)=>a===String(v??''));
+ const setAttr=Element.prototype.setAttribute;
+ Element.prototype.setAttribute=function(n,v){if(racing()&&this.isConnected&&this.getAttribute(n)===String(v))return;return setAttr.call(this,n,v);};
+}
+
 // --- Autosave off the frame --------------------------------------------------------------
 if(typeof dcSave==='function'){
  const base=dcSave;let queued=false;
@@ -155,6 +173,7 @@ if(typeof dcSave==='function'){
 if(typeof dcRenderWorld==='function'){
  const base=dcRenderWorld;
  dcRenderWorld=function(W,L,dt){
+  PF.frame=(PF.frame||0)+1;
   try{if(W&&L?.player){pfGL(W);pfShadows(W,L);pfLods(W,L);pfMergeDecals(W);pfMirror(W);}}catch(e){console.warn('pf61',e);}
   return base.apply(this,arguments);
  };
