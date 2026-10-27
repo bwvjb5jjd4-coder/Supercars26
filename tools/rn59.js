@@ -7,7 +7,7 @@
 // allocates per frame: every buffer, target and material is made once and reused.
 (function(){
 const RN={I:0,mode:'',lastAngle:-1.53,lastAt:0,v1:null,v2:null,cc:null};
-const RN_A=1024/576,RN_FW=64,RN_FH=36,RN_D=900,RN_TR=900;
+const RN_A=1024/576,RN_FW=128,RN_FH=72,RN_D=900,RN_TR=900;
 function rnRain(L){return !L||L.weather==='Dry'?0:L.weather==='Extremely Wet'?1:.42;}
 function rnLevel(){return typeof gx55Level==='function'?gx55Level():1;}
 function rnPostOn(W){return typeof gx55PostWanted==='function'&&gx55PostWanted(W)&&!!W.gx55P;}
@@ -131,7 +131,7 @@ function rnWater(W){
    void main(){float f=texture2D(tFilm,vUv).r;vec2 off=vec2(0.0);float th=0.0;
     vec2 q=vUv*vec2(46.0,14.0)+vec2(0.0,uFlow);float n0=rnNoise(q),n1=rnNoise(q+vec2(.4,0.0)),n2=rnNoise(q+vec2(0.0,.4));off+=vec2(n1-n0,n2-n0)*.012*f;
     for(int k=0;k<2;k++){vec2 sc=k==0?vec2(150.0,84.375):vec2(270.0,151.875);vec2 c=vUv*sc;vec2 ci=floor(c)+float(k)*41.0;vec2 cf=fract(c)-.5;float h=rnHash(ci);
-     if(h<f*1.15-.05){vec2 o=(vec2(rnHash(ci+3.7),rnHash(ci+9.1))-.5)*.44;float rad=.15+.26*rnHash(ci+5.3);vec2 e=(cf-o)/rad;float r2=dot(e,e);if(r2<1.0){off+=-e*rad*2.6/sc;th+=sqrt(1.0-r2)*.75;}}}
+     if(h<f*1.15-.05){vec2 o=(vec2(rnHash(ci+3.7),rnHash(ci+9.1))-.5)*.44;float rad=.15+.26*rnHash(ci+5.3);vec2 e=(cf-o)/rad;float r2=dot(e,e);if(r2<1.0){off+=-e*rad*1.8/sc*sqrt(1.0-r2);}}}
     gl_FragColor=vec4(off,th,f);}`});
  const filmQuad=new T.Mesh(quadGeo,film);filmQuad.frustumCulled=false;const filmScene=new T.Scene();filmScene.add(filmQuad);
  const N=RN_D+RN_TR,g=new T.InstancedBufferGeometry();g.setAttribute('position',new T.Float32BufferAttribute([-1,-1,0,1,-1,0,-1,1,0,1,1,0],3));g.setIndex([0,1,2,1,3,2]);
@@ -177,6 +177,7 @@ function rnFrame(W,L){
  if(mode==='glass'&&rnPolarGlass(W,S)){const a=W.sc30Wiper.rotation.z;if(rate){wipe=true;lo=Math.min(a,RN.lastAngle)-.03;hi=Math.max(a,RN.lastAngle)+.03;}RN.lastAngle=a;}
  else if(mode==='bonnet'){rnPolarBonnet(S);const a=rate?Math.sin(L.elapsed*rate)*1.03-.18:-1.53;if(rate){wipe=true;lo=Math.min(a,RN.lastAngle)-.03;hi=Math.max(a,RN.lastAngle)+.03;}RN.lastAngle=a;}
  // Water beads only on the windscreen in the cockpit view; bonnet and chase cams keep a clear lens.
+ RN.flow=((RN.flow||0)+Math.min(.7,Math.abs(p?.v||0)*.008)*dt)%500;
  if(glass){if(dt>0)rnStep(S,P,I,dt,Math.abs(p?.v||0),wipe,lo,hi);rnDrawWater(W,S);}
  RN.mode=mode;
  const pl=W.sc30RainPlane;
@@ -200,14 +201,47 @@ function rnPostKit(W,P){
      vec4 g=texture2D(tG,vUv);vec2 dx=dFdx(vUv),dy=dFdy(vUv);float det=dx.x*dy.y-dy.x*dx.y;
      vec2 pix=abs(det)>1e-14?vec2(dy.y*g.x-dy.x*g.y,dx.x*g.y-dx.y*g.x)/det:vec2(0.0);pix=clamp(pix,vec2(-60.0),vec2(60.0));
      gl_FragColor=vec4(pix/uRes,g.z,g.w);}`});
+  // The car's own glass (windscreen, side and rear windows): the windscreen samples the drop
+  // simulation through the wiper plane's UVs, so the water reaches every edge of the real glass;
+  // side and rear windows get beads that crawl rearward with speed.
+  const carMat=new T.ShaderMaterial({depthTest:false,depthWrite:false,side:T.DoubleSide,uniforms:{tG:{value:null},tDepth:{value:null},uRes:{value:new T.Vector2()},uNear:{value:.05},uFar:{value:2000},uInvRoot:{value:new T.Matrix4()},uScr:{value:new T.Vector4(.9,1.3,.8,.65)},uZ:{value:.4},uI:{value:1},uFlow:{value:0}},
+   vertexShader:'uniform mat4 uInvRoot;varying vec3 vB;varying vec3 vBN;void main(){vec4 w=modelMatrix*vec4(position,1.0);vB=(uInvRoot*w).xyz;vBN=mat3(uInvRoot)*(mat3(modelMatrix)*normal);gl_Position=projectionMatrix*viewMatrix*w;}',
+   fragmentShader:`varying vec3 vB;varying vec3 vBN;uniform sampler2D tG;uniform sampler2D tDepth;uniform vec2 uRes;uniform float uNear;uniform float uFar;uniform vec4 uScr;uniform float uZ;uniform float uI;uniform float uFlow;${RN_HASH}
+    float lin(float d){return uNear*uFar/(uFar-d*(uFar-uNear));}
+    vec2 toPix(vec2 o,vec2 q){vec2 dx=dFdx(q),dy=dFdy(q);float det=dx.x*dy.y-dy.x*dx.y;vec2 p=abs(det)>1e-14?vec2(dy.y*o.x-dy.x*o.y,dx.x*o.y-dx.y*o.x)/det:vec2(0.0);return clamp(p,vec2(-60.0),vec2(60.0));}
+    void main(){float sd=texture2D(tDepth,gl_FragCoord.xy/uRes).x;if(lin(sd)<lin(gl_FragCoord.z)-.03)discard;
+     float V=(vB.y-uScr.x)/(uScr.y-uScr.x);float hw=mix(uScr.z,uScr.w,clamp(V,0.0,1.0));vec2 g=vec2(.5-vB.x/(2.0*hw),V);
+     vec2 sq=vec2(vB.z+uFlow,vB.y);vec2 sp=vec2(vB.z,vB.y);
+     vec2 dgx=dFdx(g),dgy=dFdy(g),dsx=dFdx(sp),dsy=dFdy(sp);
+     vec3 n=normalize(vBN);
+     if(abs(n.x)<.6&&vB.z>uZ-.3){vec4 w=texture2D(tG,clamp(g,vec2(.002),vec2(.998)));float det=dgx.x*dgy.y-dgy.x*dgx.y;vec2 pix=abs(det)>1e-14?vec2(dgy.y*w.x-dgy.x*w.y,dgx.x*w.y-dgx.y*w.x)/det:vec2(0.0);gl_FragColor=vec4(clamp(pix,vec2(-60.0),vec2(60.0))/uRes,w.z,w.w);return;}
+     vec2 off=vec2(0.0);float th=0.0;
+     for(int k=0;k<3;k++){float sc=k==0?70.0:k==1?120.0:45.0;vec2 c=(k==1?sq:sp)*sc;vec2 ci=floor(c)+float(k)*31.0;vec2 cf=fract(c)-.5;float h=rnHash(ci);
+      if(h<uI*(k==2?.25:.55)){vec2 o=(vec2(rnHash(ci+3.7),rnHash(ci+9.1))-.5)*.4;float rad=.12+.25*rnHash(ci+5.3);vec2 e=(cf-o)/rad;e.x*=k==1?.6:1.0;float r2=dot(e,e);if(r2<1.0){float hh=sqrt(1.0-r2);off+=-e*rad*2.4/sc*hh;th+=hh*(k==2?1.0:.55);}}}
+     vec2 dx=dsx,dy=dsy;float det=dx.x*dy.y-dy.x*dx.y;vec2 pix=abs(det)>1e-14?vec2(dy.y*off.x-dy.x*off.y,dx.x*off.y-dx.y*off.x)/det:vec2(0.0);
+     gl_FragColor=vec4(clamp(pix,vec2(-60.0),vec2(60.0))/uRes,th,uI*.32);}`});
   const glass=new T.Mesh(new T.BufferGeometry(),glassMat);glass.frustumCulled=false;glass.matrixAutoUpdate=false;glass.matrixWorldAutoUpdate=false;const glassScene=new T.Scene();glassScene.matrixWorldAutoUpdate=false;glassScene.add(glass);
-  K=RN.post={quad,scene,down,copy,glass,glassMat,glassScene,cam:new T.OrthographicCamera(-1,1,1,-1,0,1),w:0,h:0,t:[]};
+  K=RN.post={quad,scene,down,copy,glass,glassMat,glassScene,carMat,proxies:[],cam:new T.OrthographicCamera(-1,1,1,-1,0,1),w:0,h:0,t:[]};
   // Compile the post materials now rather than on the first wet frame.
-  try{const warm=new T.Scene();for(const m of [down,copy,glassMat]){const q=new T.Mesh(quad.geometry,m);q.frustumCulled=false;warm.add(q);}r.compile(warm,W.camera);}catch(e){}
+  try{const warm=new T.Scene();for(const m of [down,copy,glassMat,carMat]){const q=new T.Mesh(quad.geometry,m);q.frustumCulled=false;warm.add(q);}r.compile(warm,W.camera);}catch(e){}
  }
  if(K.w!==P.w||K.h!==P.h){for(const t of K.t)t.dispose();const mk=(w,h)=>new T.WebGLRenderTarget(Math.max(4,w),Math.max(4,h),{type:T.HalfFloatType,minFilter:T.LinearFilter,magFilter:T.LinearFilter,depthBuffer:false});
-  K.s=mk(P.w>>1,P.h>>1);K.a=mk(P.w>>2,P.h>>2);K.b=mk(P.w>>3,P.h>>3);K.c=mk(P.w>>4,P.h>>4);K.t=[K.s,K.a,K.b,K.c];K.w=P.w;K.h=P.h;}
+  K.s=mk(P.w,P.h);K.a=mk(P.w>>2,P.h>>2);K.b=mk(P.w>>3,P.h>>3);K.c=mk(P.w>>4,P.h>>4);K.t=[K.s,K.a,K.b,K.c];K.w=P.w;K.h=P.h;}
  return K;
+}
+// Glass meshes of the player's car, mirrored by proxies (shared geometry) in a private scene.
+function rnCarGlass(W,L,K,P){
+ const car=W.carNodes?.get(L.player?.d?.id),root=W.dc36ScreenRoot,pl=W.sc30RainPlane;if(!car||!root)return false;
+ if(RN.glassCar!==car){RN.glassCar=car;RN.glassSrc=[];const body=car.userData.dc35Chassis?.[0]||car;body.traverse(o=>{if(o.isMesh&&o.userData.dc35Bucket==='glass'&&o.geometry?.attributes.normal)RN.glassSrc.push(o);});RN.scrKey=null;}
+ const src=RN.glassSrc;if(!src.length)return false;
+ const T=THREE,u=K.carMat.uniforms;root.updateMatrixWorld(true);
+ if(RN.scrKey!==pl.geometry){RN.scrKey=pl.geometry;const pos=pl.geometry.attributes.position,m=new T.Matrix4().copy(root.matrixWorld).invert().multiply(pl.matrixWorld),v=new T.Vector3(),at=k=>v.fromBufferAttribute(pos,k).applyMatrix4(m);
+  if(pos.count>=41*21){const yb=at(20).y,yt=at(20*41+20).y,hb=Math.abs(at(0).x),ht=Math.abs(at(20*41).x),zt=at(20*41+20).z;u.uScr.value.set(yb,yt,hb,ht);u.uZ.value=zt;}}
+ if(!K.glassScene2){K.glassScene2=new T.Scene();K.glassScene2.matrixWorldAutoUpdate=false;}
+ while(K.proxies.length<src.length){const m=new T.Mesh(src[0].geometry,K.carMat);m.frustumCulled=false;m.matrixAutoUpdate=false;m.matrixWorldAutoUpdate=false;K.proxies.push(m);K.glassScene2.add(m);}
+ for(let i=0;i<K.proxies.length;i++){const m=K.proxies[i],o=src[i];m.visible=!!o;if(!o)continue;o.updateWorldMatrix(true,false);m.geometry=o.geometry;m.matrixWorld.copy(o.matrixWorld);}
+ u.tG.value=RN.water.G.texture;u.tDepth.value=P.rt.depthTexture;u.uRes.value.set(K.s.width,K.s.height);u.uNear.value=W.camera.near;u.uFar.value=W.camera.far;u.uInvRoot.value.copy(root.matrixWorld).invert();u.uI.value=RN.I;u.uFlow.value=RN.flow||0;
+ W.renderer.render(K.glassScene2,W.camera);return true;
 }
 function rnPost(W,L,P){
  const r=W.renderer,K=rnPostKit(W,P),R=RN.water,prev=r.getRenderTarget(),auto=r.autoClear;r.getClearColor(RN.cc);const ca=r.getClearAlpha();
@@ -216,7 +250,8 @@ function rnPost(W,L,P){
   const pass=(src,w,h,dst)=>{K.quad.material=K.down;K.down.uniforms.tSrc.value=src;K.down.uniforms.texel.value.set(1/w,1/h);r.setRenderTarget(dst);r.render(K.scene,K.cam);};
   pass(P.rt.texture,P.w,P.h,K.a);pass(K.a.texture,K.a.width,K.a.height,K.b);pass(K.b.texture,K.b.width,K.b.height,K.c);
   r.setRenderTarget(K.s);r.setClearColor(0x000000,0);r.clear(true,false,false);
-  if(RN.mode==='glass'&&R&&W.sc30RainPlane){const pl=W.sc30RainPlane,u=K.glassMat.uniforms;pl.updateWorldMatrix(true,false);K.glass.geometry=pl.geometry;K.glass.matrixWorld.copy(pl.matrixWorld);
+  if(RN.mode==='glass'&&R&&W.sc30RainPlane&&rnCarGlass(W,L,K,P)){}
+  else if(RN.mode==='glass'&&R&&W.sc30RainPlane){const pl=W.sc30RainPlane,u=K.glassMat.uniforms;pl.updateWorldMatrix(true,false);K.glass.geometry=pl.geometry;K.glass.matrixWorld.copy(pl.matrixWorld);
    u.tG.value=R.G.texture;u.tDepth.value=P.rt.depthTexture;u.uRes.value.set(K.s.width,K.s.height);u.uNear.value=W.camera.near;u.uFar.value=W.camera.far;r.render(K.glassScene,W.camera);}
  }finally{r.setRenderTarget(prev);r.autoClear=auto;r.setClearColor(RN.cc,ca);}
  const u=P.mats.composite.uniforms,I=RN.I;
@@ -240,7 +275,7 @@ function rnPatchComposite(m){
    vec3 soft=mix(bA,bB,smoothstep(.2,.85,f));
    col=mix(col,soft,clamp(smoothstep(.0,.8,f)+th*.25,0.0,1.0));
    float lum=dot(soft,vec3(.2126,.7152,.0722));
-   col=mix(col,vec3(lum)*.85+rnFog*.4,f*f*.62);
+   col=mix(col,vec3(lum)*.9+rnFog*.22,f*f*.42);
    float rim=smoothstep(.0,.22,th)*(1.0-smoothstep(.3,.75,th));
    vec2 dir=rnW.xy/max(length(rnW.xy),1e-6);
    col*=1.0-rim*.32;col+=rnFog*pow(max(0.0,dot(dir,vec2(.45,-.89))),10.0)*rim*.3;
