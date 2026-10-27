@@ -4,7 +4,7 @@ An unofficial, fan-made Supercars 2026 browser game: driver career, instant race
 
 ## Play
 
-Open the hosted site (GitHub Pages) in any modern browser, including Microsoft Edge on Xbox. The game needs to be served from a website or local web server; opening `index.html` straight from disk won't load the 3D models and liveries.
+Play it at **https://bwvjb5jjd4-coder.github.io/Supercars26/** in any modern browser, including Microsoft Edge on Xbox. The site is GitHub Pages, deployed from `main` (root), so every merge to `main` goes live within a minute or two. The game needs to be served from a website or local web server; opening `index.html` straight from disk won't load the 3D models and liveries.
 
 To run it locally on a Mac, double-click `Play on Mac.command` (the first time, right-click it and choose Open). Or run `python3 -m http.server` in this folder and open http://localhost:8000.
 
