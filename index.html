@@ -2423,7 +2423,7 @@ function dcHeader(){const p=dcPlayer(),unread=D.mail.filter(m=>m.unread).length;
 function dcRender(){if(live)return;document.title='Supercars / Driver Career';document.body.classList.remove('broadcast-mode');document.body.style.overflow='';if(!D){$('root').innerHTML=dcSetup();return}dcBindWorld();const renderers={'Home':dcHome,'Race Weekend':dcWeekendPage,'Car Management':dcCarPage,'Test Centre':dcTestPage,'Championship':dcChampionship,'Inbox':dcInbox,'Personal':dcPersonal,'Contracts':dcContracts,'Settings':dcSettings};$('root').innerHTML=`<div class="dc-shell">${dcHeader()}<main class="dc-main"><header class="dc-top"><div><div class="dc-eyebrow">SEASON ${D.year} / ${dcTeam().name}</div><div class="dc-date">${dcDateLabel()} <span class="dc-muted"> · Week ${Math.floor(D.day/7)+1}</span></div></div><div class="dc-actions"><span class="dc-tag">${D.weekend?'RACE WEEK':'BETWEEN ROUNDS'}</span><button class="dc-btn primary" onclick="dcAdvance()">${dcAdvanceLabel()} →</button></div></header>${(renderers[dcTab]||dcHome)()}</main></div>${dcOverlay}`;}
 function dcStats(label,value,note=''){return `<div class="dc-card"><div class="dc-eyebrow">${label}</div><div class="dc-value">${value}</div><div class="dc-note">${note}</div></div>`}
 function dcHome(){const p=dcPlayer(),e=dcEvent(),rank=dcDrivers().findIndex(x=>x.d.id===D.pid)+1;return `<h1 class="dc-title">Your career. Your racing line.</h1><p class="dc-sub">${esc(p.name)} · ${p.age} years old · ${esc(p.home)} · ${D.contract.until-D.year+1} season${D.contract.until===D.year?'':'s'} on contract</p><section class="dc-hero"><div><div class="dc-eyebrow">${e?'NEXT DESTINATION / ROUND '+(e.id+1):'SEASON COMPLETE'}</div><h2>${e?esc(e.circuit):'The next chapter<br>starts here.'}</h2><p>${e?`${dcDateLabel(dcSunday(e)-2)} — ${dcDateLabel(dcSunday(e))} · ${e.lengthKm.toFixed(3)} km · ${Math.min(2,e.races)} race${e.races>1?'s':''}`:'Review your offers and build your future on the grid.'}</p><div class="dc-actions"><button class="dc-btn primary" onclick="dcNav('${e?'Race Weekend':'Contracts'}')">${e?'Open race weekend':'Review contracts'} →</button><button class="dc-btn" onclick="dcNav('Test Centre')">Go testing</button>${D.activeSession?'<button class="dc-btn" onclick="dcResumeSaved()">Resume saved session</button>':''}</div></div><div>${dcCarArt(dcTeam().livery.secondary,p.number)}</div></section><div class="dc-grid four">${dcStats('CHAMPIONSHIP','P'+rank,p.pts+' points · '+p.wins+' wins')}${dcStats('DRIVER OVR',p.ovr.toFixed(1),'Next review in '+(2-p.recent.length)+' race'+(p.recent.length===1?'':'s'))}${dcStats('POTENTIAL',p.pot.toFixed(1),'Form, age and racecraft influence development')}${dcStats('NET WORTH',dcMoney(dcNetWorth()),'Personal assets minus mortgage')}</div><div class="dc-split"><section class="dc-card"><h3>The latest from your garage</h3><div class="dc-list">${D.mail.slice(0,3).map(m=>`<button onclick="dcNav('Inbox')"><span><b>${esc(m.title)}</b><small>${esc(m.from)} · ${dcDateLabel(m.day)}</small></span><span>↗</span></button>`).join('')}</div></section><section class="dc-card"><h3>Your current package</h3><div class="dc-list"><div><span>Tyres</span><b>${D.setup.tyre}</b></div><div><span>Downforce bias</span><b>${D.setup.aero}%</b></div><div><span>Starting fuel</span><b>${D.setup.fuel} L</b></div><div><span>Race distance</span><b>${Math.round(D.settings.raceDistance*100)}%</b></div></div><p>Set up the car, check your rivals, then find the balance in testing.</p></section></div>`}
-function dcTarget(){const order=dcDrivers().sort((a,b)=>(b.d.ovr*.65+b.team.base*.35)-(a.d.ovr*.65+a.team.base*.35)),rank=order.findIndex(x=>x.d.id===D.pid)+1;return clamp(Math.round(rank+(D.settings.difficulty==='Easy'?3:D.settings.difficulty==='Hard'?-1:1)),1,22)}
+function dcTarget(){const order=dcDrivers().sort((a,b)=>(b.d.ovr*.65+b.team.base*.35)-(a.d.ovr*.65+a.team.base*.35)),rank=order.findIndex(x=>x.d.id===D.pid)+1;return clamp(Math.round(rank+hd64TargetShift()),1,22)}
 function dcWeekly(){const week=Math.floor(D.day/7);if(week===D.lastMailWeek)return;D.lastMailWeek=week;const e=dcEvent(),target=dcTarget();D.target=target;dcMsg(dcTeam().ceo,e?'The plan for '+e.circuit:'Season debrief',e?`We’re targeting P${target} or better at ${e.circuit}, worth at least ${DC_POINTS[target-1]} points per race in this championship. A clean qualifying lap and the right compound will matter. Meeting this target earns your ${dcMoney(D.contract.bonus)} performance bonus and improves your reputation.`:'Thanks for your effort this season. Your results and driver development will shape the next contract.');const notes=['Wet tyres reduce aquaplaning; slicks in standing water require much earlier braking.','Maintain the 60 km/h pit limit. Unsafe releases and cutting corners can bring penalties.','Hydration, recovery and consistent practice support long-term driver development.','Blue flags require cooperation. Leave racing room and avoid avoidable contact.','Your two-race performance review compares finishes with the performance of your car.'];dcMsg('Supercars Drivers Association','Weekly driver bulletin',notes[week%notes.length]);}
 function dcForecast(e){if(!D.weekend){const base=(e.id*11+D.year*7)%10,weather=base<5?'Dry':base<8?'Wet':'Extremely Wet';D.weekend={event:e.id,phase:0,race:0,grid:[],times:{},results:[],weather,forecast:['Friday','Saturday','Sunday'].map((day,i)=>({day,weather:i===0&&weather!=='Dry'?'Wet':weather,temp:17+(e.id*3+i)%16,rain:weather==='Dry'?5+i*5:weather==='Wet'?65+i*7:95}))};dcMsg('Race engineer','Your weekend forecast · '+e.circuit,D.weekend.forecast.map(x=>`${x.day}: ${x.weather==='Extremely Wet'?'Ultra wet':x.weather}, ${x.temp}°C, ${x.rain}% rain chance.`).join(' ')+' Forecast issued three days before the first race. Select your tyres in Car Management.');}}
 function dcAdvanceLabel(){if(!dcEvent())return 'Next season';if(D.weekend&&D.day>=dcSunday()-2&&D.weekend.phase<4)return 'Open weekend';return dcSunday()-D.day<=7?'Advance one day':'Advance one week'}
@@ -2481,7 +2481,7 @@ function dcSettings(){return `<h1 class="dc-title">Make it feel right.</h1><p cl
 function dcExport(){dcSnapshot();const b=new Blob([JSON.stringify(D)],{type:'application/json'}),url=URL.createObjectURL(b),a=document.createElement('a');a.href=url;a.download='Supercars_Driver_'+D.year+'_Career.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)}
 async function dcImport(file){if(!file)return;try{let n=JSON.parse(await file.text());if(n.version!==1||n.world?.teams?.length!==12||!n.pid||!n.world.teams.flatMap(t=>t.drivers).some(d=>d.id===n.pid))throw Error('Not a driver-career save');D=n;dcBindWorld();dcSave();dcRender();dcToast('Career imported.')}catch(e){dcToast('Could not import: '+e.message)}}
 function dcNewCareerPrompt(){dcOverlay=`<div class="dc-modal"><div class="dc-card"><h3>Start a new driver career?</h3><p>Export your current career before replacing this browser save.</p><div class="dc-actions"><button class="dc-btn" onclick="dcExport()">Export current career</button><button class="dc-btn primary" onclick="D=null;dcOverlay='';dcRender()">Start new career</button><button class="dc-btn" onclick="dcOverlay='';dcRender()">Cancel</button></div></div></div>`;dcRender()}
-function dcPerformance(x,stage='race'){const wet=S.weather!=='Dry',aero=x.aero??D.setup.aero,tyre=x.tyre||D.setup.tyre,car=x.team.base,ovr=x.d.ovr,condition=wet?(tyre==='Wet'?1:tyre==='Hard'?.80:.71):(tyre==='Soft'?1.035:tyre==='Hard'?1:.86),balance=dcEvent()?.track==='fast'?1-(aero-30)*.0005:1+(aero-40)*.00045;return (1+(ovr-82)*.003+(car-78)*.0018)*condition*balance*(x.d.id===D.pid?1+(D.practiceBonus||0):D.settings.difficulty==='Easy'?.93:D.settings.difficulty==='Hard'?1.035:1)}
+function dcPerformance(x,stage='race'){const wet=S.weather!=='Dry',aero=x.aero??D.setup.aero,tyre=x.tyre||D.setup.tyre,car=x.team.base,ovr=x.d.ovr,condition=wet?(tyre==='Wet'?1:tyre==='Hard'?.80:.71):(tyre==='Soft'?1.035:tyre==='Hard'?1:.86),balance=dcEvent()?.track==='fast'?1-(aero-30)*.0005:1+(aero-40)*.00045;return (1+(ovr-82)*.003+(car-78)*.0018)*condition*balance*(x.d.id===D.pid?1+(D.practiceBonus||0):hd64Pace())}
 function dcSimTimes(stage){return D.world.teams.flatMap(t=>t.drivers.map(d=>{const a=d.id===D.pid?D.setup:dcRivalSetup(t),x={d,team:t,...a},pace=dcPerformance(x,stage);return {id:d.id,time:dcEvent().realLap/pace*(.992+Math.random()*.023),d,team:t}})).sort((a,b)=>a.time-b.time)}
 function dcSkipPhase(){const w=D.weekend;if(!w||D.day<dcPhaseDay())return;dcBindWorld();if(w.phase===3){dcQuickRace();return}const stage=['practice','qualifying','shootout'][w.phase];let rows=dcSimTimes(stage);if(stage==='shootout'){const ids=w.grid.slice(0,10);rows=rows.filter(r=>ids.includes(r.id));}dcCompleteSession(stage,rows,true)}
 function dcCompleteSession(stage,rows,simulated=false){const w=D.weekend;if(!w)return;const pos=rows.findIndex(x=>x.id===D.pid)+1,best=rows.find(x=>x.id===D.pid)?.time||null;w.results.push({name:stage==='shootout'?'Top Ten Shootout':stage[0].toUpperCase()+stage.slice(1),playerPosition:pos||null,best});if(stage==='practice'){D.practiceBonus=.003;w.phase=1;dcMsg('Race engineer','Practice debrief',`Practice is complete${best?'. Best lap '+dcLapTime(best):''}. Your work gives a small confidence benefit in qualifying.`)}if(stage==='qualifying'){w.grid=rows.map(x=>x.id);w.times=Object.fromEntries(rows.map(x=>[x.id,x.time]));w.phase=2;dcMsg('Race engineer','Qualifying · P'+pos,pos<=10?'You’re through to the top ten shootout. One flying lap will decide the first ten places.':'Outside the top ten. Your qualifying position is locked in; simulate the shootout to see the final grid.')}if(stage==='shootout'){w.grid=[...rows.map(x=>x.id),...w.grid.slice(10)];w.phase=3;dcMsg('Race engineer','Grid confirmed',`You will start P${w.grid.indexOf(D.pid)+1}. Review fuel, tyres and downforce before lights out.`)}dcSave();dcRender()}
@@ -2717,7 +2717,7 @@ dcAIStep=function(x,dt){const W=sc25Engine,L=live;if(!W||!L||x.outlapHold)return
  if(headingToPit){lane=W.pit.side*3.0;target=Math.min(target,Math.sqrt((60/3.6)**2+2*brake*Math.max(0,toEntry-8)));}
  let traffic=dc32Traffic(x,lane);const noPass=L.scTrain||L.phase==='formation';if(L.scTrain){lane=x.lane;traffic=dc32Traffic(x,lane);}if(traffic.front&&!noPass&&!headingToPit&&traffic.gap>8&&traffic.gap<Math.max(70,x.v*1.8)){if(!x.dc32Pass||L.elapsed>x.dc32PassUntil){const choices=[-4.5,-1.4,1.4,4.5].sort((a,b)=>Math.abs(a-x.lane)-Math.abs(b-x.lane));const chosen=choices.find(c=>Math.abs(c-(traffic.front.lane||0))>3.1&&dc32LaneClear(x,c));if(chosen!==undefined){x.dc32Pass=chosen;x.dc32PassUntil=L.elapsed+3.5;}}
  }if(x.dc32Pass!==undefined&&L.elapsed<x.dc32PassUntil&&!noPass&&!headingToPit)lane=dc32LaneClear(x,x.dc32Pass)?x.dc32Pass:x.lane;if(!headingToPit&&L.phase!=='formation'&&!dc32LaneClear(x,lane))lane=x.lane;
- const maxShift=(L.weather==='Dry'?2.0:1.35)*dt,newLane=x.lane+clamp(lane-x.lane,-maxShift,maxShift);traffic=dc32Traffic(x,newLane);target=Math.min(target,traffic.target);if(x.aiError>0){x.aiError-=dt;target*=.65;}
+ const maxShift=(L.weather==='Dry'?2.0:1.35)*dt*(x.hd64Rate||1),newLane=x.lane+clamp(lane-x.lane,-maxShift,maxShift);traffic=dc32Traffic(x,newLane);target=Math.min(target,traffic.target);if(x.aiError>0){x.aiError-=dt;target*=.65;}
  if(L.phase==='formation'&&Number.isFinite(x.formationTarget)){lane=x.formationLane;const remaining=Math.max(0,(x.formationTarget-x.progress)*L.e.lengthKm*1000);target=Math.min(target,Math.sqrt(5.4*remaining));}
  const oldLane=x.lane;x.lane=L.phase==='formation'?x.lane+clamp(lane-x.lane,-maxShift,maxShift):newLane;x.dc32LaneV=(x.lane-oldLane)/dt;const accel=8.5/(1+x.v*.017)*Math.min(1,grip*1.1),oldV=x.v;x.ai62Target=target;x.v=Math.max(0,x.v+clamp(target-x.v,-brake*dt,accel*dt));if(x.fuel<=0)x.v=Math.max(0,x.v-2*dt);x.braking=x.v<oldV-.01;x.speed=x.v*3.6;
  const prev=x.progress;x.progress+=x.v/Math.max(5,s.speed)/(L.e.realLap*(L.ai62Pace||1))*dt;const q=W.at(x.progress);x.idx=Math.round(q.t*W.N)%W.N;x.pos={x:q.p.x+q.n.x*x.lane,y:q.p.y,z:q.p.z+q.n.z*x.lane};x.yaw=Math.atan2(q.v.x,q.v.z);x.steer=-Math.atan(3.05*dcTrackCurvature(W,x.progress));x.loadTransfer=clamp(x.v*x.v*k/9.81*.085,0,.16);
@@ -9819,7 +9819,7 @@ window.PT61={_crew:crewFrame,estimate:x=>{const L=live;if(!x||!L)return null;ret
    damage limits); it runs as a planner each frame, then an AI driver turns its plan into
    steering, throttle and brake for the real car physics. Cars far from the player (and
    fast-forwarded sessions) keep the light path model so frame time stays low. */
-const AI62={near:340,far:420,look:.36,gain:.004,damp:.012,use:.96,dec:.62,pace:1,assist:{...PH47_ASSISTS.standard,label:'AI'},loose:{...PH47_ASSISTS.off,label:'AI loose'},lock:{...PH47_ASSISTS.standard,abs:false,label:'AI lock'}};
+const AI62={near:340,far:420,look:.36,gain:.004,damp:.05,trail:1,react:.5,use:.96,dec:.62,tgain:.5,bgain:.18,pace:1,assist:{...PH47_ASSISTS.standard,label:'AI'},loose:{...PH47_ASSISTS.off,label:'AI loose'},lock:{...PH47_ASSISTS.standard,abs:false,label:'AI lock'}};
 function ai62Wanted(L,x){
  if(D.settings.ph47Classic||D.settings.ai62Off||dcSimBusy||L.simulated||!L.dc)return false;
  if(x===L.player||x.retired||x.finished||x.garage||x.pitStage||x.outlapHold||x.sc3Crash||!x.pos||(x.releaseDelay||0)>0)return false;
@@ -9835,12 +9835,13 @@ function ai62Enter(L,x){
  const s=ph47State(x);s.r=clamp(x.v*k,-2,2);s.delta=Math.atan(2.82*k);s.af=s.ar=0;s.ax=s.ay=0;x.yaw=Math.atan2(q.v.x,q.v.z);
 }
 function ai62Leave(x){x.ai62=null;x.ph47On=false;x.latV=0;x.v=Math.max(0,x.v);if(x.ph47){x.ph47.r=0;x.ph47.tumble=0;x.ph47.phi=0;}dc33Sync(x);}
-// Fastest speed the tyre model can carry through the next 130 m, with room to brake for it.
+// Fastest speed the tyre model can carry (scaled by the difficulty's corner pace) through the corners ahead, looking at least one full
+// braking distance down the road so fast approaches start braking in time.
 function ai62CornerCap(L,x){
  const W=sc25Engine,P=PH47,len=L.e.lengthKm*1000,grip=dcTyreGrip(x),mass=1335+(x.fuel||0)*.75,aero=x.aero??50,kd=P.cl*(1+aero/100*.9)*(1-clamp(((x.bodyDamage||0)-15)/85,0,1)*.35);
- const skill=clamp(dcPerformance(x),.72,1.14),use=AI62.use+(skill-.9)*.3,mu=P.mu*grip*use,decel=Math.max(4,mu*P.g*AI62.dec);let cap=99;
- for(let m=0;m<=130;m+=13){const k=Math.abs(dcTrackCurvature(W,x.progress+m/len));if(k<1e-5)continue;const den=k-mu*kd/mass;const v2=den>1e-6?mu*P.g/den:1e4;cap=Math.min(cap,Math.sqrt(v2+2*decel*Math.max(0,m-x.v*.25)));}
- return cap;
+ const skill=clamp(dcPerformance(x)/(window.hd64Pace?.()||1),.72,1.14),use=AI62.use+(skill-.9)*.3,mu=P.mu*grip*use,decel=Math.max(4,mu*P.g*AI62.dec);let cap=99;
+ const reach=Math.max(130,x.v*x.v/(2*decel)+x.v*.5+30);for(let m=0;m<=reach;m+=13){const k=Math.abs(dcTrackCurvature(W,x.progress+m/len));if(k<1e-5)continue;const den=k-mu*kd/mass;const v2=den>1e-6?mu*P.g/den:1e4;cap=Math.min(cap,Math.sqrt(v2+2*decel*Math.max(0,m-x.v*AI62.react)));}
+ return cap*AI62.pace;
 }
 // The planner's own target with no traffic or race-control limits (same formula as dcAIStep).
 function ai62FreeTarget(L,x){
@@ -9864,15 +9865,20 @@ function ai62Drive(L,x,plan,dt){
  // approach, formation, a driver error, damage limits) still applies as an absolute speed.
  const base=Number.isFinite(x.ai62Target)?x.ai62Target:plan.v,free=ai62FreeTarget(L,x);let target=Math.min(ai62CornerCap(L,x),(318-(x.aero??50)*.36)/3.6);
  if(base<free-.5)target=Math.min(target,base);if(plan.v<Math.min(base,vx)-.6)target=Math.min(target,plan.v);
- if(lx<1||Math.abs(Math.atan2(ly,lx))>1.1)target=Math.min(target,7);
+ const lost=lx<1||Math.abs(Math.atan2(ly,lx))>1.1;if(lost)target=Math.min(target,7);
  if(s.grass>=2)target=Math.min(target,Math.max(14,vx-4));
  // Lift when the fronts are at the limit and the car is still running wide of the line.
- const wide=Math.abs(lane-x.lane)>1.2&&Math.sign(ly)===Math.sign(steer);if(Math.abs(steer)>.92&&wide||s.slideF>.03)target=Math.min(target,vx-1.5-Math.abs(lane-x.lane)*.6);
+ // Not while pointing away from the line at low speed (after a spin): that is full lock by
+ // design, and lifting there left the car parked on the brakes.
+ const wide=Math.abs(lane-x.lane)>1.2&&Math.sign(ly)===Math.sign(steer);if(!lost&&vx>8&&(Math.abs(steer)>.92&&wide||s.slideF>.03))target=Math.min(target,Math.max(6,vx-1.5-Math.abs(lane-x.lane)*.6));
  const slope=(target-a.lastT)/Math.max(dt,1e-3);a.lastT=target;
  const err=target-vx;let throttle=0,brake=0;
- if(err>-.4)throttle=clamp(.3+err*.5,0,1);
- if(err<-.8)brake=clamp((-err-.8)*.18+(slope<-1?-slope/22:0),0,1);
+ if(err>-.4)throttle=clamp(.3+err*AI62.tgain,0,1);
+ if(err<-.8)brake=clamp((-err-.8)*AI62.bgain+(slope<-1?-slope/22:0),0,1);
  if(Math.abs(vy)>3.5&&sp>8)throttle*=.55;
+ // Trail braking inside the friction circle: release the brake as cornering load builds, and
+ // come off the pedals when the rear is past its peak slip, so turn-in does not spin the car.
+ if(AI62.trail&&sp>6){const lat=Math.abs(s.ay)/(P.mu*dcTyreGrip(x)*P.g),over=Math.abs(s.ar)>P.peakR*1.05;brake*=clamp(1+AI62.trail*(.35-lat),.25,1);if(over){brake=Math.min(brake,.25);throttle*=.5;}}
  return{steer,throttle,brake,ai:true};
 }
 // Race-control mistakes play out in the tyre model instead of a scripted slide.
@@ -9918,7 +9924,7 @@ dcSettingsFields=function(...args){
 // Quasi-steady lap on the tyre model (corner limits, then power and braking passes). The path
 // model's pace is scaled to it, so cars far away lap at the same speed the physics allows.
 function ai62LapEstimate(W,e){
- const P=PH47,len=e.lengthKm*1000,N=Math.max(200,Math.round(len/4)),ds=len/N,mass=1365,aero=50,kd=P.cl*(1+aero/100*.9),cd=P.cd*(1+aero*.009),mu=P.mu*AI62.use,top=(318-aero*.36)/3.6,v=new Float64Array(N);
+ const P=PH47,len=e.lengthKm*1000,N=Math.max(200,Math.round(len/4)),ds=len/N,mass=1365,aero=50,kd=P.cl*(1+aero/100*.9),cd=P.cd*(1+aero*.009),mu=P.mu*(AI62.use+.03),top=(318-aero*.36)/3.6,v=new Float64Array(N);
  for(let i=0;i<N;i++){const k=Math.abs(dcTrackCurvature(W,i/N)),den=k-mu*kd/mass;v[i]=Math.min(top,k<1e-5||den<=1e-6?top:Math.sqrt(mu*P.g/den));}
  for(let pass=0;pass<2;pass++){for(let i=0;i<2*N;i++){const a=i%N,b=(i+1)%N,u=v[a],acc=Math.min(P.drive,P.power/Math.max(4,u))/mass-cd*u*u/mass-.12;v[b]=Math.min(v[b],Math.sqrt(Math.max(0,u*u+2*acc*ds)));}
   for(let i=2*N;i>0;i--){const a=i%N,b=(i-1+N)%N,u=v[a],dec=mu*P.g*.85+(kd*mu*.85+cd)*u*u/mass;v[b]=Math.min(v[b],Math.sqrt(u*u+2*dec*ds));}}
@@ -10926,4 +10932,49 @@ function rnInstall(){
 }
 if(document.readyState==='complete')rnInstall();else window.addEventListener('load',rnInstall);
 })();
+</script><script id="hd64-difficulty">
+/* HD64 difficulty tiers. Easy is the old Intermediate, Intermediate is the old Hard, and Hard is
+   new: rivals drive near the tyre limit (later braking, full use of the grip), defend their
+   position against you, and make fewer mistakes. */
+const HD64={tiers:{
+ Easy:{pace:1,use:.89,corner:.92,dec:.62,tgain:.5,bgain:.6,look:.7,mistakes:2,block:0,rate:1,target:1},
+ Intermediate:{pace:1.035,use:.89,corner:.955,dec:.62,tgain:.5,bgain:.6,look:.7,mistakes:2,block:0,rate:1,target:-1},
+ Hard:{pace:1.065,use:.89,corner:1,dec:.62,tgain:.5,bgain:.6,look:.7,mistakes:1,block:1,rate:1.6,target:-3}
+}};
+function hd64Tier(){return HD64.tiers[D?.settings?.difficulty]||HD64.tiers.Intermediate;}
+function hd64Pace(){return hd64Tier().pace;}
+function hd64TargetShift(){return hd64Tier().target;}
+// Tyre-model driver settings follow the tier; the far-away path model is rescaled to match.
+const hd64Launch=dcLaunch;
+dcLaunch=function(...args){
+ const T=hd64Tier();for(const k of ['use','dec','tgain','bgain','look'])AI62[k]=T[k];AI62.pace=T.corner;
+ const r=hd64Launch(...args),L=live,W=sc25Engine;
+ if(L?.dc&&W&&!(D.settings.ph47Classic||D.settings.ai62Off)){const cache=W.hd64Lap||(W.hd64Lap={}),key=L.e.key+':'+AI62.use;if(!cache[key])cache[key]=ai62LapEstimate(W,L.e);L.ai62Pace=clamp(cache[key]/L.e.realLap,.9,1.25);}
+ return r;
+};
+
+// Hard: one scripted race mistake instead of two (the tyre model still punishes errors).
+const hd64Plan=rf40Plan;
+rf40Plan=function(L){const fresh=!L.rf40RaceErrors,p=hd64Plan(L),n=hd64Tier().mistakes;if(fresh&&p.events.length>n)p.events=p.events.filter((e,i)=>i===(p.seed%2?1:0)).slice(0,n);return p;};
+// Hard: a rival with you close behind defends. It mirrors your line on the straights and covers
+// the inside before braking zones, holding each move for a moment (no weaving every frame).
+// Once you have overlap it stops moving across, and the lane-clear check still prevents
+// it from driving into a car alongside.
+function hd64Humans(L){const h=[L.player];if(typeof CO!=='undefined'&&CO.race&&CO.pl?.[1]?.x)h.push(CO.pl[1].x);return h.filter(Boolean);}
+function hd64Defend(L,x){
+ x.hd64Rate=1;if(!hd64Tier().block||L.stage!=='race'||!L.started||L.phase!=='racing'||L.scTrain||x.pitStage||x.pitNow||x.rf40Incident||x.retired||x.finished||hd64Humans(L).includes(x)){x.hd64Def=null;return;}
+ const W=sc25Engine,len=L.e.lengthKm*1000;let att=null,gap=Infinity;
+ for(const h of hd64Humans(L)){if(h.pitStage||h.retired)continue;const g=(x.progress-h.progress)*len;if(g>0&&g<gap){gap=g;att=h;}}
+ if(!att||gap>45||gap<5.5){x.hd64Def=null;return;}
+ const d=x.hd64Def;if(d&&L.elapsed<d.until&&d.att===att){x.hd64Rate=HD64.tiers.Hard.rate;return;}
+ // Inside of the next real corner within braking range, otherwise the attacker's line.
+ let kMax=0,apex=0;for(let m=25;m<=Math.max(90,x.v*2.6);m+=12){const f=x.progress+m/len,k=Math.abs(dcTrackCurvature(W,f));if(k>kMax){kMax=k;apex=f;}}
+ let lane;if(kMax>1/180){const a=hd64Lane(W,apex,x);lane=(Math.sign(a)||1)*3.3;}else lane=clamp(att.lane||0,-4.5,4.5);
+ x.hd64Def={lane,att,until:L.elapsed+1.1};x.hd64Rate=HD64.tiers.Hard.rate;
+}
+const hd64Lane=dcRacingLane;
+dcRacingLane=function(W,phase,x){const d=x?.hd64Def;if(d&&live&&L_ok(x))return d.lane;return hd64Lane(W,phase,x);};
+function L_ok(x){return !x.rf40Incident&&!x.pitStage;}
+const hd64AI=dcAIStep;
+dcAIStep=function(x,dt){const L=live;if(L?.dc)hd64Defend(L,x);return hd64AI.apply(this,arguments);};
 </script></body></html>

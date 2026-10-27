@@ -3,7 +3,7 @@
    damage limits); it runs as a planner each frame, then an AI driver turns its plan into
    steering, throttle and brake for the real car physics. Cars far from the player (and
    fast-forwarded sessions) keep the light path model so frame time stays low. */
-const AI62={near:340,far:420,look:.36,gain:.004,damp:.012,use:.96,dec:.62,pace:1,assist:{...PH47_ASSISTS.standard,label:'AI'},loose:{...PH47_ASSISTS.off,label:'AI loose'},lock:{...PH47_ASSISTS.standard,abs:false,label:'AI lock'}};
+const AI62={near:340,far:420,look:.36,gain:.004,damp:.05,trail:1,react:.5,use:.96,dec:.62,tgain:.5,bgain:.18,pace:1,assist:{...PH47_ASSISTS.standard,label:'AI'},loose:{...PH47_ASSISTS.off,label:'AI loose'},lock:{...PH47_ASSISTS.standard,abs:false,label:'AI lock'}};
 function ai62Wanted(L,x){
  if(D.settings.ph47Classic||D.settings.ai62Off||dcSimBusy||L.simulated||!L.dc)return false;
  if(x===L.player||x.retired||x.finished||x.garage||x.pitStage||x.outlapHold||x.sc3Crash||!x.pos||(x.releaseDelay||0)>0)return false;
@@ -19,12 +19,13 @@ function ai62Enter(L,x){
  const s=ph47State(x);s.r=clamp(x.v*k,-2,2);s.delta=Math.atan(2.82*k);s.af=s.ar=0;s.ax=s.ay=0;x.yaw=Math.atan2(q.v.x,q.v.z);
 }
 function ai62Leave(x){x.ai62=null;x.ph47On=false;x.latV=0;x.v=Math.max(0,x.v);if(x.ph47){x.ph47.r=0;x.ph47.tumble=0;x.ph47.phi=0;}dc33Sync(x);}
-// Fastest speed the tyre model can carry through the next 130 m, with room to brake for it.
+// Fastest speed the tyre model can carry (scaled by the difficulty's corner pace) through the corners ahead, looking at least one full
+// braking distance down the road so fast approaches start braking in time.
 function ai62CornerCap(L,x){
  const W=sc25Engine,P=PH47,len=L.e.lengthKm*1000,grip=dcTyreGrip(x),mass=1335+(x.fuel||0)*.75,aero=x.aero??50,kd=P.cl*(1+aero/100*.9)*(1-clamp(((x.bodyDamage||0)-15)/85,0,1)*.35);
- const skill=clamp(dcPerformance(x),.72,1.14),use=AI62.use+(skill-.9)*.3,mu=P.mu*grip*use,decel=Math.max(4,mu*P.g*AI62.dec);let cap=99;
- for(let m=0;m<=130;m+=13){const k=Math.abs(dcTrackCurvature(W,x.progress+m/len));if(k<1e-5)continue;const den=k-mu*kd/mass;const v2=den>1e-6?mu*P.g/den:1e4;cap=Math.min(cap,Math.sqrt(v2+2*decel*Math.max(0,m-x.v*.25)));}
- return cap;
+ const skill=clamp(dcPerformance(x)/(window.hd64Pace?.()||1),.72,1.14),use=AI62.use+(skill-.9)*.3,mu=P.mu*grip*use,decel=Math.max(4,mu*P.g*AI62.dec);let cap=99;
+ const reach=Math.max(130,x.v*x.v/(2*decel)+x.v*.5+30);for(let m=0;m<=reach;m+=13){const k=Math.abs(dcTrackCurvature(W,x.progress+m/len));if(k<1e-5)continue;const den=k-mu*kd/mass;const v2=den>1e-6?mu*P.g/den:1e4;cap=Math.min(cap,Math.sqrt(v2+2*decel*Math.max(0,m-x.v*AI62.react)));}
+ return cap*AI62.pace;
 }
 // The planner's own target with no traffic or race-control limits (same formula as dcAIStep).
 function ai62FreeTarget(L,x){
@@ -48,15 +49,20 @@ function ai62Drive(L,x,plan,dt){
  // approach, formation, a driver error, damage limits) still applies as an absolute speed.
  const base=Number.isFinite(x.ai62Target)?x.ai62Target:plan.v,free=ai62FreeTarget(L,x);let target=Math.min(ai62CornerCap(L,x),(318-(x.aero??50)*.36)/3.6);
  if(base<free-.5)target=Math.min(target,base);if(plan.v<Math.min(base,vx)-.6)target=Math.min(target,plan.v);
- if(lx<1||Math.abs(Math.atan2(ly,lx))>1.1)target=Math.min(target,7);
+ const lost=lx<1||Math.abs(Math.atan2(ly,lx))>1.1;if(lost)target=Math.min(target,7);
  if(s.grass>=2)target=Math.min(target,Math.max(14,vx-4));
  // Lift when the fronts are at the limit and the car is still running wide of the line.
- const wide=Math.abs(lane-x.lane)>1.2&&Math.sign(ly)===Math.sign(steer);if(Math.abs(steer)>.92&&wide||s.slideF>.03)target=Math.min(target,vx-1.5-Math.abs(lane-x.lane)*.6);
+ // Not while pointing away from the line at low speed (after a spin): that is full lock by
+ // design, and lifting there left the car parked on the brakes.
+ const wide=Math.abs(lane-x.lane)>1.2&&Math.sign(ly)===Math.sign(steer);if(!lost&&vx>8&&(Math.abs(steer)>.92&&wide||s.slideF>.03))target=Math.min(target,Math.max(6,vx-1.5-Math.abs(lane-x.lane)*.6));
  const slope=(target-a.lastT)/Math.max(dt,1e-3);a.lastT=target;
  const err=target-vx;let throttle=0,brake=0;
- if(err>-.4)throttle=clamp(.3+err*.5,0,1);
- if(err<-.8)brake=clamp((-err-.8)*.18+(slope<-1?-slope/22:0),0,1);
+ if(err>-.4)throttle=clamp(.3+err*AI62.tgain,0,1);
+ if(err<-.8)brake=clamp((-err-.8)*AI62.bgain+(slope<-1?-slope/22:0),0,1);
  if(Math.abs(vy)>3.5&&sp>8)throttle*=.55;
+ // Trail braking inside the friction circle: release the brake as cornering load builds, and
+ // come off the pedals when the rear is past its peak slip, so turn-in does not spin the car.
+ if(AI62.trail&&sp>6){const lat=Math.abs(s.ay)/(P.mu*dcTyreGrip(x)*P.g),over=Math.abs(s.ar)>P.peakR*1.05;brake*=clamp(1+AI62.trail*(.35-lat),.25,1);if(over){brake=Math.min(brake,.25);throttle*=.5;}}
  return{steer,throttle,brake,ai:true};
 }
 // Race-control mistakes play out in the tyre model instead of a scripted slide.
@@ -102,7 +108,7 @@ dcSettingsFields=function(...args){
 // Quasi-steady lap on the tyre model (corner limits, then power and braking passes). The path
 // model's pace is scaled to it, so cars far away lap at the same speed the physics allows.
 function ai62LapEstimate(W,e){
- const P=PH47,len=e.lengthKm*1000,N=Math.max(200,Math.round(len/4)),ds=len/N,mass=1365,aero=50,kd=P.cl*(1+aero/100*.9),cd=P.cd*(1+aero*.009),mu=P.mu*AI62.use,top=(318-aero*.36)/3.6,v=new Float64Array(N);
+ const P=PH47,len=e.lengthKm*1000,N=Math.max(200,Math.round(len/4)),ds=len/N,mass=1365,aero=50,kd=P.cl*(1+aero/100*.9),cd=P.cd*(1+aero*.009),mu=P.mu*(AI62.use+.03),top=(318-aero*.36)/3.6,v=new Float64Array(N);
  for(let i=0;i<N;i++){const k=Math.abs(dcTrackCurvature(W,i/N)),den=k-mu*kd/mass;v[i]=Math.min(top,k<1e-5||den<=1e-6?top:Math.sqrt(mu*P.g/den));}
  for(let pass=0;pass<2;pass++){for(let i=0;i<2*N;i++){const a=i%N,b=(i+1)%N,u=v[a],acc=Math.min(P.drive,P.power/Math.max(4,u))/mass-cd*u*u/mass-.12;v[b]=Math.min(v[b],Math.sqrt(Math.max(0,u*u+2*acc*ds)));}
   for(let i=2*N;i>0;i--){const a=i%N,b=(i-1+N)%N,u=v[a],dec=mu*P.g*.85+(kd*mu*.85+cd)*u*u/mass;v[b]=Math.min(v[b],Math.sqrt(u*u+2*dec*ds));}}
