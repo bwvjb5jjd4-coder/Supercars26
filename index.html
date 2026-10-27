@@ -10730,8 +10730,9 @@ function setupSession(L){
   L.release=3;
  }else{
   // Straight to the grid: no formation lap.
+  for(const x of L.entrants){x.outlapHold=true;x.releaseDelay=0;}
   dcSetGrid();L.release=0;
-  for(const x of L.entrants){x.outlapHold=false;x.releaseDelay=0;x.dc33PitCommitted=false;}
+  for(const x of L.entrants)x.dc33PitCommitted=false;
  }
  try{window.UI58?.endIntro?.();}catch(_){}
  setupSplit(L);
@@ -10749,7 +10750,7 @@ dcPhysics=function(dt,input,auto=false){
  const [a,b]=CO.pl,done=x=>x.finished||x.retired;
  const want=done(a.x)&&!done(b.x)?1:0;
  if(want!==CO.primary)swapPrimary(want);
- if(CO.primary===0){CO.in2=p2Input();return basePhysics(dt,input,auto);}
+ if(CO.primary===0){CO.in2=p2Input();b.x.ic59Stuck=-1e9;/* not an AI car to the stuck-car recovery */return basePhysics(dt,input,auto);}
  // P1 is finished: P2 is the game's player for the rest of the session.
  return basePhysics(dt,CO.in2=input,auto);};
 // Keyboard keys only drive the player who paired the keyboard.
