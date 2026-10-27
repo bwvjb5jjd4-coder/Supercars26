@@ -124,6 +124,7 @@ body.co63-race #ui58-hud,body.co63-race #pt61-hud,body.co63-race .ui58-hud,body.
 .co63-hud .lights{position:absolute;left:50%;top:22%;transform:translateX(-50%);display:flex;gap:10px;background:rgba(5,6,8,.85);padding:10px 14px;border-radius:10px}
 .co63-hud .lights:empty{display:none}
 .co63-hud .lights i{width:26px;height:26px;border-radius:50%;background:#2a0e10}
+.co63-hud .mm{position:absolute;right:18px;top:14px;width:200px;height:140px;background:rgba(8,10,14,.62);border-radius:8px}
 .co63-hud .lights i.on{background:#ff2433;box-shadow:0 0 16px #ff2433}
 .co63-hud .lights.go i{background:#33e05a;box-shadow:0 0 16px #33e05a}
 #co63-pause{position:absolute;inset:0;display:grid;place-items:center;background:rgba(4,6,10,.72);z-index:20}
@@ -383,7 +384,7 @@ function setupSplit(L){const host=document.querySelector('.dc-driving');if(!host
  const wrap=document.createElement('div');wrap.id='co63-split';const c=document.createElement('canvas');wrap.appendChild(c);host.appendChild(wrap);
  const line=document.createElement('div');line.id='co63-line';host.appendChild(line);
  CO.view=c;CO.ctx2d=c.getContext('2d',{alpha:false,desynchronized:true});
- for(const i of [0,1]){const h=document.createElement('div');h.className='co63-hud h'+i;h.style.setProperty('--c',COLORS[i]);h.innerHTML=`<div class="tag"><i>P${i+1}</i><span><b class="nm"></b><small class="tm"></small></span></div><div class="pos"><span><small>POS</small> <b class="ps">–</b></span><span><small class="lpl">LAP</small> <em class="lp">–</em></span></div><div class="gap"></div><div class="lights"></div><div class="msg"></div><div class="rpm">${'<i></i>'.repeat(12)}</div><div class="dash"><div><div class="sp">0</div><small>KM/H</small></div><div class="g">N</div></div>`;host.appendChild(h);CO.pl[i].hud={root:h,nm:h.querySelector('.nm'),tm:h.querySelector('.tm'),ps:h.querySelector('.ps'),lp:h.querySelector('.lp'),lpl:h.querySelector('.lpl'),gap:h.querySelector('.gap'),lights:h.querySelector('.lights'),msg:h.querySelector('.msg'),sp:h.querySelector('.sp'),g:h.querySelector('.g'),rpm:[...h.querySelectorAll('.rpm i')],last:{}};}
+ for(const i of [0,1]){const h=document.createElement('div');h.className='co63-hud h'+i;h.style.setProperty('--c',COLORS[i]);h.innerHTML=`<div class="tag"><i>P${i+1}</i><span><b class="nm"></b><small class="tm"></small></span></div><div class="pos"><span><small>POS</small> <b class="ps">–</b></span><span><small class="lpl">LAP</small> <em class="lp">–</em></span></div><div class="gap"></div><div class="lights"></div><div class="msg"></div><div class="rpm">${'<i></i>'.repeat(12)}</div><div class="dash"><div><div class="sp">0</div><small>KM/H</small></div><div class="g">N</div></div><canvas class="mm" width="200" height="140"></canvas>`;host.appendChild(h);CO.pl[i].hud={root:h,nm:h.querySelector('.nm'),tm:h.querySelector('.tm'),ps:h.querySelector('.ps'),lp:h.querySelector('.lp'),lpl:h.querySelector('.lpl'),gap:h.querySelector('.gap'),lights:h.querySelector('.lights'),msg:h.querySelector('.msg'),sp:h.querySelector('.sp'),g:h.querySelector('.g'),rpm:[...h.querySelectorAll('.rpm i')],mm:h.querySelector('.mm').getContext('2d'),last:{}};}
  sc25Engine?.resize?.();}
 function teardownSplit(){document.body.classList.remove('co63-race');$id('co63-split')?.remove();$id('co63-line')?.remove();document.querySelectorAll('.co63-hud').forEach(e=>e.remove());CO.view=null;CO.ctx2d=null;}
 // gr27Camera smooths the chase camera with dt; P2's pass runs with dt 0 (so nothing else steps twice) and uses the real frame dt here.
@@ -410,8 +411,21 @@ dcRenderWorld=function(W,L,dt){
 function setText(h,k,v){if(h.last[k]!==v){h.last[k]=v;h[k].textContent=v;}}
 function setHtml(h,k,v){if(h.last[k]!==v){h.last[k]=v;h[k].innerHTML=v;}}
 function raceOrder(L){return [...L.entrants].sort((a,b)=>Number(a.retired)-Number(b.retired)||(a.finished&&b.finished?a.finishTime-b.finishTime:Number(b.finished)-Number(a.finished)||b.progress-a.progress));}
-let hudAt=0;
-function paintHud(L,W){const now=performance.now(),slow=now-hudAt>110;if(slow)hudAt=now;const order=slow&&L.stage==='race'?raceOrder(L):null;
+let hudAt=0,mapAt=0,mapBase=null;
+// Mini maps: the circuit outline is drawn once to an offscreen canvas, then each map is a blit plus one dot per car (~20 Hz).
+function mapFit(W,w,h){const b=W.bounds,sc=Math.min((w-24)/(b.maxX-b.minX),(h-24)/(b.maxZ-b.minZ)),ox=(w-(b.maxX-b.minX)*sc)/2,oy=(h-(b.maxZ-b.minZ)*sc)/2;return {X:x=>ox+(x-b.minX)*sc,Y:z=>oy+(z-b.minZ)*sc};}
+function paintMaps(L,W){if(!W?.samples?.length||!W.bounds)return;const w=200,h=140;
+ if(!mapBase||mapBase.src!==W.samples){const c=document.createElement('canvas');c.width=w;c.height=h;const g=c.getContext('2d'),f=mapFit(W,w,h);g.lineJoin='round';g.lineCap='round';
+  const path=()=>{g.beginPath();W.samples.forEach((s,i)=>{if(i%4)return;i?g.lineTo(f.X(s.p.x),f.Y(s.p.z)):g.moveTo(f.X(s.p.x),f.Y(s.p.z));});g.closePath();};
+  path();g.strokeStyle='rgba(0,0,0,.55)';g.lineWidth=7;g.stroke();path();g.strokeStyle='#c9d3dc';g.lineWidth=3.5;g.stroke();
+  const s0=W.samples[0]?.p;if(s0){g.fillStyle='#fff';g.fillRect(f.X(s0.x)-3,f.Y(s0.z)-3,6,6);}
+  mapBase={src:W.samples,c,f};}
+ const f=mapBase.f;
+ for(const i of [0,1]){const s=CO.pl[i],g=s.hud?.mm;if(!g)continue;g.clearRect(0,0,w,h);g.drawImage(mapBase.c,0,0);
+  for(const x of L.entrants){if(!x.pos||x.garage||x===CO.pl[0].x||x===CO.pl[1].x)continue;g.fillStyle=x.retired?'#6a6f78':'#e8edf2';g.beginPath();g.arc(f.X(x.pos.x),f.Y(x.pos.z),2.6,0,6.283);g.fill();}
+  // The other player in their colour, then this screen's player on top, larger with a white ring.
+  for(const j of [1-i,i]){const x=CO.pl[j].x;if(!x?.pos)continue;const r=j===i?6:4.2;g.beginPath();g.arc(f.X(x.pos.x),f.Y(x.pos.z),r,0,6.283);g.fillStyle=COLORS[j];g.fill();if(j===i){g.lineWidth=2;g.strokeStyle='#fff';g.stroke();}}}}
+function paintHud(L,W){const now=performance.now(),slow=now-hudAt>110;if(slow)hudAt=now;if(now-mapAt>48){mapAt=now;paintMaps(L,W);}const order=slow&&L.stage==='race'?raceOrder(L):null;
  for(const i of [0,1]){const s=CO.pl[i],h=s.hud,x=s.x;if(!h)continue;
   setText(h,'sp',String(Math.round(Math.abs(x.speed||x.v*3.6||0))));setText(h,'g',String(dcGear(x)));
   const rpm=x.ph47?.rpm??x.rpm,frac=Number.isFinite(rpm)?clamp((rpm-3000)/4600,0,1):clamp((Math.abs(x.v)%22)/22,0,1),lit=Math.round(frac*12);if(h.last.rpm!==lit){h.last.rpm=lit;h.rpm.forEach((e,k)=>{e.className=k<lit?('on'+(k>=9?' b':k>=6?' r':'')):'';});}
