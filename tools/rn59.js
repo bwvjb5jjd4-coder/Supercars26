@@ -176,8 +176,8 @@ function rnFrame(W,L){
  let wipe=false,lo=0,hi=0;const rate=L.wipers===2?5.8:L.wipers===1?2.5:0;
  if(mode==='glass'&&rnPolarGlass(W,S)){const a=W.sc30Wiper.rotation.z;if(rate){wipe=true;lo=Math.min(a,RN.lastAngle)-.03;hi=Math.max(a,RN.lastAngle)+.03;}RN.lastAngle=a;}
  else if(mode==='bonnet'){rnPolarBonnet(S);const a=rate?Math.sin(L.elapsed*rate)*1.03-.18:-1.53;if(rate){wipe=true;lo=Math.min(a,RN.lastAngle)-.03;hi=Math.max(a,RN.lastAngle)+.03;}RN.lastAngle=a;}
- if(dt>0)rnStep(S,P,I,dt,Math.abs(p?.v||0),wipe,lo,hi);
- rnDrawWater(W,S);
+ // Water beads only on the windscreen in the cockpit view; bonnet and chase cams keep a clear lens.
+ if(glass){if(dt>0)rnStep(S,P,I,dt,Math.abs(p?.v||0),wipe,lo,hi);rnDrawWater(W,S);}
  RN.mode=mode;
  const pl=W.sc30RainPlane;
  if(pl){if(rnPostOn(W)||!glass)pl.visible=false;else{const R=rnWater(W);if(pl.material!==R.fallback){pl.userData.rn59Old=pl.material;pl.material=R.fallback;}R.fallback.uniforms.uFog.value.copy(W.scene.fog?.color||RN.cc);pl.visible=true;}}
@@ -216,9 +216,8 @@ function rnPost(W,L,P){
   const pass=(src,w,h,dst)=>{K.quad.material=K.down;K.down.uniforms.tSrc.value=src;K.down.uniforms.texel.value.set(1/w,1/h);r.setRenderTarget(dst);r.render(K.scene,K.cam);};
   pass(P.rt.texture,P.w,P.h,K.a);pass(K.a.texture,K.a.width,K.a.height,K.b);pass(K.b.texture,K.b.width,K.b.height,K.c);
   r.setRenderTarget(K.s);r.setClearColor(0x000000,0);r.clear(true,false,false);
-  if(RN.mode==='glass'&&W.sc30RainPlane){const pl=W.sc30RainPlane,u=K.glassMat.uniforms;pl.updateWorldMatrix(true,false);K.glass.geometry=pl.geometry;K.glass.matrixWorld.copy(pl.matrixWorld);
+  if(RN.mode==='glass'&&R&&W.sc30RainPlane){const pl=W.sc30RainPlane,u=K.glassMat.uniforms;pl.updateWorldMatrix(true,false);K.glass.geometry=pl.geometry;K.glass.matrixWorld.copy(pl.matrixWorld);
    u.tG.value=R.G.texture;u.tDepth.value=P.rt.depthTexture;u.uRes.value.set(K.s.width,K.s.height);u.uNear.value=W.camera.near;u.uFar.value=W.camera.far;r.render(K.glassScene,W.camera);}
-  else{K.quad.material=K.copy;K.copy.uniforms.tG.value=R.G.texture;r.render(K.scene,K.cam);}
  }finally{r.setRenderTarget(prev);r.autoClear=auto;r.setClearColor(RN.cc,ca);}
  const u=P.mats.composite.uniforms,I=RN.I;
  u.rnOn.value=1;u.tWater.value=K.s.texture;u.tBlurA.value=K.a.texture;u.tBlurB.value=K.c.texture;u.rnTexB.value.set(1/K.c.width,1/K.c.height);
@@ -274,7 +273,7 @@ function rnInstall(){
  rf41MainDraw=function(W,L){try{if(L?.player)rnFrame(W,L);}catch(e){console.warn('rn59 rain frame',e);RN.I=0;}return main(W,L);};
  // Composite: blur and screen-space water, then gx55's composite with the rain block on.
  if(typeof gx55Materials==='function'){const gm=gx55Materials;gx55Materials=function(){const M=gm();try{rnPatchComposite(M.composite);}catch(e){console.warn('rn59 composite',e);}return M;};}
- if(typeof gx55Composite==='function'){const gc=gx55Composite;gx55Composite=function(W,L,P){const u=P?.mats?.composite?.uniforms;if(u?.rnOn){u.rnOn.value=0;if(RN.I>0&&RN.water&&L?.player){try{rnPost(W,L,P);}catch(e){console.warn('rn59 post',e);u.rnOn.value=0;}}}return gc(W,L,P);};}
+ if(typeof gx55Composite==='function'){const gc=gx55Composite;gx55Composite=function(W,L,P){const u=P?.mats?.composite?.uniforms;if(u?.rnOn){u.rnOn.value=0;if(RN.I>0&&L?.player){try{rnPost(W,L,P);}catch(e){console.warn('rn59 post',e);u.rnOn.value=0;}}}return gc(W,L,P);};}
  // Legacy canvas beads are replaced by the drop simulation.
  if(typeof dc36Windshield==='function'){const ws=dc36Windshield;dc36Windshield=function(W,L,dt){if(rnRain(L)){W.dc36RainAt=L.elapsed;W.dc36RainWeather=L.weather;}return ws(W,L,dt);};}
  // Standing water on the asphalt.
