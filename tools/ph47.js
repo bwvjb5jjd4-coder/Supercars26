@@ -251,14 +251,27 @@ SC25World.prototype.dispose=function(){const F=this.ph47Fx;if(F)for(const o of [
 
 // Presentation: smoothed ground tilt for every car; the player's body pitches and rolls
 // from the solver's real accelerations, kerbs shake the chassis and rollovers lift it.
+// Origin height that puts the four tyre contact patches (sampled by gr27RoadPose) on the road for the car's current rotation.
+function ph47Seat(x,car){
+ const C=car.userData.gr27Contacts;if(!C?.points||C.points.length!==4)return car.position.y;
+ const seen=new Set(),pivots=[];for(const w of car.userData.dc35Wheels||[])if(!seen.has(w.pivot.name)){seen.add(w.pivot.name);pivots.push(w.pivot.position);}
+ if(pivots.length!==4)return car.position.y;const v=PH47_TMP.seat||(PH47_TMP.seat=new THREE.Vector3()),ford=x.team.manufacturer==='Ford';let sum=0,top=-Infinity;
+ for(let i=0;i<4;i++){const c=pivots[i],r=ford?(c.z>0?.342:.308):.338;v.set(c.x,c.y-r,c.z).applyQuaternion(car.quaternion);const o=C.points[i]-v.y;sum+=o;top=Math.max(top,o);}
+ const fit=Math.max(sum/4,top-.03);return Math.abs(fit-car.position.y)<1.2?fit:car.position.y;
+}
 const ph47Present=dc35Present;
 dc35Present=function(W,L,dt){
  ph47Present(W,L,dt);const T=THREE;
  for(const x of L.entrants){const car=W.carNodes.get(x.d.id);if(!car?.userData.dc35Car||!x.pos)continue;
   const yawQ=PH47_TMP.yaw.setFromAxisAngle(PH47_UP,x.yaw+(x.sc3Crash?.yaw||0)),tilt=PH47_TMP.tilt.copy(yawQ).invert().premultiply(car.quaternion);
-  const u=car.userData;if(!u.ph47Tilt||dt>.5||W.cameraCut)u.ph47Tilt=tilt.clone();else u.ph47Tilt.slerp(tilt,1-Math.exp(-dt*14));
-  if(!u.ph47Y||Math.abs(u.ph47Y-car.position.y)>1)u.ph47Y=car.position.y;else u.ph47Y+=(car.position.y-u.ph47Y)*(1-Math.exp(-dt*20));
-  car.quaternion.copy(u.ph47Tilt).multiply(yawQ);car.position.y=u.ph47Y;
+  const u=car.userData;if(!u.ph47Tilt||dt>.5||W.cameraCut)u.ph47Tilt=tilt.clone();else u.ph47Tilt.slerp(tilt,1-Math.exp(-dt*24));
+  car.quaternion.copy(u.ph47Tilt).multiply(yawQ);
+  // Re-seat the wheels on the road for the smoothed tilt, then follow the road's rise and fall
+  // exactly (only jitter is smoothed), so a car climbing the Mountain no longer lags into the tarmac.
+  const target=ph47Seat(x,car);
+  if(!u.ph47Y||dt>.5||W.cameraCut||Math.abs(u.ph47Y-target)>1)u.ph47Y=target;
+  else{const rise=target-(u.ph47T??target);if(Math.abs(rise)<.5)u.ph47Y+=rise;u.ph47Y+=(target-u.ph47Y)*(1-Math.exp(-dt*30));u.ph47Y=Math.max(u.ph47Y,target-.01);}
+  u.ph47T=target;car.position.y=u.ph47Y;
   const s=x.ph47;
   if(s&&x.ph47On){
    const pitch=clamp(s.ax*.0042,-.045,.04),roll=clamp(s.ay*.0036,-.06,.06),bump=s.kerb&&Math.abs(x.v)>5?Math.sin(L.elapsed*61)*.012*s.kerb/2:0,grassBump=s.grass&&Math.abs(x.v)>4?Math.sin(L.elapsed*23+1.3)*.01*s.grass/2:0;
