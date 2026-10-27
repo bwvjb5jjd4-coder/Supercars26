@@ -9308,6 +9308,7 @@ function holdPlayer(L,p){
 }
 
 /* ---------- Wreck clearing ---------- */
+function queued(L,x){const W=sc25Engine,q=W.at(x.progress);return L.entrants.some(y=>{if(y===x||y.garage||y.retired||!y.pos)return false;const dx=y.pos.x-q.p.x,dz=y.pos.z-q.p.z,along=dx*q.v.x+dz*q.v.z,side=dx*q.n.x+dz*q.n.z-(x.lane||0);return along>0&&along<14&&Math.abs(side)<3.2;});}
 function clearWrecks(L,dt){
  const W=sc25Engine,racing=L.stage==='race'&&L.phase==='racing',lineup=L.ic59Sc?.phase==='lineup';
  for(const x of L.entrants){
@@ -9315,8 +9316,10 @@ function clearWrecks(L,dt){
   if(x===L.player&&!L.dc33Auto)continue;
   if(x.retired&&!x.garage&&!x.finished){x.ic59Out=(x.ic59Out||0)+dt;if(x.ic59Out>.8){x.garage=true;x.v=x.speed=0;}continue;}
   if(!racing||x.retired||x.finished||x.pitStage||x.outlapHold||(x.releaseDelay||0)>0||lineup&&!x.ic59Through){x.ic59Stuck=0;continue;}
-  if((x.v||0)<2.5)x.ic59Stuck=(x.ic59Stuck||0)+dt;else x.ic59Stuck=0;
-  if(x.ic59Stuck>1.6){x.ic59Stuck=0;
+  // A car crawling in traffic (the start, a queue into a hairpin) is not stuck: only a car with
+  // clear road ahead counts, never in the first 12 s after the start, and only after 3 s.
+  const go=L.ic59Go??=L.elapsed;if((x.v||0)<2.5&&L.elapsed-go>12&&!queued(L,x))x.ic59Stuck=(x.ic59Stuck||0)+dt;else x.ic59Stuck=0;
+  if(x.ic59Stuck>3){x.ic59Stuck=0;
    if((x.bodyDamage||0)>=70){x.retired=true;x.garage=true;x.v=x.speed=0;dcRadio('Race control','Car #'+x.d.number+' retired and recovered.');continue;}
    calm(x);const lanes=[0,-3,3,-5.5,5.5];x.lane=lanes.find(l=>dc32LaneClear(x,l))??0;x.progress+=4/lenM(L);x.v=Math.max(x.v,L.scTrain?10:16);place(x);x.ic59Ghost=4;x.dc33Previous=null;
   }

@@ -1,13 +1,17 @@
-"""Difficulty tiers (hd64): refresh the AI62 script in place from tools/ai62.js, route the race
+"""Difficulty tiers (hd64): refresh the AI62 and IC59 scripts in place from tools/ai62.js, route the race
 pace and championship target through hd64, and embed tools/hd64.js as the last script."""
 import re,pathlib
 root=pathlib.Path(__file__).resolve().parent.parent
 html=(root/'index.html').read_text()
 ai62=(root/'tools/ai62.js').read_text()
+ic59=(root/'tools/ic59.js').read_text()
 js=(root/'tools/hd64.js').read_text()
 m=re.search(r'(<script id="ai62-physics">\n).*?(</script>)',html,flags=re.S)
 assert m
 html=html[:m.start()]+m.group(1)+ai62+m.group(2)+html[m.end():]
+m=re.search(r'(<script id="ic59-incidents">\n).*?(</script>)',html,flags=re.S)
+assert m
+html=html[:m.start()]+m.group(1)+ic59+m.group(2)+html[m.end():]
 html=re.sub(r'<script id="hd64-difficulty">.*?</script>','',html,flags=re.S)
 for old,new in [
  ("D.settings.difficulty==='Easy'?.93:D.settings.difficulty==='Hard'?1.035:1)}","hd64Pace())}"),
