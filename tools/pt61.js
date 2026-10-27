@@ -16,7 +16,7 @@
      and AI teams swap too. */
 (()=>{
 'use strict';
-const LIMIT=60,FLOW=4.2,TOL=61.2,MAXB=300,MAXC=26,MAXL=380,MAXS=480,MAXCARS=4;
+const CLEAR=2.3,LIMIT=60,FLOW=4.2,TOL=61.2,MAXB=300,MAXC=26,MAXL=380,MAXS=480,MAXCARS=4;
 const T=THREE;
 /* ---------- Co-drivers (team id → [seat 0, seat 1]) ---------- */
 const CO_NAMES={
@@ -99,11 +99,15 @@ const baseNear=dcNearestPose;
 dcNearestPose=function(x){const q=baseNear(x),L=live;if(q?.pit&&q.pitLimited&&L?.dc&&x===L.player&&!L.dc33Auto&&!L.pt61?.lim)q.pitLimited=false;return q;};
 const scratch={};
 const baseManual=dcManualStep;
-dcManualStep=function(x,dt,input){const L=live;if(!L?.dc||x!==L.player||L.dc33Auto||!L.pt61?.lim||!input)return baseManual(x,dt,input);
+dcManualStep=function(x,dt,input){const L=live;if(!L?.dc||x!==L.player||L.dc33Auto||!input)return baseManual(x,dt,input);
+ if(x.pitStage&&x.dc32Serviced&&!x.pt61Released&&crewClearing(x)){Object.assign(scratch,input);scratch.throttle=0;scratch.brake=1;scratch.steer=0;baseManual(x,dt,scratch);x.v=x.speed=0;return;}
+ if(!L.pt61?.lim)return baseManual(x,dt,input);
  const lim=LIMIT/3.6;Object.assign(scratch,input);if(x.v>lim+.15)scratch.throttle=0;else if(x.v>lim-.5)scratch.throttle=Math.min(scratch.throttle||0,.3);
  baseManual(x,dt,scratch);if(x.v>lim&&x.v<lim+1.2){x.v=lim;x.speed=Math.hypot(x.v,x.latV||0)*3.6;}};
 
 /* ---------- Per-step rules ---------- */
+// The crew step back to the wall after the work; the car stays on the brakes until they are clear.
+function crewClearing(x){const s=x.pt61Svc;return !!s?.done&&live.elapsed-s.doneAt<CLEAR;}
 function laneTraffic(x){const L=live,my=x.pitDistance||0;for(const y of L.entrants){if(y===x||!y.pitStage||y.garage||!y.pos||(y.v||0)<2||y.dc32Servicing)continue;if(Math.abs(y.pitLane||0)>3.6)continue;const d=my-(y.pitDistance||0);if(d>-4&&d<48)return y;}return null;}
 function playerRules(L,dt){
  const W=sc25Engine,x=L.player,S=st();if(!x||!W?.pit||x.retired||x.finished)return;
@@ -124,8 +128,9 @@ function playerRules(L,dt){
  S.board=null;
  if(stage&&!auto){const box=W.pit.bays[x.team.id],long=(q.f-box.f)*W.pit.length;
   if(x.dc32Servicing)S.board='stop';
-  else if(x.dc32Serviced&&x.pt61Mark&&!x.pt61Released){const traffic=laneTraffic(x),hold=!!traffic||!!L.ic59Repair;S.board=hold?'hold':'go';
-   if(S.board!==S.lastBoard)say('Crew chief',hold?(traffic?'Hold, hold. Car coming down the lane.':'Hold there.'):'Clear. Go, go, go!',hold?null:{cls:'go',tag:'RELEASE',text:'Go go go',ms:1800});
+  else if(x.dc32Serviced&&x.pt61Mark&&!x.pt61Released){const clearing=crewClearing(x),traffic=clearing?null:laneTraffic(x),hold=clearing||!!traffic||!!L.ic59Repair;S.board=hold?(clearing?'crew':'hold'):'go';S.hold=traffic?'traffic':clearing?'crew':L.ic59Repair?'sc':null;
+   if(S.board==='go'&&S.lastBoard!=='go')x.pt61GoAt=L.elapsed;
+   if(S.board!==S.lastBoard&&S.board!=='crew')say('Crew chief',hold?(traffic?'Hold, hold. Car coming down the lane.':'Hold there.'):'Lollipop up. Go, go, go!',hold?null:{cls:'go',tag:'RELEASE',text:'Go go go',ms:1800});
    if(Math.hypot(x.pos.x-x.pt61Mark.x,x.pos.z-x.pt61Mark.z)>1.6){x.pt61Released=true;if(traffic&&!L.ic59Repair)penalise(x,5,'Unsafe release.');}}
   else if(!x.dc32Serviced&&(x.pitNow||L.stage==='race'))S.board=Math.abs(long)<60?'in':null;
  }
@@ -156,7 +161,7 @@ function rivalsAndCodrivers(L,dt){
 const basePitStep=dcPitStep;
 dcPitStep=function(x,dt,input){const L=live;
  if(L?.dc&&(x!==L.player||L.dc33Auto)&&x.dc32Serviced&&x.pt61Mark&&!x.pt61Released&&x.pt61Svc?.done){
-  const wait=L.elapsed-x.pt61Svc.doneAt<.35||!!laneTraffic(x);x.pt61AiHold=wait;
+  const wait=crewClearing(x)||!!laneTraffic(x);if(x.pt61AiHold&&!wait)x.pt61GoAt=L.elapsed;x.pt61AiHold=wait;
   if(wait){x.v=x.speed=0;x.braking=true;return;}
   if(Math.hypot(x.pos.x-x.pt61Mark.x,x.pos.z-x.pt61Mark.z)>1.6)x.pt61Released=true;}
  return basePitStep(x,dt,input);};
@@ -188,7 +193,7 @@ dc32BoardCanvas=function(W,L){baseBoard(W,L);if(!W?.dc32BoardTexture||!isBathurs
 const baseMakePit=SC25World.prototype.makePit;
 SC25World.prototype.makePit=function(){baseMakePit.call(this);const W=this;if(!W.pit?.dc32)return;
  // The old static crew blocks at each box are replaced by the animated crew below.
- for(const k of Object.keys(W.batches||{}))if(k.startsWith('dc32-crew-'))delete W.batches[k];
+ for(const k of Object.keys(W.batches||{}))if(k.startsWith('dc32-crew-')||k.startsWith('pit-crew-'))delete W.batches[k];
  const side=W.pit.side,white=W.mat('#f4f3ea',.6),N=W.pit.samples.length-1;
  // Solid lines you may not cross, on the track side of pit entry and exit.
  W.ribbon(W.pit.samples.slice(0,Math.round(N*.2)),-side*3.95,.34,white,.088);
@@ -205,6 +210,8 @@ SC25World.prototype.makePit=function(){baseMakePit.call(this);const W=this;if(!W
  const cols=new Map(),helm=new Map();for(const t of S.teams){cols.set(t.id,new T.Color(t.livery?.primary||'#c33'));helm.set(t.id,new T.Color(t.livery?.secondary||'#eeeeee'));}
  W.pt61={boxes,crew,cyl,limb,sph,cols,helm,c:{skin:new T.Color('#c99a7c'),boot:new T.Color('#121316'),glove:new T.Color('#1b1c20'),visor:new T.Color('#0a0c10'),helmet:new T.Color('#16181c'),gun:new T.Color('#3b4046'),can:new T.Color('#c8ccd0'),ext:new T.Color('#d4201c'),jack:new T.Color('#e8bd45'),tyre:new T.Color('#141414'),red:new T.Color('#e01e1e'),green:new T.Color('#1fd060'),white:new T.Color('#eeeeee')}};
 };
+const baseUpdateCrews=SC25World.prototype.updateCrews;
+SC25World.prototype.updateCrews=function(dt){if(this.pt61){if(this.crewMeshes&&!this.pt61OldHidden){for(const o of Object.values(this.crewMeshes))o.visible=false;this.pt61OldHidden=true;}return;}return baseUpdateCrews?.call(this,dt);};
 const baseDispose=SC25World.prototype.dispose;
 SC25World.prototype.dispose=function(){const P=this.pt61;if(P){for(const m of [P.crew,P.cyl,P.limb,P.sph]){m.removeFromParent();m.geometry.dispose();m.material.dispose();}this.pt61=null;}return baseDispose.call(this);};
 const basePose=SC25World.prototype.pose;
@@ -277,7 +284,7 @@ function travel(i,cx,cz,workYaw){
  const delay=i*.06+(i===6||i===7?.25:0),dur=Math.max(.4,dist/4.2),t=RT0>0?RNOW-RT0-delay:-1;
  let k=0,yaw=RWAIT,amp=0,phase=0,arr=0,back=false;
  if(t>0){k=Math.min(1,t/dur);amp=clamp(t/.18,0,1)*clamp((dur-t)/.2+.15,0,1);phase=dist*k/1.15*Math.PI;arr=clamp((t-dur)/.35,0,1);}
- if(RBACK>=0){const tb=RNOW-RBACK-delay*.5,bd=Math.max(.6,dist/1.7);if(tb>0){const kb=Math.min(1,tb/bd);k=1-kb;arr=0;back=true;amp=.55*clamp(tb/.2,0,1)*clamp((bd-tb)/.25,0,1);phase=dist*kb/.9*Math.PI;}}
+ if(RBACK>=0){const tb=RNOW-RBACK-delay*.5,bd=Math.max(.6,dist/4.4);if(tb>0){const kb=Math.min(1,tb/bd);k=1-kb;arr=0;back=true;amp=.85*clamp(tb/.15,0,1)*clamp((bd-tb)/.2+.1,0,1);phase=dist*kb/1.1*Math.PI;}}
  const u=ease(k)*dist;let px,pz,hx,hz;
  if(u<d1||d2<.01){const f=d1>.01?u/d1:1;px=lerp(ax,mx,f);pz=lerp(az,mz,f);hx=mx-ax;hz=mz-az;}else{const f=(u-d1)/d2;px=lerp(mx,kx,f);pz=lerp(mz,kz,f);hx=kx-mx;hz=kz-mz;}
  // Face the way they move (turning smoothly at the corner), the job at the spot and the lane at the wall.
@@ -295,8 +302,9 @@ function crewFrame(W,L){
  for(const x of L.entrants){
   if(!x.pitStage||x.garage||!x.pos||x.retired){x.pt61CrewT0=0;continue;}const B=Pc.boxes[x.team.id];if(!B)continue;
   const dx=x.pos.x-B.x,dz=x.pos.z-B.z,d2=dx*dx+dz*dz,s=x.pt61Svc,recent=s?.done&&now-s.doneAt<7;
-  const coming=!x.dc32Serviced&&(x.pitStage==='entry'||x===L.player&&(x.pitNow||L.stage==='race'));
-  if(coming&&!x.pt61CrewT0&&(d2<28*28||x.dc32Servicing))x.pt61CrewT0=now;
+  const coming=!x.dc32Serviced&&(x.pitStage==='entry'||x===L.player);
+  if(x.pt61CrewT0&&coming&&!x.dc32Servicing&&(x.pos.x-B.x)*B.fx+(x.pos.z-B.z)*B.fz>9)x.pt61CrewT0=0;
+  if(!x.pt61CrewT0&&(coming&&d2<28*28||x.dc32Servicing))x.pt61CrewT0=now;
   const wanted=x.dc32Servicing||recent||coming&&d2<130*130;
   if(!wanted)continue;const cd=(cam.x-B.x)**2+(cam.z-B.z)**2;if(cd>240*240)continue;
   let k=-1;for(let i=0;i<MAXCARS;i++)if(cd<PD[i]){k=i;break;}if(k<0)continue;
@@ -310,7 +318,7 @@ function crewFor(W,L,x,Pc,C,now){
  const B=Pc.boxes[x.team.id],suit=Pc.cols.get(x.team.id)||C.red,helm=Pc.helm.get(x.team.id)||C.white,s0=x.pt61Svc,s=s0&&(x.dc32Servicing||s0.done&&now-s0.doneAt<7)?s0:null,waitYaw=Math.atan2(-B.gx,-B.gz);
  const t=s?now-s.t0-s.extra:-1,fuelOn=s&&!s.done&&t>=0&&t<s.tFuel,tyreT=s?t-s.tFuel:-1,tyreOn=s&&!s.done&&s.tTyre&&tyreT>=0&&tyreT<s.tTyre;
  const yaw=x.yaw,c=Math.cos(yaw),sn=Math.sin(yaw),g=Math.sign(c*B.gx-sn*B.gz)||1,carOn=s&&(x.dc32Servicing||s.done);
- RX=x;RB=B;RG=g;RNOW=now;RT0=x.pt61CrewT0||0;RBACK=s?.done?s.doneAt+.5:-1;RCAR=carOn?clamp((now-s.t0)/.5,0,1):0;RSUIT=suit;RHELM=helm;RC=C;RWAIT=waitYaw;
+ RX=x;RB=B;RG=g;RNOW=now;RT0=x.pt61CrewT0||0;RBACK=s?.done?s.doneAt+.15:-1;RCAR=carOn?clamp((now-s.t0)/.5,0,1):0;RSUIT=suit;RHELM=helm;RC=C;RWAIT=waitYaw;
  const H=Math.PI/2,midT=s&&s.tTyre?s.tTyre*.55:0;
  // Wheel gunners, each rolling a fresh tyre out beside them.
  for(let w=0;w<4;w++){const sx=w&1?-1:1,az=w<2?1.42:-1.36,wy=yaw+(sx>0?-H:H);travel(w,sx*1.32,az,wy);
@@ -329,9 +337,11 @@ function crewFor(W,L,x,Pc,C,now){
  if(fuelOn&&RARR>.5){carPt(x,g*1.02,-1.05);bx(WX,B.y+1.2,WZ,0,yaw,-g*.85,.27,.8,.27,C.can);}else bx((HX+GX)/2,(HY+GY)/2-.3,(HZ+GZ)/2,0,RYAW,0,.25,.7,.25,C.can);
  travel(7,g*1.95,-2.15,yaw+(g>0?-H-.5:H+.5));pose(fuelOn?P_EXT:P_STAND);person(RPX,B.y+.04,RPZ,RYAW,suit,helm,C);bx(HX,HY-.12,HZ,0,RYAW,0,.16,.46,.16,C.ext);
  // Lollipop man in front of the box: waves the car in, board red until release, raised green on go.
- const go=s?.done&&(x!==L.player||L.dc33Auto?!x.pt61AiHold:L.pt61?.board==='go'||x.pt61Released),stopped=x.dc32Servicing||s?.done&&!go;
+ const go=s?.done&&(x!==L.player||L.dc33Auto?!x.pt61AiHold&&!crewClearing(x):L.pt61?.board==='go'||x.pt61Released),stopped=x.dc32Servicing||s?.done&&!go;
+ const away=go&&x.pt61GoAt?clamp((now-x.pt61GoAt-.35)/.9,0,1):0;
  const approach=!x.dc32Servicing&&!s?.done,wave=approach?Math.sin(now*6)*.5:0,arm=go?-3.0:stopped?-1.5:-2.4+wave;
- boxPt(B,4.2,0);const ly=Math.atan2(-B.fx,-B.fz);blendPose(P_STAND,P_STAND,0);POSE[7]=arm;POSE[8]=-.05;POSE[5]=approach?-2.2-wave:.1;POSE[6]=-.3;person(WX,B.y+.04,WZ,ly,suit,helm,C);
+ boxPt(B,4.2,0);const l0x=WX,l0z=WZ;boxPt(B,4.2,4.4);const lpx=lerp(l0x,WX,ease(away)),lpz=lerp(l0z,WZ,ease(away));WX=lpx;WZ=lpz;
+ const ly=away>0&&away<1?Math.atan2(B.gx,B.gz):Math.atan2(-B.fx,-B.fz);if(away>0&&away<1){runPose(away*9,.5);blendPose(P_STAND,TMP,1);}else blendPose(P_STAND,P_STAND,0);POSE[7]=away>=1?.1:arm;POSE[8]=-.05;POSE[5]=approach?-2.2-wave:.1;POSE[6]=-.3;person(WX,B.y+.04,WZ,ly,suit,helm,C);
  const cl=Math.cos(ly),sl=Math.sin(ly),ph=.75,oy=-ph*Math.cos(arm),oz=-ph*Math.sin(arm);
  bx(HX+oz*sl/2,HY+oy/2,HZ+oz*cl/2,arm,ly,0,.035,ph,.035,C.white);
  cy(HX+oz*sl,HY+oy,HZ+oz*cl,Math.PI/2,ly,0,.3,.035,go?C.green:C.red);
@@ -365,13 +375,17 @@ function paintHud(force){
  else if(x.pitStage&&x.dc33PitCommitted&&!auto&&!x.dc32Servicing)parts.push(`<div class="off">Limiter off · RB / L</div>`);
  if(x.pitStage&&!auto){const box=W.pit.bays[x.team.id],q=dc32PitNear(W,x.pos),long=(box.f-q.f)*W.pit.length,lat=q.lane*W.pit.side-8.1;
   if(x.dc32Servicing&&x.pt61Svc){const s=x.pt61Svc,t=L.elapsed-s.t0,ph=t<s.extra?'Back on marks':t<s.extra+s.tFuel?'Fuel '+Math.round(s.litres)+' L':t<s.extra+s.tFuel+s.tTyre?'Tyres':s.tSwap&&t<s.tSwap?'Driver change':s.tRep?'Repairs':'Checks';parts.push(`<div><span class="lp"></span>${ph} <b>${Math.max(0,x.pitClock||0).toFixed(1)}</b></div>`);}
-  else if(S.board==='hold'||S.board==='go')parts.push(`<div class="${S.board==='go'?'ok':''}"><span class="lp ${S.board==='go'?'go':''}"></span>${S.board==='go'?'Go go go':'Hold · traffic'}</div>`);
+  else if(S.board==='hold'||S.board==='go'||S.board==='crew')parts.push(`<div class="${S.board==='go'?'ok':''}"><span class="lp ${S.board==='go'?'go':''}"></span>${S.board==='go'?'Lollipop up · go':S.board==='crew'?'Crew clearing · hold':'Hold · car coming'}</div>`);
   else if(S.board==='in'||!x.dc32Serviced&&Math.abs(long)<80){const on=Math.abs(long)<.9&&Math.abs(lat)<.8;parts.push(`<div class="${on?'ok':''}">${on?'On the marks · stop':`Box <b>${long>0?long.toFixed(long<10?1:0)+' m':'over '+(-long).toFixed(1)+' m'}</b>${Math.abs(lat)>.8&&Math.abs(long)<25?` · ${arrow(x,lat)} ${Math.abs(lat).toFixed(1)} m`:''}`}</div>`);}
  }
  if(isBathurstRace(L)&&L.started){const co=coDriver(x);if(co){const req=coReq(L),done=x.pt61CoLaps||0;parts.push(`<div class="${x.pt61Co?'co':''}">${x.pt61Co?surname(co.name)+' driving':'Co-driver '+surname(co.name)} <b>${done}/${req}</b>${L.pitPlan?.swap?' · swap next stop':''}</div>`);}}
  const html=parts.join('');if(html!==last||force){last=html;hud.innerHTML=html;}hud.hidden=!html;
 }
 setInterval(paintHud,100);
+
+const baseHud=dcPaintHUD;
+dcPaintHUD=function(...a){const r=baseHud.apply(this,a);try{const L=live,x=L?.player,el=document.getElementById('dc-status');if(L?.dc&&x?.pitStage&&el&&!L.dc33Auto){const S=L.pt61||{},s=x.pt61Svc;
+ el.textContent=x.dc32Servicing?'PIT STOP · '+Math.ceil(x.pitClock||0)+'s · HOLD BRAKE':x.dc32Serviced&&!x.pt61Released?(S.board==='crew'?'CREW CLEARING · WAIT FOR THE LOLLIPOP':S.board==='hold'?'LOLLIPOP DOWN · CAR COMING · HOLD':'LOLLIPOP UP · GO · FOLLOW PIT EXIT'):(S.lim?'PIT LIMITER ON':'PIT LIMITER OFF · RB / L')+' · '+(x.dc32Serviced?'FOLLOW PIT EXIT':'STOP ON YOUR MARKS');}}catch(_){}return r;};
 
 /* ---------- Input: RB / L toggles the limiter ---------- */
 let prevRB=false;
