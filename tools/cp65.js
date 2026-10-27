@@ -95,7 +95,8 @@ sc25Car=function(E,team,driver){
  // Only cockpits that got the in55 centre screen (the player's car, and player 2's in Co-Op).
  let cockpit=false;car.traverse(o=>{if(o.name==='IN55 centre screen')cockpit=true;});
  if(!cockpit)return car;
- try{cp65Wheel(E,car);cp65Column(E,car);const skin=sc27LiveryProfile(team,driver);car.userData.cp65Logo=cp65Logo(make,skin.key,team,skin.brand);}catch(e){console.warn('CP65 cockpit',e);}
+ try{cp65Wheel(E,car);cp65Column(E,car);
+  if(CP65_SCREEN_X[make]!=null)car.traverse(o=>{if(o.name==='IN55 centre screen'||o.name==='IN55 dash sponsor')o.position.x=CP65_SCREEN_X[make];});const skin=sc27LiveryProfile(team,driver);car.userData.cp65Logo=cp65Logo(make,skin.key,team,skin.brand);}catch(e){console.warn('CP65 cockpit',e);}
  return car;
 };
 
@@ -157,4 +158,26 @@ dc36DrawDash=function(W,L){
  c.fillStyle=L.scTrain?'#f2c230':p.pitStage?'#5aa9ff':'#1f3a44';c.fillRect(24,h-38,w-48,8);
  const sh=c.createLinearGradient(0,0,w,h);sh.addColorStop(0,'rgba(255,255,255,.07)');sh.addColorStop(.35,'rgba(255,255,255,0)');sh.addColorStop(1,'rgba(255,255,255,.02)');c.fillStyle=sh;c.fillRect(0,0,w,h);
  W.dc35DashTex.needsUpdate=true;
+};
+
+// Cockpit eye position by body model (car space). The base camera picks the eye from the team's
+// make, and the Falcon's eye sat further back and higher than the ZB's, so it saw a narrower
+// slice of windscreen (-7 to +8 degrees straight ahead against the ZB's -5 to +15.5).
+// The Falcon eye now gives -4.5 to +13.5.
+const CP65_EYE={Ford:[.37,1.105,.10]}; // the ZB keeps the base camera
+// From the Falcon's new eye the centre screen ran off the right of the view, so it moves inboard.
+const CP65_SCREEN_X={Ford:-.035};
+const cp65Camera=gr27Camera;
+gr27Camera=function(W,L,dt){
+ const r=cp65Camera.apply(this,arguments);
+ try{
+  const p=L?.player,car=p&&W.carNodes.get(p.d.id),eye=CP65_EYE[car?.userData?.make];
+  if(sc25Camera==='onboard'&&eye){
+   const spec=DC35_ASSETS?.cars[p.team.manufacturer]?.spec,base=[.37,DC37_EYE_HEIGHT[p.team.manufacturer]??(spec?spec.H-.17:eye[1]),.045];
+   const body=D.settings.cameraMotion!==false?car.userData.dc35Chassis[0]:car,T=THREE;
+   const shift=new T.Vector3(eye[0]-base[0],eye[1]-base[1],eye[2]-base[2]).transformDirection(body.matrixWorld).multiplyScalar(Math.hypot(eye[0]-base[0],eye[1]-base[1],eye[2]-base[2]));
+   W.camera.position.add(shift);W.camera.updateMatrixWorld();
+  }
+ }catch(e){}
+ return r;
 };
