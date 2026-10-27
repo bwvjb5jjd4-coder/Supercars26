@@ -85,6 +85,7 @@ const css=document.createElement('style');css.id='ui58-style';css.textContent=`
 .u58-tile .num{position:absolute;top:18px;left:22px;font:700 13px 'UI Rajdhani',sans-serif;letter-spacing:.2em;color:var(--u58-red)}
 .u58-tile .ico{position:absolute;top:50px;left:22px;width:46px;height:46px;color:#fff;opacity:.8}
 .u58-tile strong{position:relative;display:block;font:700 clamp(19px,1.9vw,36px)/.95 'UI Rajdhani',sans-serif;font-style:italic;text-transform:uppercase;letter-spacing:.01em;overflow-wrap:anywhere}
+.u58-rail:has(.u58-tile:nth-child(7)) .u58-tile strong{font-size:clamp(14px,1.3vw,32px);overflow-wrap:normal}
 .u58-tile small{position:relative;display:block;margin-top:8px;color:#cfd4df;font-size:12px;line-height:1.45;max-height:0;opacity:0;overflow:hidden;transition:max-height .3s,opacity .3s}
 .u58-tile:focus small,.u58-tile.ui26-pad-focus small,.u58-tile:hover small{max-height:60px;opacity:1}
 .u58-tile:after{content:'';position:absolute;left:0;right:0;bottom:0;height:4px;background:var(--u58-red);transform:skewX(6deg) scaleX(0);transform-origin:left;transition:transform .3s}
@@ -195,7 +196,7 @@ document.addEventListener('focusin',e=>{if(menuOpen()&&performance.now()-lastNav
 document.addEventListener('click',e=>{if(menuOpen()&&e.target.closest?.('button,summary'))sfx('confirm');},true);
 
 /* ---------- Title screen and tile main menu ---------- */
-const ICON={career:'<path d="M8 40V8m0 2c10-7 18 7 30 0v20c-12 7-20-7-30 0"/>',instant:'<path d="M27 4 10 27h13l-3 17 18-24H25z"/>',test:'<circle cx="24" cy="26" r="15"/><path d="M24 26l8-7M24 6v5M18 4h12"/>',garage:'<path d="M5 20 24 7l19 13v21H5z"/><path d="M13 41V27h22v14M13 33h22"/>',champ:'<path d="M15 6h18v9a9 9 0 0 1-18 0zM15 9H8a6 6 0 0 0 7 8m18-8h7a6 6 0 0 1-7 8M24 24v8m-8 9h16l-2-9H18z"/>',settings:'<circle cx="24" cy="24" r="6"/><path d="M24 4v6m0 28v6M4 24h6m28 0h6M10 10l4 4m20 20 4 4M10 38l4-4m20-20 4-4"/>'};
+const ICON={career:'<path d="M8 40V8m0 2c10-7 18 7 30 0v20c-12 7-20-7-30 0"/>',instant:'<path d="M27 4 10 27h13l-3 17 18-24H25z"/>',coop:'<circle cx="16" cy="15" r="6"/><circle cx="32" cy="15" r="6"/><path d="M5 40c0-8 5-13 11-13s11 5 11 13M21 40c0-8 5-13 11-13s11 5 11 13"/>',test:'<circle cx="24" cy="26" r="15"/><path d="M24 26l8-7M24 6v5M18 4h12"/>',garage:'<path d="M5 20 24 7l19 13v21H5z"/><path d="M13 41V27h22v14M13 33h22"/>',champ:'<path d="M15 6h18v9a9 9 0 0 1-18 0zM15 9H8a6 6 0 0 0 7 8m18-8h7a6 6 0 0 1-7 8M24 24v8m-8 9h16l-2-9H18z"/>',settings:'<circle cx="24" cy="24" r="6"/><path d="M24 4v6m0 28v6M4 24h6m28 0h6M10 10l4 4m20 20 4 4M10 38l4-4m20-20 4-4"/>'};
 const icon=k=>`<svg class="ico" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">${ICON[k]}</svg>`;
 function profile(){try{if(!hasCareer())return null;const p=dcPlayer(),t=dcTeam();return {name:p.name,number:p.number,team:t.name,year:D.year,colour:t.livery?.primary};}catch(_){return null;}}
 function carArt(n){return ASSET.cars?.[String(n)]||ASSET.car;}
@@ -207,6 +208,7 @@ function renderTitle(){portal.classList.add('u58-on');const was=$('ui26-enter'),
 function tiles(){const p=profile(),me=p?carArt(p.number):ASSET.car,list=[];
  list.push({k:'career',big:true,title:p?'Continue career':'Driver career',sub:p?`${p.name} · #${p.number} · ${p.team} · Season ${p.year}`:'Make your name, choose your seat and build a career.',art:me,car:true,go:()=>UI26.play('career')});
  list.push({k:'instant',title:'Instant race',sub:'Any car, any circuit, your conditions.',art:carArt(88),car:true,go:()=>UI26.play('instant')});
+ list.push({k:'coop',title:'Co-Op',sub:'Split-screen race for two controllers. Shootout, then straight to the grid.',art:carArt(888),car:true,go:()=>window.CO63?.open()});
  if(p){list.push({k:'test',title:'Test day',sub:'Private running at the Test Centre. Learn the circuit.',go:()=>{UI26.close();dcNav('Test Centre');}});
   list.push({k:'garage',title:'Garage',sub:'Car management, upgrades and setup.',art:me,car:true,go:()=>{UI26.close();dcNav('Car Management');}});
   list.push({k:'champ',title:'Standings',sub:'Championship standings, results and the calendar.',go:()=>{UI26.close();dcNav('Championship');}});}
@@ -339,5 +341,5 @@ let introFor=null;
 setInterval(()=>{const x=L();if(!x?.dc){introFor=null;if(intro)endIntro();return;}if(introFor===x)return;
  if(x.simulated||x.paused||!root.querySelector('.dc-driving'))return;if(document.querySelector('.ui26-engine-loading'))return;
  const W=typeof sc25Engine!=='undefined'?sc25Engine:null;if(!W?.scene)return;introFor=x;if(x.started&&x.stage==='race'&&x.elapsed>3)return;try{startIntro(x);}catch(e){console.warn('ui58 intro',e);}},200);
-window.UI58={banner,cycleMfd,endIntro,paint(){paint(true);paintFast();},get intro(){return !!intro;}};
+window.UI58={asset:ASSET,track:TRACK_ART,banner,cycleMfd,endIntro,paint(){paint(true);paintFast();},get intro(){return !!intro;}};
 })();

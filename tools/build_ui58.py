@@ -9,8 +9,12 @@ asset=re.search(r'const ASSET=(\{.*?\}\}),root=',ui26).group(1)
 track=re.search(r'const TRACK_ART=(\{.*?\});',ui26).group(1)
 json.loads(asset);json.loads(track)
 js=js.replace('/*UI58_ASSET*/{}',asset).replace('/*UI58_TRACK*/{}',track)
-html=re.sub(r'<script id="ui58-interface">.*?</script>','',html,flags=re.S)
-i=html.rindex('</body>')
-html=html[:i]+'<script id="ui58-interface">\n'+js+'</script>'+html[i:]
+tag='<script id="ui58-interface">\n'+js+'</script>'
+if '<script id="ui58-interface">' in html:
+    # Replace in place: later layers (gx55, ic59, pt61, pf61, co63…) wrap functions after it.
+    html=re.sub(r'<script id="ui58-interface">.*?</script>',lambda m:tag,html,count=1,flags=re.S)
+else:
+    i=html.rindex('</body>')
+    html=html[:i]+tag+html[i:]
 (root/'index.html').write_text(html)
 print('ok',len(html))
