@@ -3,19 +3,19 @@
    damage limits); it runs as a planner each frame, then an AI driver turns its plan into
    steering, throttle and brake for the real car physics. Cars far from the player (and
    fast-forwarded sessions) keep the light path model so frame time stays low. */
-const AI62={near:340,far:420,look:.36,gain:.004,damp:.05,trail:1,react:.5,use:.96,dec:.62,tgain:.5,bgain:.18,pace:1,assist:{...PH47_ASSISTS.standard,label:'AI'},loose:{...PH47_ASSISTS.off,label:'AI loose'},lock:{...PH47_ASSISTS.standard,abs:false,label:'AI lock'}};
+const AI62={near:340,far:420,look:.36,track:1,sharp:.9,preview:.1,kh:.6,ke:2,tdamp:.2,gain:.004,damp:.05,trail:1,react:.5,use:.96,dec:.62,tgain:.5,bgain:.18,pace:1,assist:{...PH47_ASSISTS.standard,label:'AI'},loose:{...PH47_ASSISTS.off,label:'AI loose'},lock:{...PH47_ASSISTS.standard,abs:false,label:'AI lock'}};
 function ai62Wanted(L,x){
  if(D.settings.ph47Classic||D.settings.ai62Off||dcSimBusy||L.simulated||!L.dc)return false;
  if(x===L.player||x.retired||x.finished||x.garage||x.pitStage||x.outlapHold||x.sc3Crash||!x.pos||(x.releaseDelay||0)>0)return false;
  if(L.stage==='race'&&!L.started)return false;
  // Pick a car up only once it is on the racing surface (not while merging from the pit exit).
- if(!x.ai62&&(Math.abs(x.lane)>6.2||x.dc32PitMerge==='out'))return false;
+ if(!x.ai62&&(Math.abs(x.lane)>7.4||x.dc32PitMerge==='out'))return false;
  const p=L.player?.pos;if(!p)return true;const d=Math.hypot(x.pos.x-p.x,x.pos.z-p.z);
  return d<(x.ai62?AI62.far:AI62.near);
 }
 function ai62Enter(L,x){
  const W=sc25Engine,q=W.at(x.progress),k=dcTrackCurvature(W,x.progress);
- x.ai62={assist:AI62.assist,rear:1,target:x.v,lastT:x.v,lane:clamp(x.lane,-6,6)};x.dc33YawOffset=0;x.dc33Angular=0;x.dc33ImpactX=x.dc33ImpactZ=0;x.latV=0;
+ x.ai62={assist:AI62.assist,rear:1,target:x.v,lastT:x.v,lane:clamp(x.lane,-7.2,7.2)};x.dc33YawOffset=0;x.dc33Angular=0;x.dc33ImpactX=x.dc33ImpactZ=0;x.latV=0;
  const s=ph47State(x);s.r=clamp(x.v*k,-2,2);s.delta=Math.atan(2.82*k);s.af=s.ar=0;s.ax=s.ay=0;x.yaw=Math.atan2(q.v.x,q.v.z);
 }
 function ai62Leave(x){x.ai62=null;x.ph47On=false;x.latV=0;x.v=Math.max(0,x.v);if(x.ph47){x.ph47.r=0;x.ph47.tumble=0;x.ph47.phi=0;}dc33Sync(x);}
@@ -24,24 +24,29 @@ function ai62Leave(x){x.ai62=null;x.ph47On=false;x.latV=0;x.v=Math.max(0,x.v);if
 function ai62CornerCap(L,x){
  const W=sc25Engine,P=PH47,len=L.e.lengthKm*1000,grip=dcTyreGrip(x),mass=1335+(x.fuel||0)*.75,aero=x.aero??50,kd=P.cl*(1+aero/100*.9)*(1-clamp(((x.bodyDamage||0)-15)/85,0,1)*.35);
  const skill=clamp(dcPerformance(x)/(window.hd64Pace?.()||1),.72,1.14),use=AI62.use+(skill-.9)*.3,mu=P.mu*grip*use,decel=Math.max(4,mu*P.g*AI62.dec);let cap=99;
- const reach=Math.max(130,x.v*x.v/(2*decel)+x.v*.5+30);for(let m=0;m<=reach;m+=13){const k=Math.abs(dcTrackCurvature(W,x.progress+m/len));if(k<1e-5)continue;const den=k-mu*kd/mass;const v2=den>1e-6?mu*P.g/den:1e4;cap=Math.min(cap,Math.sqrt(v2+2*decel*Math.max(0,m-x.v*AI62.react)));}
+ const reach=Math.max(130,x.v*x.v/(2*decel)+x.v*.5+30),off=x.ai62&&ai68Off(W,x.progress,x.ai62.lane);for(let m=0;m<=reach;m+=13){const f=x.progress+m/len,k=Math.max(ai68CapCurv(W,f),Math.abs(ai68Curv(W,f,true))*AI62.sharp,off?Math.abs(dcTrackCurvature(W,f)):0);if(k<1e-5)continue;const den=k-mu*kd/mass;const v2=den>1e-6?mu*P.g/den:1e4;cap=Math.min(cap,Math.sqrt(v2+2*decel*Math.max(0,m-x.v*AI62.react)));}
  return cap*AI62.pace;
 }
 // The planner's own target with no traffic or race-control limits (same formula as dcAIStep).
 function ai62FreeTarget(L,x){
- const W=sc25Engine,s=W.at(x.progress),grip=dcTyreGrip(x),skill=clamp(dcPerformance(x),.72,1.14),aero=1+x.aero/100*x.v*x.v/4000*.65,k=Math.abs(dcTrackCurvature(W,x.progress)),brake=Math.max(3,11*grip);
+ const W=sc25Engine,s=W.at(x.progress),grip=dcTyreGrip(x),skill=clamp(dcPerformance(x),.72,1.14),aero=1+x.aero/100*x.v*x.v/4000*.65,k=Math.abs(ai68Curv(W,x.progress)),brake=Math.max(3,11*grip);
  let target=Math.min(s.speed,W.at(x.progress+.002).speed)*Math.sqrt(clamp(grip/1.02,.28,1.15))*skill*(1-Math.max(0,x.rdWear-55)*.0035)*(1-x.fuel*.00022)*(x.bodyDamage>20?Math.max(.45,1-(x.bodyDamage-20)*.004):1);
- for(let metres=12;metres<=150;metres+=18){const ck=Math.abs(dcTrackCurvature(W,x.progress+metres/(L.e.lengthKm*1000))),limit=ck>.00001?Math.sqrt(19*grip*aero/ck):88;target=Math.min(target,Math.sqrt(limit*limit+2*brake*metres));}
+ for(let metres=12;metres<=150;metres+=18){const ck=Math.abs(ai68Curv(W,x.progress+metres/(L.e.lengthKm*1000))),limit=ck>.00001?Math.sqrt(19*grip*aero/ck):88;target=Math.min(target,Math.sqrt(limit*limit+2*brake*metres));}
  target=Math.min(target,(318-x.aero*.36)/3.6);if(k>.00001)target=Math.min(target,Math.sqrt(20*grip*aero/k));return target;
 }
-// Pure pursuit on the planner's lane: body-frame aim means the AI countersteers on its own
-// when the rear steps out and the nose swings past the target.
+// Pure pursuit on the planner's lane (carried along the racing line to the look-ahead point):
+// body-frame aim means the AI countersteers on its own when the rear steps out and the nose
+// swings past the target.
 function ai62Drive(L,x,plan,dt){
  const W=sc25Engine,P=PH47,s=ph47State(x),len=L.e.lengthKm*1000,a=x.ai62,vx=x.v||0,vy=x.latV||0,sp=Math.hypot(vx,vy);
- const look=clamp(6+Math.abs(vx)*AI62.look,7,42),q=W.at(x.progress+look/len),lane=plan.lane,tx=q.p.x+q.n.x*lane-x.pos.x,tz=q.p.z+q.n.z*lane-x.pos.z;
+ const look=clamp(6+Math.abs(vx)*AI62.look,7,42),q=W.at(x.progress+look/len),lane=plan.lane,aim=ai68Aim(W,x.progress+look/len,x.progress,lane),tx=q.p.x+q.n.x*aim-x.pos.x,tz=q.p.z+q.n.z*aim-x.pos.z;
  const fx=Math.sin(x.yaw),fz=Math.cos(x.yaw),lx=tx*fx+tz*fz,ly=tx*Math.cos(x.yaw)-tz*Math.sin(x.yaw);
- let steer;
- if(lx<1){steer=Math.sign(ly||1);}else{const kappa=2*ly/(lx*lx+ly*ly),delta=Math.atan((P.a+P.b)*kappa)*(1+Math.abs(vx)*AI62.gain)-(s.r-Math.abs(vx)*kappa)*AI62.damp,dmax=.58/(1+Math.abs(vx)*.11);steer=clamp(delta/dmax,-1,1);}
+ let steer;const dmax=.58/(1+Math.abs(vx)*.11);
+ if(lx<1){steer=Math.sign(ly||1);}else{const kappa=2*ly/(lx*lx+ly*ly),delta=Math.atan((P.a+P.b)*kappa)*(1+Math.abs(vx)*AI62.gain)-(s.r-Math.abs(vx)*kappa)*AI62.damp;steer=clamp(delta/dmax,-1,1);}
+ // On the line at speed, track it closely instead: the line's own curvature as feed-forward plus
+ // heading and front-axle offset corrections (Stanley). Pure pursuit turns in early by half its
+ // look-ahead, which on a full-width line means an early apex and running out of road on exit.
+ const tr=vx>8&&AI62.track?ai62Track(W,x,plan,vx,s,len):null;if(tr&&Math.abs(tr.ey)<3&&Math.abs(tr.eh)<.45)steer=clamp(tr.delta/dmax,-1,1);
  // Speed: the planner's target, capped by what the tyres can do, with braking feed-forward.
  // The race AI's speed targets come from a reference speed trace that the path model rescales
  // to the real lap time, so on the tyre model the free target is what the tyres can carry.
@@ -64,6 +69,17 @@ function ai62Drive(L,x,plan,dt){
  // come off the pedals when the rear is past its peak slip, so turn-in does not spin the car.
  if(AI62.trail&&sp>6){const lat=Math.abs(s.ay)/(P.mu*dcTyreGrip(x)*P.g),over=Math.abs(s.ar)>P.peakR*1.05;brake*=clamp(1+AI62.trail*(.35-lat),.25,1);if(over){brake=Math.min(brake,.25);throttle*=.5;}}
  return{steer,throttle,brake,ai:true};
+}
+function ai62Track(W,x,plan,vx,s,len){
+ const P=PH47,pre=vx*AI62.preview,at=f=>{const q=W.at(f),l=ai68Aim(W,f,x.progress,plan.lane);return{x:q.p.x+q.n.x*l,z:q.p.z+q.n.z*l};};
+ const fx=Math.sin(x.yaw),fz=Math.cos(x.yaw),ax=x.pos.x+fx*(P.a+pre),az=x.pos.z+fz*(P.a+pre);
+ // Project the preview point onto the track: off-centre through a corner the car covers less (or
+ // more) road than the centreline, and a fixed phase step made it turn in early on the inside.
+ let ph=x.progress+(P.a+pre)/len;for(let n=0;n<2;n++){const q=W.at(ph);ph+=((ax-q.p.x)*q.v.x+(az-q.p.z)*q.v.z)/len;}
+ const c=at(ph),a=at(ph-2/len),b=at(ph+2/len),hp=Math.atan2(b.x-a.x,b.z-a.z);
+ const ey=(c.x-ax)*Math.cos(x.yaw)-(c.z-az)*Math.sin(x.yaw),eh=dcWrapAngle(hp-x.yaw),k=ai68Off(W,x.progress,plan.lane)?dcTrackCurvature(W,ph):ai68Curv(W,ph);
+ const delta=Math.atan((P.a+P.b)*k)*(1+vx*AI62.gain)+eh*AI62.kh+Math.atan(AI62.ke*ey/(vx+3))-(s.r-vx*k)*AI62.tdamp;
+ return{delta,ey,eh};
 }
 // Race-control mistakes play out in the tyre model instead of a scripted slide.
 function ai62Mistake(L,x,incident,input,dt){
@@ -92,7 +108,7 @@ dcAIStep=function(x,dt){
  x.rf40Incident=null;x.ai62Target=undefined;x.v=Math.max(0,keep.v);const planLane=x.ai62.lane??keep.lane;x.lane=planLane;
  ai62AI(x,dt);
  if(incident&&!x.rf40Incident)x.rf40Incident=incident;
- x.ai62.lane=clamp(x.lane,-6,6);const plan={lane:x.ai62.lane,v:x.v},len=L.e.lengthKm*1000,jump=Math.abs(x.progress-keep.progress)*len>Math.max(6,Math.abs(keep.v)*dt*3+4)||Math.abs(x.lane-planLane)>3;
+ x.ai62.lane=ai68Clamp(sc25Engine,x.progress,x.lane);const plan={lane:x.ai62.lane,v:x.v},len=L.e.lengthKm*1000,jump=Math.abs(x.progress-keep.progress)*len>Math.max(6,Math.abs(keep.v)*dt*3+4)||Math.abs(x.lane-planLane)>3;
  if(x.pitStage||x.outlapHold||x.retired||x.finished||jump){ai62Leave(x);return;}
  Object.assign(x,keep);x.pos=keep.pos;x.v=keep.v;
  const input=ai62Drive(L,x,plan,dt);if(x.rf40Incident)ai62Mistake(L,x,x.rf40Incident,input,dt);
@@ -105,11 +121,11 @@ const ai62Settings=dcSettingsFields;
 dcSettingsFields=function(...args){
  return ai62Settings(...args)+`<div class="dc-card" style="margin-top:18px"><h3>AI cars</h3><label class="dc-checkbox"><input type="checkbox" ${D.settings.ai62Off?'':'checked'} onchange="D.settings.ai62Off=!this.checked;dcSave()">AI cars drive the full car physics near you</label><p class="dc-muted">Rivals within about 350 m use the same tyre model as your car, so they slide, lock up, spin and react to contact like you do. Untick on a slow machine to put them back on the lighter path model.</p></div>`;
 };
-// Quasi-steady lap on the tyre model (corner limits, then power and braking passes). The path
-// model's pace is scaled to it, so cars far away lap at the same speed the physics allows.
+// Quasi-steady lap on the tyre model along the racing line (corner limits, then power and
+// braking passes). The path model's pace is scaled to it, so cars far away lap at the same speed the physics allows.
 function ai62LapEstimate(W,e){
- const P=PH47,len=e.lengthKm*1000,N=Math.max(200,Math.round(len/4)),ds=len/N,mass=1365,aero=50,kd=P.cl*(1+aero/100*.9),cd=P.cd*(1+aero*.009),mu=P.mu*(AI62.use+.03),top=(318-aero*.36)/3.6,v=new Float64Array(N);
- for(let i=0;i<N;i++){const k=Math.abs(dcTrackCurvature(W,i/N)),den=k-mu*kd/mass;v[i]=Math.min(top,k<1e-5||den<=1e-6?top:Math.sqrt(mu*P.g/den));}
+ const P=PH47,len=e.lengthKm*1000,N=Math.max(200,Math.round(len/4)),ds=len/N*(W.ai68?.ratio||1),mass=1365,aero=50,kd=P.cl*(1+aero/100*.9),cd=P.cd*(1+aero*.009),mu=P.mu*(AI62.use+.03),top=(318-aero*.36)/3.6,v=new Float64Array(N);
+ for(let i=0;i<N;i++){const k=Math.abs(ai68Curv(W,i/N)),den=k-mu*kd/mass;v[i]=Math.min(top,k<1e-5||den<=1e-6?top:Math.sqrt(mu*P.g/den));}
  for(let pass=0;pass<2;pass++){for(let i=0;i<2*N;i++){const a=i%N,b=(i+1)%N,u=v[a],acc=Math.min(P.drive,P.power/Math.max(4,u))/mass-cd*u*u/mass-.12;v[b]=Math.min(v[b],Math.sqrt(Math.max(0,u*u+2*acc*ds)));}
   for(let i=2*N;i>0;i--){const a=i%N,b=(i-1+N)%N,u=v[a],dec=mu*P.g*.85+(kd*mu*.85+cd)*u*u/mass;v[b]=Math.min(v[b],Math.sqrt(u*u+2*dec*ds));}}
  let t=0;for(let i=0;i<N;i++)t+=ds/Math.max(1,v[i]);return t;

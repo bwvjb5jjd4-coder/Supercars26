@@ -2578,7 +2578,7 @@ SC25World.prototype.terrainHeight=function(x,z){if(!this.samples)return -.65;con
 const dcBaseTerrainGeometry=SC25World.prototype.makeTerrainGeometry;
 SC25World.prototype.makeTerrainGeometry=function(){const g=dcBaseTerrainGeometry.call(this),data=this.sc26Terrain;if(data?.positions&&g?.attributes?.position){const {positions:p,N,size}=data;for(let j=0;j<=N;j++)for(let i=0;i<=N;i++){const k=j*(N+1)+i,x=(i/N-.5)*size,z=(j/N-.5)*size;p[k*3+1]=this.terrainHeight(x,z)}g.attributes.position.array.set(p);g.attributes.position.needsUpdate=true;g.computeVertexNormals();}return g;};
 const dcBaseMakeTrack=SC25World.prototype.makeTrack;
-SC25World.prototype.makeTrack=function(){dcBaseMakeTrack.call(this);const N=this.N,ds=this.e.lengthKm*1000/N,raw=new Array(N);this.racingCorridor=3.6;for(let i=0;i<N;i++){const a=this.samples[(i-8+N)%N].v,b=this.samples[(i+8)%N].v,angle=Math.atan2(a.x*b.z-a.z*b.x,clamp(a.dot(b),-1,1)),k=angle/(16*ds);raw[i]=Math.sign(k)*clamp((Math.abs(k)-.0015)*85,0,2.4);}this.racingLine=raw.map((_,i)=>{let n=0;for(let j=-4;j<=4;j++)n+=raw[(i+j+N)%N];return n/9});for(const s of this.samples)s.speed*=.93;};
+SC25World.prototype.makeTrack=function(){dcBaseMakeTrack.call(this);const N=this.N,ds=this.e.lengthKm*1000/N,raw=new Array(N);this.racingCorridor=3.6;for(let i=0;i<N;i++){const a=this.samples[(i-8+N)%N].v,b=this.samples[(i+8)%N].v,angle=Math.atan2(a.x*b.z-a.z*b.x,clamp(a.dot(b),-1,1)),k=angle/(16*ds);raw[i]=Math.sign(k)*clamp((Math.abs(k)-.0015)*85,0,2.4);}this.racingLine=raw.map((_,i)=>{let n=0;for(let j=-4;j<=4;j++)n+=raw[(i+j+N)%N];return n/9});for(const s of this.samples)s.speed*=.93;if(typeof ai68Build==='function')ai68Build(this);};
 SC25World.prototype.clear=function(x,z,r=0){if(this.nearest({x,z}).distance<7.5+r+1)return false;return !this.pit?.samples?.some(s=>Math.hypot(s.p.x-x,s.p.z-z)<4+r)};
 dcTyreGrip=function(x){const raw=dcBaseTyreGrip(x),temp=x.tyreTemp??78,thermal=clamp(1-Math.abs(temp-84)*.0027,.78,1);return raw*thermal};
 dcEntry=function(...args){const x=dcBaseEntry(...args);x.tyreTemp=34;x.outlapHold=false;return x};
@@ -2710,16 +2710,16 @@ function dc32Traffic(x,lane,pit=false){const L=live,W=sc25Engine,yaw=x.yaw||0,fx
 }
 function dc32LaneClear(x,lane){const W=sc25Engine,L=live,q=W.at(x.progress),lo=Math.min(x.lane,lane)-2.7,hi=Math.max(x.lane,lane)+2.7;return !L.entrants.some(y=>{if(y===x||y.garage||!y.pos)return false;const dx=y.pos.x-q.p.x,dz=y.pos.z-q.p.z,along=dx*q.v.x+dz*q.v.z,side=dx*q.n.x+dz*q.n.z;return along>-Math.max(10,((y.v||0)-x.v)*1.4)&&along<Math.max(14,x.v*.65)&&side>lo&&side<hi;});}
 dcAIStep=function(x,dt){const W=sc25Engine,L=live;if(!W||!L||x.outlapHold)return;if((x.releaseDelay||0)>0){x.releaseDelay=Math.max(0,x.releaseDelay-dt);x.v=x.speed=0;return;}
- const s=W.at(x.progress),grip=dcTyreGrip(x),skill=clamp(dcPerformance(x),.72,1.14),aero=1+x.aero/100*x.v*x.v/4000*.65,k=Math.abs(dcTrackCurvature(W,x.progress));let target=Math.min(s.speed,W.at(x.progress+.002).speed)*Math.sqrt(clamp(grip/1.02,.28,1.15))*skill*(1-Math.max(0,x.rdWear-55)*.0035)*(1-x.fuel*.00022)*(x.bodyDamage>20?Math.max(.45,1-(x.bodyDamage-20)*.004):1),lane=dcRacingLane(W,x.progress,x),brake=Math.max(3,11*grip);
- for(let metres=12;metres<=150;metres+=18){const ck=Math.abs(dcTrackCurvature(W,x.progress+metres/(L.e.lengthKm*1000))),limit=ck>.00001?Math.sqrt(19*grip*aero/ck):88;target=Math.min(target,Math.sqrt(limit*limit+2*brake*metres));}target=Math.min(target,(318-x.aero*.36)/3.6);if(k>.00001)target=Math.min(target,Math.sqrt(20*grip*aero/k));if(L.scTrain)target=Math.min(target,26);
+ const s=W.at(x.progress),grip=dcTyreGrip(x),skill=clamp(dcPerformance(x),.72,1.14),aero=1+x.aero/100*x.v*x.v/4000*.65,k=Math.abs(ai68Curv(W,x.progress));let target=Math.min(s.speed,W.at(x.progress+.002).speed)*Math.sqrt(clamp(grip/1.02,.28,1.15))*skill*(1-Math.max(0,x.rdWear-55)*.0035)*(1-x.fuel*.00022)*(x.bodyDamage>20?Math.max(.45,1-(x.bodyDamage-20)*.004):1),lane=dcRacingLane(W,x.progress,x),brake=Math.max(3,11*grip);
+ for(let metres=12;metres<=150;metres+=18){const ck=Math.abs(ai68Curv(W,x.progress+metres/(L.e.lengthKm*1000))),limit=ck>.00001?Math.sqrt(19*grip*aero/ck):88;target=Math.min(target,Math.sqrt(limit*limit+2*brake*metres));}target=Math.min(target,(318-x.aero*.36)/3.6);if(k>.00001)target=Math.min(target,Math.sqrt(20*grip*aero/k));if(L.scTrain)target=Math.min(target,26);
  if(x.fuel<18||x.rdWear>78||x.bodyDamage>25){x.pitNow=true;x.pitPlan||={tyre:L.weather==='Dry'?'Hard':'Wet',fuel:75,aero:x.aero,repair:true};}
  const phase=((x.progress%1)+1)%1,toEntry=((W.pit.start-phase+1)%1)*L.e.lengthKm*1000,headingToPit=x.pitNow&&toEntry<Math.max(130,x.v*x.v/(2*brake)+30)&&x.progress>0;
  if(headingToPit){lane=W.pit.side*3.0;target=Math.min(target,Math.sqrt((60/3.6)**2+2*brake*Math.max(0,toEntry-8)));}
  let traffic=dc32Traffic(x,lane);const noPass=L.scTrain||L.phase==='formation';if(L.scTrain){lane=x.lane;traffic=dc32Traffic(x,lane);}if(traffic.front&&!noPass&&!headingToPit&&traffic.gap>8&&traffic.gap<Math.max(70,x.v*1.8)){if(!x.dc32Pass||L.elapsed>x.dc32PassUntil){const choices=[-4.5,-1.4,1.4,4.5].sort((a,b)=>Math.abs(a-x.lane)-Math.abs(b-x.lane));const chosen=choices.find(c=>Math.abs(c-(traffic.front.lane||0))>3.1&&dc32LaneClear(x,c));if(chosen!==undefined){x.dc32Pass=chosen;x.dc32PassUntil=L.elapsed+3.5;}}
  }if(x.dc32Pass!==undefined&&L.elapsed<x.dc32PassUntil&&!noPass&&!headingToPit)lane=dc32LaneClear(x,x.dc32Pass)?x.dc32Pass:x.lane;if(!headingToPit&&L.phase!=='formation'&&!dc32LaneClear(x,lane))lane=x.lane;
- const maxShift=(L.weather==='Dry'?2.0:1.35)*dt*(x.hd64Rate||1),newLane=x.lane+clamp(lane-x.lane,-maxShift,maxShift);traffic=dc32Traffic(x,newLane);target=Math.min(target,traffic.target);if(x.aiError>0){x.aiError-=dt;target*=.65;}
+ const maxShift=(L.weather==='Dry'?2.0:1.35)*dt*(x.hd64Rate||1),drift=ai68Drift(W,x,dt),newLane=x.lane+clamp(lane-x.lane,Math.min(0,drift)-maxShift,Math.max(0,drift)+maxShift);traffic=dc32Traffic(x,newLane);target=Math.min(target,traffic.target);if(x.aiError>0){x.aiError-=dt;target*=.65;}
  if(L.phase==='formation'&&Number.isFinite(x.formationTarget)){lane=x.formationLane;const remaining=Math.max(0,(x.formationTarget-x.progress)*L.e.lengthKm*1000);target=Math.min(target,Math.sqrt(5.4*remaining));}
- const oldLane=x.lane;x.lane=L.phase==='formation'?x.lane+clamp(lane-x.lane,-maxShift,maxShift):newLane;x.dc32LaneV=(x.lane-oldLane)/dt;const accel=8.5/(1+x.v*.017)*Math.min(1,grip*1.1),oldV=x.v;x.ai62Target=target;x.v=Math.max(0,x.v+clamp(target-x.v,-brake*dt,accel*dt));if(x.fuel<=0)x.v=Math.max(0,x.v-2*dt);x.braking=x.v<oldV-.01;x.speed=x.v*3.6;
+ const oldLane=x.lane;x.lane=L.phase==='formation'?x.lane+clamp(lane-x.lane,Math.min(0,drift)-maxShift,Math.max(0,drift)+maxShift):newLane;x.dc32LaneV=(x.lane-oldLane)/dt;const accel=8.5/(1+x.v*.017)*Math.min(1,grip*1.1),oldV=x.v;x.ai62Target=target;x.v=Math.max(0,x.v+clamp(target-x.v,-brake*dt,accel*dt));if(x.fuel<=0)x.v=Math.max(0,x.v-2*dt);x.braking=x.v<oldV-.01;x.speed=x.v*3.6;
  const prev=x.progress;x.progress+=x.v/Math.max(5,s.speed)/(L.e.realLap*(L.ai62Pace||1))*dt;const q=W.at(x.progress);x.idx=Math.round(q.t*W.N)%W.N;x.pos={x:q.p.x+q.n.x*x.lane,y:q.p.y,z:q.p.z+q.n.z*x.lane};x.yaw=Math.atan2(q.v.x,q.v.z);x.steer=-Math.atan(3.05*dcTrackCurvature(W,x.progress));x.loadTransfer=clamp(x.v*x.v*k/9.81*.085,0,.16);
  if(headingToPit&&prev<W.pit.start+Math.floor(prev)&&x.progress>=W.pit.start+Math.floor(prev)){x.pitStage='entry';x.pitDistance=0;x.pitLane=x.lane;x.pitBase=Math.floor(x.progress);x.dc32Serviced=false;x.dc32PitMerge='in';const p=dc32PitAt(W,0);x.pos={x:p.p.x+p.n.x*x.lane,y:p.p.y,z:p.p.z+p.n.z*x.lane};}
  if(L.phase==='formation'&&(x.progress>=x.formationTarget||(x.formationTarget-x.progress)*L.e.lengthKm*1000<.7&&x.v<1)){x.progress=x.formationTarget;x.lane=x.formationLane;x.v=x.speed=0;x.outlapHold=true;const p=W.at(x.progress);x.pos={x:p.p.x+p.n.x*x.lane,y:p.p.y,z:p.p.z+p.n.z*x.lane};x.yaw=Math.atan2(p.v.x,p.v.z);}
@@ -10007,19 +10007,19 @@ window.PT61={_crew:crewFrame,estimate:x=>{const L=live;if(!x||!L)return null;ret
    damage limits); it runs as a planner each frame, then an AI driver turns its plan into
    steering, throttle and brake for the real car physics. Cars far from the player (and
    fast-forwarded sessions) keep the light path model so frame time stays low. */
-const AI62={near:340,far:420,look:.36,gain:.004,damp:.05,trail:1,react:.5,use:.96,dec:.62,tgain:.5,bgain:.18,pace:1,assist:{...PH47_ASSISTS.standard,label:'AI'},loose:{...PH47_ASSISTS.off,label:'AI loose'},lock:{...PH47_ASSISTS.standard,abs:false,label:'AI lock'}};
+const AI62={near:340,far:420,look:.36,track:1,sharp:.9,preview:.1,kh:.6,ke:2,tdamp:.2,gain:.004,damp:.05,trail:1,react:.5,use:.96,dec:.62,tgain:.5,bgain:.18,pace:1,assist:{...PH47_ASSISTS.standard,label:'AI'},loose:{...PH47_ASSISTS.off,label:'AI loose'},lock:{...PH47_ASSISTS.standard,abs:false,label:'AI lock'}};
 function ai62Wanted(L,x){
  if(D.settings.ph47Classic||D.settings.ai62Off||dcSimBusy||L.simulated||!L.dc)return false;
  if(x===L.player||x.retired||x.finished||x.garage||x.pitStage||x.outlapHold||x.sc3Crash||!x.pos||(x.releaseDelay||0)>0)return false;
  if(L.stage==='race'&&!L.started)return false;
  // Pick a car up only once it is on the racing surface (not while merging from the pit exit).
- if(!x.ai62&&(Math.abs(x.lane)>6.2||x.dc32PitMerge==='out'))return false;
+ if(!x.ai62&&(Math.abs(x.lane)>7.4||x.dc32PitMerge==='out'))return false;
  const p=L.player?.pos;if(!p)return true;const d=Math.hypot(x.pos.x-p.x,x.pos.z-p.z);
  return d<(x.ai62?AI62.far:AI62.near);
 }
 function ai62Enter(L,x){
  const W=sc25Engine,q=W.at(x.progress),k=dcTrackCurvature(W,x.progress);
- x.ai62={assist:AI62.assist,rear:1,target:x.v,lastT:x.v,lane:clamp(x.lane,-6,6)};x.dc33YawOffset=0;x.dc33Angular=0;x.dc33ImpactX=x.dc33ImpactZ=0;x.latV=0;
+ x.ai62={assist:AI62.assist,rear:1,target:x.v,lastT:x.v,lane:clamp(x.lane,-7.2,7.2)};x.dc33YawOffset=0;x.dc33Angular=0;x.dc33ImpactX=x.dc33ImpactZ=0;x.latV=0;
  const s=ph47State(x);s.r=clamp(x.v*k,-2,2);s.delta=Math.atan(2.82*k);s.af=s.ar=0;s.ax=s.ay=0;x.yaw=Math.atan2(q.v.x,q.v.z);
 }
 function ai62Leave(x){x.ai62=null;x.ph47On=false;x.latV=0;x.v=Math.max(0,x.v);if(x.ph47){x.ph47.r=0;x.ph47.tumble=0;x.ph47.phi=0;}dc33Sync(x);}
@@ -10028,24 +10028,29 @@ function ai62Leave(x){x.ai62=null;x.ph47On=false;x.latV=0;x.v=Math.max(0,x.v);if
 function ai62CornerCap(L,x){
  const W=sc25Engine,P=PH47,len=L.e.lengthKm*1000,grip=dcTyreGrip(x),mass=1335+(x.fuel||0)*.75,aero=x.aero??50,kd=P.cl*(1+aero/100*.9)*(1-clamp(((x.bodyDamage||0)-15)/85,0,1)*.35);
  const skill=clamp(dcPerformance(x)/(window.hd64Pace?.()||1),.72,1.14),use=AI62.use+(skill-.9)*.3,mu=P.mu*grip*use,decel=Math.max(4,mu*P.g*AI62.dec);let cap=99;
- const reach=Math.max(130,x.v*x.v/(2*decel)+x.v*.5+30);for(let m=0;m<=reach;m+=13){const k=Math.abs(dcTrackCurvature(W,x.progress+m/len));if(k<1e-5)continue;const den=k-mu*kd/mass;const v2=den>1e-6?mu*P.g/den:1e4;cap=Math.min(cap,Math.sqrt(v2+2*decel*Math.max(0,m-x.v*AI62.react)));}
+ const reach=Math.max(130,x.v*x.v/(2*decel)+x.v*.5+30),off=x.ai62&&ai68Off(W,x.progress,x.ai62.lane);for(let m=0;m<=reach;m+=13){const f=x.progress+m/len,k=Math.max(ai68CapCurv(W,f),Math.abs(ai68Curv(W,f,true))*AI62.sharp,off?Math.abs(dcTrackCurvature(W,f)):0);if(k<1e-5)continue;const den=k-mu*kd/mass;const v2=den>1e-6?mu*P.g/den:1e4;cap=Math.min(cap,Math.sqrt(v2+2*decel*Math.max(0,m-x.v*AI62.react)));}
  return cap*AI62.pace;
 }
 // The planner's own target with no traffic or race-control limits (same formula as dcAIStep).
 function ai62FreeTarget(L,x){
- const W=sc25Engine,s=W.at(x.progress),grip=dcTyreGrip(x),skill=clamp(dcPerformance(x),.72,1.14),aero=1+x.aero/100*x.v*x.v/4000*.65,k=Math.abs(dcTrackCurvature(W,x.progress)),brake=Math.max(3,11*grip);
+ const W=sc25Engine,s=W.at(x.progress),grip=dcTyreGrip(x),skill=clamp(dcPerformance(x),.72,1.14),aero=1+x.aero/100*x.v*x.v/4000*.65,k=Math.abs(ai68Curv(W,x.progress)),brake=Math.max(3,11*grip);
  let target=Math.min(s.speed,W.at(x.progress+.002).speed)*Math.sqrt(clamp(grip/1.02,.28,1.15))*skill*(1-Math.max(0,x.rdWear-55)*.0035)*(1-x.fuel*.00022)*(x.bodyDamage>20?Math.max(.45,1-(x.bodyDamage-20)*.004):1);
- for(let metres=12;metres<=150;metres+=18){const ck=Math.abs(dcTrackCurvature(W,x.progress+metres/(L.e.lengthKm*1000))),limit=ck>.00001?Math.sqrt(19*grip*aero/ck):88;target=Math.min(target,Math.sqrt(limit*limit+2*brake*metres));}
+ for(let metres=12;metres<=150;metres+=18){const ck=Math.abs(ai68Curv(W,x.progress+metres/(L.e.lengthKm*1000))),limit=ck>.00001?Math.sqrt(19*grip*aero/ck):88;target=Math.min(target,Math.sqrt(limit*limit+2*brake*metres));}
  target=Math.min(target,(318-x.aero*.36)/3.6);if(k>.00001)target=Math.min(target,Math.sqrt(20*grip*aero/k));return target;
 }
-// Pure pursuit on the planner's lane: body-frame aim means the AI countersteers on its own
-// when the rear steps out and the nose swings past the target.
+// Pure pursuit on the planner's lane (carried along the racing line to the look-ahead point):
+// body-frame aim means the AI countersteers on its own when the rear steps out and the nose
+// swings past the target.
 function ai62Drive(L,x,plan,dt){
  const W=sc25Engine,P=PH47,s=ph47State(x),len=L.e.lengthKm*1000,a=x.ai62,vx=x.v||0,vy=x.latV||0,sp=Math.hypot(vx,vy);
- const look=clamp(6+Math.abs(vx)*AI62.look,7,42),q=W.at(x.progress+look/len),lane=plan.lane,tx=q.p.x+q.n.x*lane-x.pos.x,tz=q.p.z+q.n.z*lane-x.pos.z;
+ const look=clamp(6+Math.abs(vx)*AI62.look,7,42),q=W.at(x.progress+look/len),lane=plan.lane,aim=ai68Aim(W,x.progress+look/len,x.progress,lane),tx=q.p.x+q.n.x*aim-x.pos.x,tz=q.p.z+q.n.z*aim-x.pos.z;
  const fx=Math.sin(x.yaw),fz=Math.cos(x.yaw),lx=tx*fx+tz*fz,ly=tx*Math.cos(x.yaw)-tz*Math.sin(x.yaw);
- let steer;
- if(lx<1){steer=Math.sign(ly||1);}else{const kappa=2*ly/(lx*lx+ly*ly),delta=Math.atan((P.a+P.b)*kappa)*(1+Math.abs(vx)*AI62.gain)-(s.r-Math.abs(vx)*kappa)*AI62.damp,dmax=.58/(1+Math.abs(vx)*.11);steer=clamp(delta/dmax,-1,1);}
+ let steer;const dmax=.58/(1+Math.abs(vx)*.11);
+ if(lx<1){steer=Math.sign(ly||1);}else{const kappa=2*ly/(lx*lx+ly*ly),delta=Math.atan((P.a+P.b)*kappa)*(1+Math.abs(vx)*AI62.gain)-(s.r-Math.abs(vx)*kappa)*AI62.damp;steer=clamp(delta/dmax,-1,1);}
+ // On the line at speed, track it closely instead: the line's own curvature as feed-forward plus
+ // heading and front-axle offset corrections (Stanley). Pure pursuit turns in early by half its
+ // look-ahead, which on a full-width line means an early apex and running out of road on exit.
+ const tr=vx>8&&AI62.track?ai62Track(W,x,plan,vx,s,len):null;if(tr&&Math.abs(tr.ey)<3&&Math.abs(tr.eh)<.45)steer=clamp(tr.delta/dmax,-1,1);
  // Speed: the planner's target, capped by what the tyres can do, with braking feed-forward.
  // The race AI's speed targets come from a reference speed trace that the path model rescales
  // to the real lap time, so on the tyre model the free target is what the tyres can carry.
@@ -10068,6 +10073,17 @@ function ai62Drive(L,x,plan,dt){
  // come off the pedals when the rear is past its peak slip, so turn-in does not spin the car.
  if(AI62.trail&&sp>6){const lat=Math.abs(s.ay)/(P.mu*dcTyreGrip(x)*P.g),over=Math.abs(s.ar)>P.peakR*1.05;brake*=clamp(1+AI62.trail*(.35-lat),.25,1);if(over){brake=Math.min(brake,.25);throttle*=.5;}}
  return{steer,throttle,brake,ai:true};
+}
+function ai62Track(W,x,plan,vx,s,len){
+ const P=PH47,pre=vx*AI62.preview,at=f=>{const q=W.at(f),l=ai68Aim(W,f,x.progress,plan.lane);return{x:q.p.x+q.n.x*l,z:q.p.z+q.n.z*l};};
+ const fx=Math.sin(x.yaw),fz=Math.cos(x.yaw),ax=x.pos.x+fx*(P.a+pre),az=x.pos.z+fz*(P.a+pre);
+ // Project the preview point onto the track: off-centre through a corner the car covers less (or
+ // more) road than the centreline, and a fixed phase step made it turn in early on the inside.
+ let ph=x.progress+(P.a+pre)/len;for(let n=0;n<2;n++){const q=W.at(ph);ph+=((ax-q.p.x)*q.v.x+(az-q.p.z)*q.v.z)/len;}
+ const c=at(ph),a=at(ph-2/len),b=at(ph+2/len),hp=Math.atan2(b.x-a.x,b.z-a.z);
+ const ey=(c.x-ax)*Math.cos(x.yaw)-(c.z-az)*Math.sin(x.yaw),eh=dcWrapAngle(hp-x.yaw),k=ai68Off(W,x.progress,plan.lane)?dcTrackCurvature(W,ph):ai68Curv(W,ph);
+ const delta=Math.atan((P.a+P.b)*k)*(1+vx*AI62.gain)+eh*AI62.kh+Math.atan(AI62.ke*ey/(vx+3))-(s.r-vx*k)*AI62.tdamp;
+ return{delta,ey,eh};
 }
 // Race-control mistakes play out in the tyre model instead of a scripted slide.
 function ai62Mistake(L,x,incident,input,dt){
@@ -10096,7 +10112,7 @@ dcAIStep=function(x,dt){
  x.rf40Incident=null;x.ai62Target=undefined;x.v=Math.max(0,keep.v);const planLane=x.ai62.lane??keep.lane;x.lane=planLane;
  ai62AI(x,dt);
  if(incident&&!x.rf40Incident)x.rf40Incident=incident;
- x.ai62.lane=clamp(x.lane,-6,6);const plan={lane:x.ai62.lane,v:x.v},len=L.e.lengthKm*1000,jump=Math.abs(x.progress-keep.progress)*len>Math.max(6,Math.abs(keep.v)*dt*3+4)||Math.abs(x.lane-planLane)>3;
+ x.ai62.lane=ai68Clamp(sc25Engine,x.progress,x.lane);const plan={lane:x.ai62.lane,v:x.v},len=L.e.lengthKm*1000,jump=Math.abs(x.progress-keep.progress)*len>Math.max(6,Math.abs(keep.v)*dt*3+4)||Math.abs(x.lane-planLane)>3;
  if(x.pitStage||x.outlapHold||x.retired||x.finished||jump){ai62Leave(x);return;}
  Object.assign(x,keep);x.pos=keep.pos;x.v=keep.v;
  const input=ai62Drive(L,x,plan,dt);if(x.rf40Incident)ai62Mistake(L,x,x.rf40Incident,input,dt);
@@ -10109,11 +10125,11 @@ const ai62Settings=dcSettingsFields;
 dcSettingsFields=function(...args){
  return ai62Settings(...args)+`<div class="dc-card" style="margin-top:18px"><h3>AI cars</h3><label class="dc-checkbox"><input type="checkbox" ${D.settings.ai62Off?'':'checked'} onchange="D.settings.ai62Off=!this.checked;dcSave()">AI cars drive the full car physics near you</label><p class="dc-muted">Rivals within about 350 m use the same tyre model as your car, so they slide, lock up, spin and react to contact like you do. Untick on a slow machine to put them back on the lighter path model.</p></div>`;
 };
-// Quasi-steady lap on the tyre model (corner limits, then power and braking passes). The path
-// model's pace is scaled to it, so cars far away lap at the same speed the physics allows.
+// Quasi-steady lap on the tyre model along the racing line (corner limits, then power and
+// braking passes). The path model's pace is scaled to it, so cars far away lap at the same speed the physics allows.
 function ai62LapEstimate(W,e){
- const P=PH47,len=e.lengthKm*1000,N=Math.max(200,Math.round(len/4)),ds=len/N,mass=1365,aero=50,kd=P.cl*(1+aero/100*.9),cd=P.cd*(1+aero*.009),mu=P.mu*(AI62.use+.03),top=(318-aero*.36)/3.6,v=new Float64Array(N);
- for(let i=0;i<N;i++){const k=Math.abs(dcTrackCurvature(W,i/N)),den=k-mu*kd/mass;v[i]=Math.min(top,k<1e-5||den<=1e-6?top:Math.sqrt(mu*P.g/den));}
+ const P=PH47,len=e.lengthKm*1000,N=Math.max(200,Math.round(len/4)),ds=len/N*(W.ai68?.ratio||1),mass=1365,aero=50,kd=P.cl*(1+aero/100*.9),cd=P.cd*(1+aero*.009),mu=P.mu*(AI62.use+.03),top=(318-aero*.36)/3.6,v=new Float64Array(N);
+ for(let i=0;i<N;i++){const k=Math.abs(ai68Curv(W,i/N)),den=k-mu*kd/mass;v[i]=Math.min(top,k<1e-5||den<=1e-6?top:Math.sqrt(mu*P.g/den));}
  for(let pass=0;pass<2;pass++){for(let i=0;i<2*N;i++){const a=i%N,b=(i+1)%N,u=v[a],acc=Math.min(P.drive,P.power/Math.max(4,u))/mass-cd*u*u/mass-.12;v[b]=Math.min(v[b],Math.sqrt(Math.max(0,u*u+2*acc*ds)));}
   for(let i=2*N;i>0;i--){const a=i%N,b=(i-1+N)%N,u=v[a],dec=mu*P.g*.85+(kd*mu*.85+cd)*u*u/mass;v[b]=Math.min(v[b],Math.sqrt(u*u+2*dec*ds));}}
  let t=0;for(let i=0;i<N;i++)t+=ds/Math.max(1,v[i]);return t;
@@ -12132,4 +12148,128 @@ function paint(L){
  const h=card(L,hs[0],0).replace('class="cd66-p','class="cd66-p cd66-solo');if(el.cd66!==h){el.cd66=h;el.innerHTML=h;}}
 function $id(id){return document.getElementById(id);}
 })();
+</script><script id="ai68-line">
+/* AI68 racing line. The old line sat within 2.4 m of the centreline and every car wandered
+   around it, so the field drove down the middle of the road. This builds a minimum-curvature
+   line for each circuit inside the real track edges: wide on entry, clipping the apex, wide
+   on exit, riding the kerbs where a circuit has them (chicanes get straightened over the
+   kerbs) and keeping off walls on street tracks. The race AI steers along it and plans its
+   speed from the line's own curvature, which is much gentler than the centreline's, so cars
+   carry corner speed close to what the tyres allow. The far-away path model uses the same
+   line and lap estimate, so cars out of sight lap at the matching pace. */
+const AI68={follow:1.2,kink:.5,tightGap:3.6,tightK:1.2,far:1.06,farTrack:{sydney:.969,albert:.963,taupo:.954,symmons:.903,perth:.983,darwin:.951,townsville:.971,ipswich:.959,bend:.977,bathurst:.982,goldcoast:.894,sandown:.949,adelaide:.966,homebush:.958},road:7.0,kerb:8.0,margin:.3,wall:1.2,passes:[[48,40],[24,50],[12,60],[6,70],[3,80],[1,30]]};
+// Usable half-width for the car's centre on each side of every centreline sample.
+function ai68Bounds(W){
+ const N=W.N,w=PH47.width,lo=new Float32Array(N),hi=new Float32Array(N),wl=new Float32Array(N).fill(99),wh=new Float32Array(N).fill(99),kerbs=ph47Kerbs(W),L={e:W.e};
+ for(let i=0;i<N;i++){
+  // Kerbs flag corners over ±8 samples; let the car put two wheels on them.
+  const k=kerbs[i]||kerbs[(i+2)%N]||kerbs[(i-2+N)%N],edge=(k?AI68.kerb:AI68.road)-w-AI68.margin;let a=edge,b=edge;
+  try{const wa=ph47WallLane(W,L,{idx:i},{lane:-1}),wb=ph47WallLane(W,L,{idx:i},{lane:1});if(Number.isFinite(wa)){wl[i]=wa;a=Math.min(a,wa-w-AI68.wall);}if(Number.isFinite(wb)){wh[i]=wb;b=Math.min(b,wb-w-AI68.wall);}}catch(e){}
+  lo[i]=-Math.max(.5,a);hi[i]=Math.max(.5,b);
+ }
+ // On the inside of a kink much tighter than the road is wide (Gold Coast's beach chicane) lane
+ // offsets fold up and the inside wall sits almost on the apex, so stay within half the radius.
+ for(let i=0;i<N;i++){const a=W.samples[(i-4+N)%N],b=W.samples[(i+4)%N],d=a.p.distanceTo(b.p),k=d>.5?dcWrapAngle(Math.atan2(b.v.x,b.v.z)-Math.atan2(a.v.x,a.v.z))/d:0;if(Math.abs(k)<1/30)continue;
+  const lim=Math.max(.5,AI68.kink/Math.abs(k));if(k>0)lo[i]=Math.max(lo[i],-lim);else hi[i]=Math.min(hi[i],lim);}
+ // Where another part of the circuit runs close by (tight chicanes, hairpins), stay nearer our own
+ // centreline than the other road's, or the car's track position would snap onto the other part.
+ const S=W.samples,far=Math.max(30,Math.round(60/(W.e.lengthKm*1000/N)));
+ for(let i=0;i<N;i++){const p=S[i].p,n=S[i].n,v=S[i].v;
+  for(let j=0;j<N;j++){const d=Math.abs(i-j),gap=Math.min(d,N-d);if(gap<far)continue;const dx=S[j].p.x-p.x,dz=S[j].p.z-p.z,al=dx*v.x+dz*v.z;if(Math.abs(al)>10)continue;
+   const l=dx*n.x+dz*n.z,lim=Math.max(.5,Math.abs(l)/2-w-.9);if(Math.abs(l)>40)continue;if(l>0)hi[i]=Math.min(hi[i],lim);else lo[i]=Math.max(lo[i],-lim);}}
+ return{lo,hi,wl,wh};
+}
+// K1999-style relaxation (Remi Coulom): each point moves along its normal until its curvature is
+// the average of its neighbours' curvatures. That spreads every corner over the most road it can,
+// which is what gives the wide entry, apex clip and wide exit. Coarse strides first so the solve
+// reaches across whole corners, then fine strides to smooth it.
+function ai68Curv3(ax,az,bx,bz,cx,cz){const x1=bx-ax,z1=bz-az,x2=cx-bx,z2=cz-bz,d=Math.hypot(x1,z1)*Math.hypot(x2,z2)*Math.hypot(cx-ax,cz-az);return d>1e-9?2*(x1*z2-z1*x2)/d:0;}
+function ai68Solve(W,lo,hi){
+ const N=W.N,S=W.samples,o=new Float32Array(N),px=new Float64Array(N),pz=new Float64Array(N),nx=new Float64Array(N),nz=new Float64Array(N);
+ for(let i=0;i<N;i++){px[i]=S[i].p.x;pz[i]=S[i].p.z;const l=Math.hypot(S[i].n.x,S[i].n.z)||1;nx[i]=S[i].n.x/l;nz[i]=S[i].n.z/l;}
+ const X=i=>px[i]+nx[i]*o[i],Z=i=>pz[i]+nz[i]*o[i],K=(a,b,c)=>ai68Curv3(X(a),Z(a),X(b),Z(b),X(c),Z(c));
+ for(const [h,iters] of AI68.passes)for(let it=0;it<iters;it++)for(let i=0;i<N;i++){
+  const a=(i-h+N)%N,b=(i+h)%N,aa=(i-2*h+2*N)%N,bb=(i+2*h)%N,target=(K(aa,a,i)+K(i,b,bb))*.5;
+  const c0=K(a,i,b),keep=o[i];o[i]=keep+.05;const c1=K(a,i,b);o[i]=keep;const slope=(c1-c0)/.05;
+  if(Math.abs(slope)>1e-9)o[i]=clamp(keep+(target-c0)/slope*.9,lo[i],hi[i]);
+ }
+ return o;
+}
+// Signed curvature and segment length of the racing line itself.
+function ai68Shape(W,o){
+ const N=W.N,S=W.samples,P=i=>{const s=S[(i+N)%N],j=(i+N)%N;return[s.p.x+s.n.x*o[j],s.p.z+s.n.z*o[j]];},k=new Float32Array(N),ds=new Float32Array(N),m=3;
+ for(let i=0;i<N;i++){
+  const a=P(i-m),c=P(i),b=P(i+m),d=P(i+1),h1=Math.atan2(c[0]-a[0],c[1]-a[1]),h2=Math.atan2(b[0]-c[0],b[1]-c[1]),len=Math.hypot(c[0]-a[0],c[1]-a[1])+Math.hypot(b[0]-c[0],b[1]-c[1]);
+  k[i]=len>1?dcWrapAngle(h2-h1)/(len*.5):0;ds[i]=Math.hypot(d[0]-c[0],d[1]-c[1]);
+ }
+ // Light smoothing for corner speeds (one noisy sample must not set a corner speed); the raw
+ // curvature is kept for the sharper corner-speed check.
+ const out=new Float32Array(N);for(let i=0;i<N;i++){let n=0;for(let j=-2;j<=2;j++)n+=k[(i+j+N)%N];out[i]=n/5;}
+ return{k:out,raw:k,ds};
+}
+function ai68Build(W){
+ if(!W?.samples||!W.N)return;const {lo,hi,wl,wh}=ai68Bounds(W),N=W.N,step=W.e.lengthKm*1000/N;let o=ai68Solve(W,lo,hi);
+ // Next to a wall, a car crossing the road at an angle swings its front corner out by its
+ // half-length times the sine of that angle: take that off the wall side and solve again.
+ const half=2.45,w=PH47.width;let again=false;
+ for(let i=0;i<N;i++){const sl=(o[(i+2)%N]-o[(i-2+N)%N])/(4*step),c=1/Math.sqrt(1+sl*sl),reach=w*c+half*Math.abs(sl)*c+AI68.wall*1.5;
+  if(wl[i]<90&&-wl[i]+reach>lo[i]){lo[i]=Math.min(-.5,-wl[i]+reach);again=true;}if(wh[i]<90&&wh[i]-reach<hi[i]){hi[i]=Math.max(.5,wh[i]-reach);again=true;}}
+ if(again)o=ai68Solve(W,lo,hi);const {k,raw,ds}=ai68Shape(W,o);
+ // Where the line runs within a few metres of a wall the AI takes a little speed off, so a car
+ // that slides a metre wide (street chicanes) brushes the kerb instead of the concrete.
+ const near=new Uint8Array(N),tight=new Uint8Array(N);for(let i=0;i<N;i++){const gap=o[i]<0?wl[i]+o[i]:wh[i]-o[i];if(gap<AI68.tightGap)near[i]=1;}
+ for(let i=0;i<N;i++)if(near[i])for(let j=-12;j<=4;j++)tight[(i+j+N)%N]=1;
+ const S=W.samples;let centre=0;for(let i=0;i<W.N;i++)centre+=S[i].p.distanceTo(S[(i+1)%W.N].p);const len=ds.reduce((a,b)=>a+b,0);
+ W.ai68={line:o,lo,hi,wl,wh,k,raw,ds,tight,len,ratio:len/Math.max(1,centre)};W.racingLine=Array.from(o);W.racingCorridor=.6;W.ai62Lap=null;W.hd64Lap=null;
+}
+function ai68Index(W,phase){const f=((W.at(phase).t%1)+1)%1*W.N,i=Math.floor(f)%W.N;return{i,j:(i+1)%W.N,u:f-Math.floor(f)};}
+function ai68Line(W,phase){const R=W.ai68;if(!R)return 0;const {i,j,u}=ai68Index(W,phase);return R.line[i]+(R.line[j]-R.line[i])*u;}
+// Corner-speed curvature: as ai68Curv, raised where the line runs close to a wall.
+function ai68CapCurv(W,phase){const R=W.ai68,k=Math.abs(ai68Curv(W,phase));if(!R)return k;return R.tight[ai68Index(W,phase).i]?k*AI68.tightK:k;}
+// Racing-line curvature at a lap phase (same sign convention as dcTrackCurvature); raw skips the smoothing.
+function ai68Curv(W,phase,raw){const R=W.ai68;if(!R)return dcTrackCurvature(W,phase);const {i,j,u}=ai68Index(W,phase),k=raw?R.raw:R.k;return k[i]+(k[j]-k[i])*u;}
+// Keep a planned lane (overtakes, defending, the field bunched into turn 1) on usable road: the
+// line's own bounds, which already stay off walls and kerb edges.
+function ai68Clamp(W,phase,lane){const R=W?.ai68;if(!R)return clamp(lane,-6,6);const {i}=ai68Index(W,phase);return clamp(lane,R.lo[i],R.hi[i]);}
+// Where the driver aims at a lap phase ahead. Close to the line, the planner's small offset
+// (each driver's own variation) is carried along the line. Further off it the planner is
+// placing the car (overtaking, defending, following traffic) and its lane is held as it is,
+// as the old AI did; carrying that offset round a corner put the target off the road.
+function ai68Off(W,progress,lane){return Math.abs(lane-ai68Line(W,progress))>AI68.follow;}
+function ai68Aim(W,phase,progress,lane){return ai68Clamp(W,phase,ai68Off(W,progress,lane)?lane:lane+ai68Line(W,phase)-ai68Line(W,progress));}
+// How far the line moves sideways over the next step, so the planner's lane-change rate limit
+// (meant for overtakes) does not stop a car following the line from wide entry to apex.
+function ai68Drift(W,x,dt){const R=W.ai68;if(!R||!live)return 0;const len=live.e.lengthKm*1000,step=Math.max(0,x.v||0)*dt/len;return(ai68Line(W,x.progress+step)-ai68Line(W,x.progress))*3;}
+// Each driver keeps a slightly different line on the straights; at the apex they all clip it.
+const ai68Lane=dcRacingLane;
+dcRacingLane=function(W,phase,x){
+ if(x?.hd64Def||!W?.ai68)return ai68Lane(W,phase,x);
+ const base=ai68Line(W,phase),{i}=ai68Index(W,phase),room=Math.max(0,1-Math.abs(base)/Math.max(.5,base<0?-W.ai68.lo[i]:W.ai68.hi[i])),lap=((phase%1)+1)%1;
+ return base+Math.sin((x?.seed||0)+lap*Math.PI*6)*.45*room;
+};
+// The path model's lap is scaled to the line's quasi-steady lap, times a factor per circuit
+// measured against the tyre-model AI (Hard, test day, two laps each), so cars out of sight lap
+// within about half a second of the ones around you. Wider clamp than before: some street
+// circuits are well off their real lap times on this geometry.
+// Some circuits only know where their visible concrete is once the scenery has been built, after
+// the track (and its line) was made. Rebuild the line then, with the ideal-line and rubber meshes.
+function ai68Refresh(W){
+ const R=W?.ai68;if(!R)return;const L={e:W.e};let moved=false;
+ try{for(let i=0;i<W.N&&!moved;i++){const a=ph47WallLane(W,L,{idx:i},{lane:-1}),b=ph47WallLane(W,L,{idx:i},{lane:1});moved=Math.abs((Number.isFinite(a)?a:99)-R.wl[i])>.3||Math.abs((Number.isFinite(b)?b:99)-R.wh[i])>.3;}}catch(e){return;}
+ if(!moved)return;ai68Build(W);
+ if(W.dcIdealRacingLine){W.dcIdealRacingLine.removeFromParent();W.dcIdealRacingLine.geometry?.dispose();W.dcIdealRacingLine=null;dcBuildIdealRacingLine(W);}
+ if(W.gx55Line&&typeof gx55UpgradeWorld==='function')gx55UpgradeWorld(W);
+}
+const ai68Launch=dcLaunch;
+dcLaunch=function(...args){
+ const r=ai68Launch(...args),L=live,W=sc25Engine;if(L?.dc)ai68Refresh(W);
+ if(L?.dc&&W?.ai68&&!(D.settings.ph47Classic||D.settings.ai62Off)){const cache=W.hd64Lap||(W.hd64Lap={}),key=L.e.key+':'+AI62.use;if(!cache[key])cache[key]=ai62LapEstimate(W,L.e);L.ai62Pace=clamp(cache[key]*AI68.far*(AI68.farTrack[L.e.key]||1)/L.e.realLap,.85,1.45);}
+ return r;
+};
+// Difficulty on the racing line. Hard runs the tyre-model AI at the limit the driver can hold
+// (more corner speed than this slid off on Bathurst's mountain in testing);
+// the lower tiers give up corner speed and brake earlier.
+Object.assign(HD64.tiers.Easy,{corner:.87,dec:.5});
+Object.assign(HD64.tiers.Intermediate,{corner:.92,dec:.56});
+Object.assign(HD64.tiers.Hard,{corner:.96,dec:.62});
 </script></body></html>
