@@ -99,6 +99,7 @@ function clearWrecks(L,dt){
   if(x.ic59Ghost>0)x.ic59Ghost=Math.max(0,x.ic59Ghost-dt);
   if(x===L.player&&!L.dc33Auto)continue;
   if(x.retired&&!x.garage&&!x.finished){x.ic59Out=(x.ic59Out||0)+dt;if(x.ic59Out>.8){x.garage=true;x.v=x.speed=0;}continue;}
+  if(window.ST69){x.ic59Stuck=0;continue;} // st69 handles stuck cars (by distance covered)
   if(!racing||x.retired||x.finished||x.pitStage||x.outlapHold||(x.releaseDelay||0)>0||lineup&&!x.ic59Through){x.ic59Stuck=0;continue;}
   // A car crawling in traffic (the start, a queue into a hairpin) is not stuck: only a car with
   // clear road ahead counts, never in the first 12 s after the start, and only after 3 s.

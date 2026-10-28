@@ -22,7 +22,9 @@ for old,new in [
 ]:
     assert html.count(old)==1 or (html.count(old)==0 and new in html),old
     html=html.replace(old,new)
-i=html.rindex('</body>')
+# st69 (stuck cars) stays after ai68: insert before it when it is there.
+i=html.find('<script id="st69-stuck">')
+if i<0:i=html.rindex('</body>')
 html=html[:i]+'<script id="ai68-line">\n'+js+'</script>'+html[i:]
 (root/'index.html').write_text(html)
 print('ok',len(html))
