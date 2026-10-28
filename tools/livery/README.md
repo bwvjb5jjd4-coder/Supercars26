@@ -14,3 +14,10 @@ posmap.py so the normals face outwards, then `python3 paint_falcon18.py xbox|cal
 Logos: Xbox sphere = simple-icons@7 xbox.svg (xbox_w.png); XBOX / CALTEX / FORD / Vortex set in Montserrat (Google Fonts, tools/fonts);
 Caltex hallmark drawn as vector; Shell, PPG, Penske, Pirtek, Western Star, Havoline, Bosch, Dunlop, Ford oval from assets/img.
 Both keys use RF49_KEY_MAKE -> Ford and are in RF49_BAKED. Nothing is painted on the lamp meshes (lamps are separate geometry).
+
+## Ford_objective -> 2015 Prodrive Pepsi Max Crew Falcon (SCT Motorsport, both seats), 2026-10-28
+Files in `pepsimax/` (texture now ships as assets/liveries/Ford_pepsimax.*). Same flow with the Ford body (`dump.js` with 'Ford'),
+but use `pepsimax/posmap2.py`: the Falcon UV atlas has big overlaps (wing, roof, boot corners and doors share texels),
+so triangles are drawn in priority order (wing < other < roof < door/quarter sides, larger last) and visible panels win.
+`logos.py` builds the stickers (fonts from raw.githubusercontent.com/google/fonts; Pepsi globe from simple-icons 7.0.0
+coloured in `globe.svg`, rendered by `svgr.js`; Castrol/Ford/Dunlop from assets/img). `paint_pm.py` paints and bakes.
