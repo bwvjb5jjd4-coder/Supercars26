@@ -103,10 +103,12 @@ dcPhysics=function(dt,input,auto=false){
   if(humans(L).includes(x)){c.ready=inBay(x)&&Math.abs(x.v||0)<.9;if(!c.ready)c.done=false;continue;}
   // AI: park in the box, or wherever it stopped close to the box (teammate in the way, overshot).
   if(x.retired||x.garage){continue;}
-  if(x.pitStage){const b=bayInfo(x);if(!b)continue;const near=b.long>-26&&b.long<12;c.still=(x.v<.5&&near)?c.still+dt:0;if(c.still>.6||b.long>6||x.pitStage==='out'&&b.long>-4)park(L,x);}}
+  aiPark(L,x,dt);}
  if(humans(L).every(h=>h.retired||h.cd66?.done))CD.want=true;
  paint(L);
 };
+
+function aiPark(L,x,dt){const c=x.cd66;if(!x.pitStage)return;const b=bayInfo(x);if(!b)return;const near=b.long>-26&&b.long<12;c.still=(x.v<.5&&near)?c.still+dt:0;if(c.still>.6||b.long>6||x.pitStage==='out'&&b.long>-4)park(L,x);}
 
 /* ---------- Practice, qualifying and shootout: in-lap back to the pits ---------- */
 // When the session ends (time up and you cross the line, or your shootout lap is done) you drive
@@ -133,6 +135,30 @@ function cardQ(L){const Q=L.cd66Q,p=L.player,best=Number.isFinite(Q.best)?dcLapT
  return `<div class="cd66-p cd66-solo"><div class="fl"></div><div class="tx"><b>In-lap · best ${best}</b><small>Session over. Drive back to pit lane and park in your bay</small></div></div>`;}
 function paintQ(L){ensureCss();const host=document.querySelector('.dc-driving');if(!host)return;let el=$id('cd66');if(!el){el=document.createElement('div');el.id='cd66';host.appendChild(el);}const h=cardQ(L);if(el.cd66!==h){el.cd66=h;el.innerHTML=h;}}
 CD.endQ=function(){const L=live;if(L?.cd66Q?.ready)L.cd66Q.want=true;};
+
+// AI cars: in the shootout each car drives back to its bay after its lap; in practice and
+// qualifying every car is flagged the next time it crosses the line once time is up, then
+// drives back and parks. Cars still in the garage at time-up stay there.
+const timedPhysics=dcPhysics;
+dcPhysics=function(dt,input,auto=false){const L=live;
+ if(!L?.dc||!['practice','qualifying','shootout'].includes(L.stage)||L.test||auto||dcSimBusy)return timedPhysics.apply(this,arguments);
+ const hs=humans(L),shoot=L.stage==='shootout',up=shoot||(L.sessionRemaining??1)<=0,pre=new Map(),flip=[];
+ for(const x of L.entrants){if(hs.includes(x)||x.retired)continue;pre.set(x,{p:x.progress,v:x.v,fin:x.finished});
+  if(!x.cd66&&up&&!shoot&&x.pitStage&&(x.v<1||(x.releaseDelay||0)>0)){freezeT(L,x);x.cd66.park={t:1};x.v=x.speed=0;x.finished=true;continue;}
+  const c=x.cd66;if(!c)continue;
+  if(c.park){if(c.park.to)parkStep(x,dt);continue;}
+  if(x.garage)continue;
+  x.finished=false;x.outlapHold=false;x.releaseDelay=0;x.fuel=Math.max(x.fuel||0,4);x.pitNow=true;x.aiError=Math.max(x.aiError||0,dt*2);flip.push(x);}
+ try{timedPhysics.apply(this,arguments);}finally{
+  for(const x of flip){const c=x.cd66;if(!c)continue;x.finished=true;x.best=c.best;x.timedLaps=c.laps;if(x.outlapHold){x.outlapHold=false;x.v=pre.get(x).v;}x.speed=Math.abs(x.v||0)*3.6;}}
+ if(live!==L)return;
+ for(const [x,o] of pre){if(x.cd66||x.retired)continue;
+  const crossed=Math.floor(x.progress)>Math.floor(o.p)&&x.progress>0;
+  if(shoot&&x.finished&&!o.fin){freezeT(L,x);x.outlapHold=false;x.v=o.v;x.speed=x.v*3.6;}
+  else if(!shoot&&up&&crossed&&!x.pitStage){freezeT(L,x);x.finished=true;}}
+ for(const x of flip)if(x.cd66&&!x.cd66.park&&!x.garage)aiPark(L,x,dt);
+};
+function freezeT(L,x){freeze(L,x);x.cd66.best=x.best;x.cd66.laps=x.timedLaps;}
 
 /* ---------- Prompt ---------- */
 const CSS=`#cd66{position:absolute;inset:0;pointer-events:none;z-index:7}
