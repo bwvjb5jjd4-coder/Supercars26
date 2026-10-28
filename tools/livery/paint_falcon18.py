@@ -86,7 +86,7 @@ for sgn in (-1,1):
     c=Cv(V,U,a0-0.6,a0+0.6,0.0,1.0,(z>1.6)&(x*sgn>0.3)&nothood);c.ac=a0;CN.append(c)
 wing=(z<-2.12)&(y>1.04)
 WG=Cv((0,1,0),(0,0,1),-1.1,1.1,-2.7,2.7,wing)   # wing top, reads from the tail
-LG='logos/'  # real vector logos rendered by svgr.js (see README)
+LG='logos/'
 def clear_bg(im,th=40):
     im=im.convert('RGBA');a=np.asarray(im).copy()
     from PIL import ImageDraw as D
@@ -161,7 +161,7 @@ if LIV=='xbox':
     RR.put(xw,0,0.52,0.50)
     RR.put(pirtek,0,0.38,0.30)
     cvs+=[TF,TR,WG,RR,FR]+CN
-else:
+elif LIV=='caltex':
     BLUE=hexc('#2c5b78');SILV=(172,180,187);RED=hexc('#d72a30')
     col=np.tile(BLUE,(len(x),1))
     star=ck(calstar)
@@ -209,6 +209,73 @@ else:
     RR.put(cw,0,0.63,0.32)
     cvs+=[TF,TR,WG,RR,FR]+CN
     col[wing]=hexc('#1b1d20')
+elif LIV=='taubmans':
+    from PIL import ImageFilter
+    SKY=hexc('#2b8fd8');BLK=(22,24,27);ORG=(240,134,30);WHT=(247,248,249)
+    col=np.tile(SKY,(len(x),1))
+    hg=Image.open(LG+'hogs.png').convert('RGBA').crop((130,1085,830,1495))
+    ha=np.asarray(hg);m=(ha[...,3]>60)
+    mi=Image.fromarray((m*255).astype(np.uint8)).filter(ImageFilter.MaxFilter(11))
+    hogs=Image.new('RGBA',hg.size,(16,30,60,0));hogs.putalpha(mi)
+    fill=Image.new('RGBA',hg.size,WHT+(255,));fill.putalpha(Image.fromarray((m*255).astype(np.uint8)));hogs.alpha_composite(fill);hogs=ck(hogs)
+    det=Image.open(LG+'detroit.png').convert('RGBA');det=ck(det.crop((int(det.width*0.245),0,det.width,det.height)));det=recol(det,WHT)
+    mtu=ck(Image.open(LG+'mtu.png').convert('RGBA'))
+    man=recol(ck(Image.open(LG+'man.png').convert('RGBA')),WHT)
+    wurth=recol(L(IMG+'f308c3b2a5.png'),WHT)
+    penske_r=L(IMG+'2636227148.png')
+    # Taubmans: colour-dot cluster + wordmark, "by" + PPG underneath
+    D=900;dots=Image.new('RGBA',(D,D),(0,0,0,0));dd=ImageDraw.Draw(dots)
+    for (cx,cy,r,c) in [(0.30,0.30,0.20,(238,52,43)),(0.62,0.22,0.17,(250,166,26)),(0.80,0.50,0.17,(255,214,0)),(0.62,0.78,0.18,(122,190,66)),(0.30,0.72,0.20,(0,150,214)),(0.14,0.50,0.12,(140,80,160)),(0.50,0.50,0.15,(234,90,140))]:
+        dd.ellipse(((cx-r)*D,(cy-r)*D,(cx+r)*D,(cy+r)*D),fill=c+(255,))
+    dots=ck(dots)
+    tw=txt([('TAUBMANS',WHT+(255,))],wght=620,track=-4)
+    byt=txt([('by',WHT+(255,))],wght=500)
+    TB=Image.new('RGBA',(int(dots.width*1.15+tw.width),int(tw.height*2.05)),(0,0,0,0))
+    dh=int(tw.height*1.75);ds_=dots.resize((int(dots.width*dh/dots.height),dh),Image.LANCZOS)
+    TB.alpha_composite(ds_,(0,0));tx0=int(ds_.width*1.12);TB.alpha_composite(tw,(tx0,int(tw.height*0.18)))
+    pg=ppg.resize((int(ppg.width*tw.height*0.62/ppg.height),int(tw.height*0.62)),Image.LANCZOS)
+    by=byt.resize((int(byt.width*tw.height*0.36/byt.height),int(tw.height*0.36)),Image.LANCZOS)
+    bx=tx0+tw.width//2-(by.width+pg.width)//2;TB.alpha_composite(by,(bx,int(tw.height*1.48)));TB.alpha_composite(pg,(bx+by.width+int(tw.height*0.08),int(tw.height*1.30)))
+    TB=ck(TB);TB.save('taubmans_lockup.png')
+    for c in SD:
+        f=c.f
+        # orange belt stripe from the front fender top, filling the C-pillar behind the rear window
+        c.poly([(f(1.95),0.79),(f(0.95),0.86),(f(-1.0),0.875),(f(-1.55),0.93),(f(-2.6),0.95),(f(-2.6),1.04),(f(-1.55),1.04),(f(-1.2),0.95),(f(-1.0),0.92),(f(0.95),0.895),(f(1.95),0.815)],ORG+(255,))
+        # black main panel: front door to tail
+        c.poly([(f(0.98),0.865),(f(-1.0),0.88),(f(-1.55),0.935),(f(-2.6),0.955),(f(-2.6),0.44),(f(-1.95),0.43),(f(-1.0),0.37),(f(0.62),0.40),(f(0.90),0.48)],BLK+(255,))
+        # orange stripe along the bottom of the panel, and across the rear bumper
+        c.poly([(f(0.90),0.48),(f(0.62),0.40),(f(-1.0),0.37),(f(-1.95),0.43),(f(-2.6),0.44),(f(-2.6),0.385),(f(-1.95),0.375),(f(-1.0),0.33),(f(0.62),0.36),(f(0.95),0.46)],ORG+(255,))
+        c.put(TB,0.02,0.60,1.55)
+        c.put(man,f(-1.88),0.66,0.40)
+        c.put(hogs,f(-2.05),0.265,0.26)
+        c.put(bosch,f(-1.80),0.985,0.24)
+        c.put(fordov,f(0.82),0.55,0.15)
+        c.put(wurth,f(1.97),0.635,0.20)
+        c.put(pirtek,f(1.95),0.50,0.24)
+        c.put(dunlop,f(-0.2),0.20,0.22)
+        cvs.append(c)
+    # bonnet: white with the big PPG, orange edge stripes; blue stays at the base of the windscreen
+    mix(np.array(WHT,float),(hood|((z>2.12)&(y>0.62)&(np.abs(x)<0.78))).astype(float))
+    for sx in (-1,1):TF.poly([(sx*0.60,-1.05),(sx*0.75,-1.05),(sx*0.95,-1.75),(sx*0.85,-1.80)],ORG+(255,))
+    TF.put(ppg,0.0,-1.72,0.60,rot=90)
+    # roof: Western Star header
+    TF.poly([(-0.9,-0.37),(0.9,-0.37),(0.9,-0.22),(-0.9,-0.22)],(30,40,52,255))
+    TF.put(recol(wst_txt,WHT),0,-0.295,0.86)
+    WG.put(det,0,-2.35,0.95)
+    for sgn in (-1,1):
+        ep=Cv((sgn,0,0),(0,1,0),-2.7,2.7,0.0,1.5,wing&(x*sgn>0.6));ep.put(mtu,-2.36*(-sgn),1.16,0.17);cvs.append(ep)
+    TR.put(fordov,0,-1.86,0.22)
+    for c in CN:
+        c.put(ppg,c.ac,0.42,0.12)
+        c.put(penske_r,c.ac,0.27,0.19)
+    RR.put(fordov,0.45,0.72,0.16)
+    RR.put(ppg,-0.62,0.40,0.10)
+    RR.put(hogs,0,0.30,0.34)
+    cvs+=[TF,TR,WG,RR,FR]+CN
+    col[wing&(np.abs(x)>0.70)]=np.array(ORG,float)
+    rear=(z<-2.22)&~wing
+    mix(np.array(BLK,float),(rear&(y>0.45)).astype(float))
+    mix(np.array(ORG,float),(rear&(y>0.39)&(y<=0.45)).astype(float))
 for c in cvs:c.apply()
 out=np.zeros((N,N,3),np.float64);out[ys,xs]=col
 filled=M.copy();o8=out.copy()
