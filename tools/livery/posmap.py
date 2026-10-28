@@ -5,6 +5,7 @@ r=json.load(open('geo.json'))
 P=np.array(r[0]['pos'],np.float32).reshape(-1,3);U=np.array(r[0]['uvs'],np.float32).reshape(-1,2)
 tris=[np.array(x['index']).reshape(-1,3) for x in r[:3]]
 T=np.concatenate(tris)
+T=T[np.argsort(np.abs(P[T].mean(1)[:,0]),kind='stable')]  # outer skin wins over inner door skins that share UVs
 # hood separate geometry
 Ph=np.array(r[3]['pos'],np.float32).reshape(-1,3);Uh=np.array(r[3]['uvs'],np.float32).reshape(-1,2);Th=np.array(r[3]['index']).reshape(-1,3)
 P=np.concatenate([P,Ph]);U=np.concatenate([U,Uh]);T=np.concatenate([T,Th+len(r[0]['pos'])//3])
@@ -28,5 +29,5 @@ fn=np.cross(P[T[:,1]]-P[T[:,0]],P[T[:,2]]-P[T[:,0]]);fn/=np.linalg.norm(fn,axis=
 nrm=fn[ti]
 POS=np.zeros((N,N,3),np.float32);NRM=np.zeros((N,N,3),np.float32)
 POS[ys,xs]=pos;NRM[ys,xs]=nrm
-np.save('pos.npy',POS);np.save('nrm.npy',NRM);np.save('mask.npy',m)
+np.save('hood.npy',tid>=len(T)-len(Th));np.save('pos.npy',POS);np.save('nrm.npy',NRM);np.save('mask.npy',m)
 print(m.mean())
