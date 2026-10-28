@@ -5,7 +5,7 @@ r=json.load(open('geo.json'))
 P=np.array(r[0]['pos'],np.float32).reshape(-1,3);U=np.array(r[0]['uvs'],np.float32).reshape(-1,2)
 tris=[np.array(x['index']).reshape(-1,3) for x in r[:3]]
 T=np.concatenate(tris)
-T=T[np.argsort(np.abs(P[T].mean(1)[:,0]),kind='stable')]  # outer skin wins over inner door skins that share UVs
+C=P[T].mean(1);T=T[np.argsort(np.where((C[:,1]>1.2)&(C[:,2]>-1.2)&(np.abs(C[:,0])<0.55),9.0,np.abs(C[:,0])),kind='stable')]  # outer skin wins over inner door skins sharing UVs; roof wins over the wing endplates
 # hood separate geometry
 Ph=np.array(r[3]['pos'],np.float32).reshape(-1,3);Uh=np.array(r[3]['uvs'],np.float32).reshape(-1,2);Th=np.array(r[3]['index']).reshape(-1,3)
 P=np.concatenate([P,Ph]);U=np.concatenate([U,Uh]);T=np.concatenate([T,Th+len(r[0]['pos'])//3])

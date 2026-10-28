@@ -2,7 +2,7 @@ import sys,numpy as np
 from PIL import Image,ImageDraw,ImageFont
 LIV=sys.argv[1]
 IMG='/home/claude/supercars26/assets/img/'
-MONT='Montserrat.ttf';MONTI='MontserratI.ttf'
+MONT='../fonts/Montserrat.ttf';MONTI='../fonts/MontserratI.ttf'
 N=4096
 POS=np.load('pos.npy');NRM=np.load('nrm.npy');M=np.load('mask.npy');HOOD=np.load('hood.npy')
 ys,xs=np.nonzero(M);p=POS[ys,xs].astype(np.float64);n=NRM[ys,xs].astype(np.float64)
@@ -86,7 +86,7 @@ for sgn in (-1,1):
     c=Cv(V,U,a0-0.6,a0+0.6,0.0,1.0,(z>1.6)&(x*sgn>0.3)&nothood);c.ac=a0;CN.append(c)
 wing=(z<-2.12)&(y>1.04)
 WG=Cv((0,1,0),(0,0,1),-1.1,1.1,-2.7,2.7,wing)   # wing top, reads from the tail
-LG='/tmp/claude-0/lg/'
+LG='logos/'  # real vector logos rendered by svgr.js (see README)
 def clear_bg(im,th=40):
     im=im.convert('RGBA');a=np.asarray(im).copy()
     from PIL import ImageDraw as D
@@ -111,7 +111,7 @@ calstar=keep(cal,(0,0,842/2400,1));calword=keep(cal,(1000/2400,0,1,1))
 xword=ck(Image.open(LG+'xboxword.png').convert('RGBA'))
 xsph=ck(Image.open(LG+'xboxsphere.png').convert('RGBA'))
 fordov=L(IMG+'c6def2ec7e.png');havoline=L(IMG+'c0f351584f.png');ppg=L(IMG+'941b73578c.png')
-for nm,im in [('pirtek',pirtek),('calstar2',calstar),('wst_txt',wst_txt),('wst_w',wst_w),('penske',penske),('shell',shell_emb),('lg',lg),('dlink',dlink_w),('dunlop',dunlop),('bosch_w',bosch_w),('calstar',calstar),('calword',calword),('xword',xword),('xsph',xsph)]:im.save('/tmp/claude-0/lg/_'+nm+'.png')
+for nm,im in [('pirtek',pirtek),('calstar2',calstar),('wst_txt',wst_txt),('wst_w',wst_w),('penske',penske),('shell',shell_emb),('lg',lg),('dlink',dlink_w),('dunlop',dunlop),('bosch_w',bosch_w),('calstar',calstar),('calword',calword),('xword',xword),('xsph',xsph)]:im.save('logos/_'+nm+'.png')
 def plate(im,c,px=0.10,py=0.22,r=0.18):
     W=int(im.width+2*px*im.height*2.2);H=int(im.height*(1+2*py));o=Image.new('RGBA',(W,H),(0,0,0,0))
     ImageDraw.Draw(o).rounded_rectangle((0,0,W-1,H-1),radius=int(H*r),fill=tuple(c)+(255,))
