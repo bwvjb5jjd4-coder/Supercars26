@@ -9,10 +9,13 @@ Logos come from assets/img; IVECO is the simple-icons vector rendered by svg2png
 
 # Team 18 Falcons (2026-10-28): Ford_xbox18 (#18, 2015 Xbox) and Ford_caltex18 (#48, Caltex Vortex)
 Same steps on the Ford body: in dump.js use 'Ford' instead of 'Holden'. posmap.py now also writes hood.npy (exact hood texels) and draws the
-outer skin last, because the Falcon's inner door skins share UVs with the outer doors (they showed as stripes). Run views.py once after
+outer skin last (roof centre wins over the wing endplates, which share its UVs), because the Falcon's inner door skins share UVs with the outer doors (they showed as stripes). Run views.py once after
 posmap.py so the normals face outwards, then `python3 paint_falcon18.py xbox|caltex` and bc1.py.
-Logos: Xbox sphere = simple-icons@7 xbox.svg (xbox_w.png); XBOX / CALTEX / FORD / Vortex set in Montserrat (Google Fonts, tools/fonts);
-Caltex hallmark drawn as vector; Shell, PPG, Penske, Pirtek, Western Star, Havoline, Bosch, Dunlop, Ford oval from assets/img.
+Logos (v2, 2026-10-28): real vector files from github.com/detain/svg-logos (worldvectorlogo mirror; raw.githubusercontent.com is
+reachable from the cloud), rendered to logos/*.png with `node svgr.js file.svg::out.png::2400`: xbox-12 (XBOX wordmark), xbox-1 (sphere),
+caltex-logo (hallmark + wordmark), pirtek, penske-truck-leasing, western-star-trucks-1, lg-electronics, d-link, dunlop-1, bosch, shell.
+Havoline, PPG and the Ford oval come from assets/img. Only "Vortex 98" is typeset (Montserrat Black Italic): no real file exists online.
+v1 was rejected by Riley (home-made fonts, logos under the lamps, black panel wrapping the corners, bare roof/nose).
 Both keys use RF49_KEY_MAKE -> Ford and are in RF49_BAKED. Nothing is painted on the lamp meshes (lamps are separate geometry).
 
 ## Ford_objective -> 2015 Prodrive Pepsi Max Crew Falcon (SCT Motorsport, both seats), 2026-10-28
