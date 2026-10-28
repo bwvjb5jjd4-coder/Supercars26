@@ -17,7 +17,7 @@ const coop=L=>!!(L?.coop&&window.CO63?.race&&window.CO63.pl);
 function humans(L){return coop(L)?window.CO63.pl.map(s=>s.x).filter(Boolean):[L.player].filter(Boolean);}
 function humanIndex(L,x){return coop(L)?window.CO63.pl.findIndex(s=>s.x===x):0;}
 // Cool-down needs a live, human-driven race with at least one human still running.
-function enabled(L,auto){return !!(L?.dc&&L.stage==='race'&&L.started&&!L.test&&!auto&&!L.simulated&&!dcSimBusy&&!L.cd66Off&&humans(L).some(h=>!h.retired));}
+function enabled(L,auto){return !!(L?.dc&&L.stage==='race'&&L.started&&!L.test&&!auto&&!dcSimBusy&&!L.cd66Off&&humans(L).some(h=>!h.retired));}
 const cooling=x=>!!x.cd66;
 function freeze(L,x){x.cd66={finishTime:x.finishTime,penalty:x.penalty||0,park:null,still:0,ready:false,done:false,at:L.elapsed};
  x.pitNow=true;x.aiError=0;x.rf40Incident=null;}
@@ -41,7 +41,7 @@ function parkStep(x,dt){const p=x.cd66.park;if(p.t>=1)return;p.t=Math.min(1,p.t+
 
 /* ---------- Pit service is skipped on the cool-down lap ---------- */
 const baseService=dc32Service;
-dc32Service=function(x,dt,box){const L=live;if(!L||!cooling(x))return baseService.apply(this,arguments);
+dc32Service=function(x,dt,box){const L=live;if(L?.cd66Q&&x===L.player){x.dc32Servicing=false;return;}if(!L||!cooling(x))return baseService.apply(this,arguments);
  x.dc32Servicing=false;if(x===L.player||humans(L).includes(x))return;
  const b=bayInfo(x);if(b&&Math.abs(b.long)<Math.min(3.5,box.halfLength-1)&&Math.abs(b.lat-8.1)<1.9&&x.v<.45)park(L,x);};
 
@@ -66,15 +66,17 @@ CD.end=function(i){const L=live;if(!L?.dc||!L.cd66Flag)return;const hs=humans(L)
 function readyHuman(L){const x=L.player;return x?.cd66?.ready&&!x.cd66.done?x:null;}
 // A (the camera button) on the End Race prompt ends the race instead of changing the camera.
 const baseAction=dcAction;
-dcAction=function(action){const L=live;if(action==='camera'&&L?.dc&&!L.paused){const x=readyHuman(L);if(x){CD.end(humanIndex(L,x));return;}}return baseAction.apply(this,arguments);};
-addEventListener('keydown',e=>{if(e.code!=='Enter'&&e.code!=='NumpadEnter')return;const L=live;if(!L?.dc||L.paused||!L.cd66Flag)return;
+dcAction=function(action){const L=live;if(action==='camera'&&L?.dc&&!L.paused&&L.cd66Q?.ready&&!L.cd66Q.done){CD.endQ();return;}if(action==='camera'&&L?.dc&&!L.paused){const x=readyHuman(L);if(x){CD.end(humanIndex(L,x));return;}}return baseAction.apply(this,arguments);};
+addEventListener('keydown',e=>{if(e.code!=='Enter'&&e.code!=='NumpadEnter')return;const L=live;if(L?.dc&&!L.paused&&L.cd66Q?.ready&&!L.cd66Q.done){e.preventDefault();CD.endQ();return;}if(!L?.dc||L.paused||!L.cd66Flag)return;
  let i=null;if(coop(L)){i=window.CO63.players.findIndex(p=>p?.dev==='kb');if(i<0)return;}
  const hs=humans(L),x=i==null?hs.find(h=>h.cd66?.ready&&!h.cd66.done):hs[i];if(!x?.cd66?.ready)return;e.preventDefault();CD.end(i==null?humanIndex(L,x):i);},true);
 
 /* ---------- Physics ---------- */
 const basePhysics=dcPhysics;
 dcPhysics=function(dt,input,auto=false){
- const L=live;if(!L?.dc||L.stage!=='race')return basePhysics.apply(this,arguments);
+ const L=live;if(L?.dc&&L.cd66Q)return inLap(L,dt,input,auto,arguments);
+ if(L?.dc&&L.stage==='shootout'&&L.player?.finished&&!auto&&timedOk(L)){L.cd66Q={best:L.player.best,laps:L.player.timedLaps,ready:false,done:false,want:false};return inLap(L,dt,input,auto,arguments);}
+ if(!L?.dc||L.stage!=='race')return basePhysics.apply(this,arguments);
  if(!enabled(L,auto)){
   // Simulating, or no human left running: finish the old way, from the frozen classification.
   if(L.cd66Flag&&!L.cd66Off){L.cd66Off=true;for(const x of L.entrants)if(cooling(x)){restore(x);x.cd66=null;}$id('cd66')?.remove();}
@@ -105,6 +107,32 @@ dcPhysics=function(dt,input,auto=false){
  if(humans(L).every(h=>h.retired||h.cd66?.done))CD.want=true;
  paint(L);
 };
+
+/* ---------- Practice, qualifying and shootout: in-lap back to the pits ---------- */
+// When the session ends (time up and you cross the line, or your shootout lap is done) you drive
+// back to your bay instead of the session cutting straight to the times. Your times are frozen.
+function timedOk(L){return !!(L?.dc&&['practice','qualifying','shootout'].includes(L.stage)&&!L.test&&!coop(L)&&!dcSimBusy&&L.player&&!L.player.retired);}
+const baseFinish=dcFinishTimed;
+dcFinishTimed=function(simulated){const L=live;
+ if(simulated||!timedOk(L)||L.cd66Q?.done)return baseFinish.apply(this,arguments);
+ if(!L.cd66Q){const p=L.player;L.cd66Q={best:p.best,laps:p.timedLaps,ready:false,done:false,want:false};
+  baseRadio('Race engineer',L.stage==='shootout'?'That is your lap. Cool it down and bring it back to the box.':'Chequered flag, session over. In-lap, bring it back to the box.');}
+ return;};
+function inLap(L,dt,input,auto,args){const Q=L.cd66Q,p=L.player;
+ if(auto||dcSimBusy||Q.done){Q.done=true;$id('cd66')?.remove();return basePhysics.apply(this,args);}
+ if(Q.want){Q.done=true;$id('cd66')?.remove();p.best=Q.best;p.timedLaps=Q.laps;dcFinishTimed(false);return;}
+ const shoot=L.stage==='shootout',fin=p.finished,v=p.v;if(shoot){p.finished=false;p.outlapHold=false;}
+ CD.guard=true;try{basePhysics.apply(this,args);}finally{CD.guard=false;}
+ if(live!==L)return;
+ p.best=Q.best;p.timedLaps=Q.laps;if(shoot){p.finished=fin;if(p.outlapHold){p.outlapHold=false;p.v=v;}}
+ Q.ready=inBay(p)&&Math.abs(p.v||0)<.9;paintQ(L);}
+function cardQ(L){const Q=L.cd66Q,p=L.player,best=Number.isFinite(Q.best)?dcLapTime(Q.best):'No time';
+ if(Q.ready)return `<div class="cd66-p cd66-solo go"><div class="fl"></div><div class="tx"><b>Session over · ${best}</b><small>Parked in your bay</small></div><button onclick="CD66.endQ()"><i>A</i>End session</button></div>`;
+ const b=p.pitStage?bayInfo(p):null;
+ if(b)return `<div class="cd66-p cd66-solo"><div class="fl"></div><div class="tx"><b>Pit lane · ${best}</b><small>${b.long<-2?'Your bay is '+Math.round(-b.long)+' m ahead, stop on your marks':b.long>4?'You passed your bay':'Stop in your bay'}</small></div></div>`;
+ return `<div class="cd66-p cd66-solo"><div class="fl"></div><div class="tx"><b>In-lap · best ${best}</b><small>Session over. Drive back to pit lane and park in your bay</small></div></div>`;}
+function paintQ(L){ensureCss();const host=document.querySelector('.dc-driving');if(!host)return;let el=$id('cd66');if(!el){el=document.createElement('div');el.id='cd66';host.appendChild(el);}const h=cardQ(L);if(el.cd66!==h){el.cd66=h;el.innerHTML=h;}}
+CD.endQ=function(){const L=live;if(L?.cd66Q?.ready)L.cd66Q.want=true;};
 
 /* ---------- Prompt ---------- */
 const CSS=`#cd66{position:absolute;inset:0;pointer-events:none;z-index:7}
