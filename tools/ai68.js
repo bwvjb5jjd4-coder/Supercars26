@@ -87,8 +87,10 @@ function ai68Clamp(W,phase,lane){const R=W?.ai68;if(!R)return clamp(lane,-6,6);c
 function ai68Off(W,progress,lane){return Math.abs(lane-ai68Line(W,progress))>AI68.follow;}
 function ai68Aim(W,phase,progress,lane){return ai68Clamp(W,phase,ai68Off(W,progress,lane)?lane:lane+ai68Line(W,phase)-ai68Line(W,progress));}
 // How far the line moves sideways over the next step, so the planner's lane-change rate limit
-// (meant for overtakes) does not stop a car following the line from wide entry to apex.
-function ai68Drift(W,x,dt){const R=W.ai68;if(!R||!live)return 0;const len=live.e.lengthKm*1000,step=Math.max(0,x.v||0)*dt/len;return(ai68Line(W,x.progress+step)-ai68Line(W,x.progress))*3;}
+// (meant for overtakes) does not stop a car following the line from wide entry to apex. The
+// step is in the planner's own progress units (reference-lap phase, not metres): a metres-based
+// guess was so loose that cars swung across the road at up to 19 m/s.
+function ai68Drift(W,x,dt){const R=W.ai68;if(!R||!live)return 0;const s=W.at(x.progress),step=Math.max(0,x.v||0)/Math.max(5,s.speed)/live.e.realLap*dt;return ai68Line(W,x.progress+step)-ai68Line(W,x.progress);}
 // Each driver keeps a slightly different line on the straights; at the apex they all clip it.
 const ai68Lane=dcRacingLane;
 dcRacingLane=function(W,phase,x){
@@ -113,6 +115,19 @@ const ai68Launch=dcLaunch;
 dcLaunch=function(...args){
  const r=ai68Launch(...args),L=live,W=sc25Engine;if(L?.dc)ai68Refresh(W);
  if(L?.dc&&W?.ai68&&!(D.settings.ph47Classic||D.settings.ai62Off)){const cache=W.hd64Lap||(W.hd64Lap={}),key=L.e.key+':'+AI62.use;if(!cache[key])cache[key]=ai62LapEstimate(W,L.e);L.ai62Pace=clamp(cache[key]*AI68.far*(AI68.farTrack[L.e.key]||1)/L.e.realLap,.85,1.45);}
+ return r;
+};
+// Path-model cars (far away, formation lap, physics turned off) are placed at a lane offset with
+// the centreline's heading. With the full-width line their lane sweeps across the road, so they
+// crabbed sideways. Point them where they are actually going: the centreline heading plus the
+// angle of their sideways motion, smoothed so it does not twitch.
+const ai68Step=dcAIStep;
+dcAIStep=function(x,dt){
+ const was=x.pos?{x:x.pos.x,z:x.pos.z}:null,r=ai68Step.apply(this,arguments),W=sc25Engine;
+ if(x.ai62||x.pitStage||x.garage||!x.pos||!was||!W||!(dt>0))return r;
+ const dx=x.pos.x-was.x,dz=x.pos.z-was.z,d=Math.hypot(dx,dz),q=W.at(x.progress),base=Math.atan2(q.v.x,q.v.z);
+ const slip=d>.02&&d<Math.max(3,(x.v||0)*dt*3)?clamp(dcWrapAngle(Math.atan2(dx,dz)-base),-.6,.6):0;
+ x.ai68Slip=(x.ai68Slip||0)+(slip-(x.ai68Slip||0))*Math.min(1,dt*10);x.yaw=base+x.ai68Slip;
  return r;
 };
 // Difficulty on the racing line. Hard runs the tyre-model AI at the limit the driver can hold

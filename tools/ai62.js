@@ -16,7 +16,7 @@ function ai62Wanted(L,x){
 function ai62Enter(L,x){
  const W=sc25Engine,q=W.at(x.progress),k=dcTrackCurvature(W,x.progress);
  x.ai62={assist:AI62.assist,rear:1,target:x.v,lastT:x.v,lane:clamp(x.lane,-7.2,7.2)};x.dc33YawOffset=0;x.dc33Angular=0;x.dc33ImpactX=x.dc33ImpactZ=0;x.latV=0;
- const s=ph47State(x);s.r=clamp(x.v*k,-2,2);s.delta=Math.atan(2.82*k);s.af=s.ar=0;s.ax=s.ay=0;x.yaw=Math.atan2(q.v.x,q.v.z);
+ const s=ph47State(x);s.r=clamp(x.v*k,-2,2);s.delta=Math.atan(2.82*k);s.af=s.ar=0;s.ax=s.ay=0;x.yaw=Math.atan2(q.v.x,q.v.z)+(x.ai68Slip||0);
 }
 function ai62Leave(x){x.ai62=null;x.ph47On=false;x.latV=0;x.v=Math.max(0,x.v);if(x.ph47){x.ph47.r=0;x.ph47.tumble=0;x.ph47.phi=0;}dc33Sync(x);}
 // Fastest speed the tyre model can carry (scaled by the difficulty's corner pace) through the corners ahead, looking at least one full
