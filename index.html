@@ -10880,10 +10880,28 @@ const RN_MODES={
  bonnet:{spawn:210,rMin:.0019,rRange:.0056,slide:.0068,air:.8,film:1.25,radial:0},
  lens:{spawn:34,rMin:.0022,rRange:.0065,slide:.009,air:0,film:0,radial:1}
 };
+// Wiper rig. The base rig pivots right on the bottom edge of the glass with a blade that starts
+// 36 cm out and swings +-60 degrees, so a wide band along the bottom never cleared. Like the real
+// cars, the pivot now sits in the scuttle just below the glass, the blade runs from near the
+// pivot to the top of the screen and the sweep reaches the bottom corners.
+const RN_WIPER={drop:.15,amp:1.42,root:.10};
+function rnWiperRig(W){
+ const w=W.sc30Wiper,mount=w?.parent,pl=W.sc30RainPlane,pos=pl?.geometry?.attributes.position;if(!mount||!pos||pos.count<41*21)return false;
+ if(mount.userData.rn59Rig===pl.geometry)return true;
+ if(!mount.userData.rn59Rig)mount.position.addScaledVector(new THREE.Vector3(0,1,0).applyQuaternion(mount.quaternion),-RN_WIPER.drop);
+ mount.userData.rn59Rig=pl.geometry;W.dc36ScreenRoot?.updateMatrixWorld(true);mount.updateMatrixWorld(true);
+ const m=new THREE.Matrix4().copy(mount.matrixWorld).invert().multiply(pl.matrixWorld),v=new THREE.Vector3().fromBufferAttribute(pos,20*41+20).applyMatrix4(m);
+ const tip=Math.min(1.1,Math.max(.8,Math.hypot(v.x,v.y)-.03));mount.userData.rn59Band=[RN_WIPER.root-.03,tip+.05];
+ // Stretch the arm and the blade (unit cylinders along +y) to the new length.
+ for(const c of w.children){const h=c.geometry?.parameters?.height;if(!h)continue;const arm=c.userData.rn59Y0??(c.position.y-h/2*c.scale.y<.05);c.userData.rn59Y0=arm;
+  const y0=arm?0:RN_WIPER.root,y1=arm?tip-.06:tip;c.scale.y=(y1-y0)/h;c.position.y=(y0+y1)/2;}
+ if(RN.sim)RN.sim.polarKey=null;return true;
+}
+function rnWiperAngle(L){const rate=L.wipers===2?5.8:L.wipers===1?2.5:0;return rate?Math.sin(L.elapsed*rate)*RN_WIPER.amp:-1.53;}
 // Wiper sweep table: blade angle and distance from the pivot for every film cell.
 function rnPolarGlass(W,S){
  const pl=W.sc30RainPlane,mount=W.sc30Wiper?.parent,g=pl?.geometry,pos=g?.attributes.position;if(!mount||!pos||pos.count<41*21)return false;
- if(S.polarKey===g)return true;S.polarKey=g;
+ if(S.polarKey===g)return true;S.polarKey=g;[S.r0,S.r1]=mount.userData.rn59Band||[.3,.93];
  W.dc36ScreenRoot?.updateMatrixWorld(true);const T=THREE,m=new T.Matrix4().copy(mount.matrixWorld).invert().multiply(pl.matrixWorld),v=new T.Vector3(),gp=new Float32Array(41*21),gr=new Float32Array(41*21);
  for(let k=0;k<41*21;k++){v.fromBufferAttribute(pos,k).applyMatrix4(m);gp[k]=Math.atan2(-v.x,v.y);gr[k]=Math.hypot(v.x,v.y);}
  for(let cy=0;cy<RN_FH;cy++)for(let cx=0;cx<RN_FW;cx++){const U=(cx+.5)/RN_FW,V=(cy+.5)/RN_FH,gi=(1-U)*40,gj=V*20,i0=Math.min(39,gi|0),j0=Math.min(19,gj|0),fi=gi-i0,fj=gj-j0,a=j0*41+i0,b=a+1,c=a+41,d=a+42,k=cy*RN_FW+cx;
@@ -10891,7 +10909,7 @@ function rnPolarGlass(W,S){
  return true;
 }
 function rnPolarBonnet(S){
- if(S.polarKey==='bonnet')return;S.polarKey='bonnet';
+ if(S.polarKey==='bonnet')return;S.polarKey='bonnet';S.r0=.3;S.r1=.93;
  for(let cy=0;cy<RN_FH;cy++)for(let cx=0;cx<RN_FW;cx++){const x=(cx+.5)/RN_FW-.5,y=(cy+.5)/RN_FH/RN_A+.2,k=cy*RN_FW+cx;S.polar[k]=Math.atan2(-x,y)*.82-.18;S.rad[k]=Math.hypot(x,y)*.6;}
 }
 function rnCell(S,U,V){const cx=Math.min(RN_FW-1,Math.max(0,U*RN_FW|0)),cy=Math.min(RN_FH-1,Math.max(0,V*RN_FH|0));return cy*RN_FW+cx;}
@@ -10906,7 +10924,7 @@ function rnStep(S,P,I,dt,speed,wipe,lo,hi){
  const up=P.air*(speed/45)*(speed/45),net=up-.55;
  for(let i=0;i<RN_D;i++){
   if(!S.on[i])continue;let x=S.x[i],y=S.y[i],r=S.r[i];
-  if(wipe){const k=rnCell(S,x,y),a=S.polar[k],d=S.rad[k];if(d>.3&&d<.93&&a>=lo&&a<=hi){S.on[i]=0;continue;}}
+  if(wipe){const k=rnCell(S,x,y),a=S.polar[k],d=S.rad[k];if(d>S.r0&&d<S.r1&&a>=lo&&a<=hi){S.on[i]=0;continue;}}
   // Merge with neighbours when freshly landed or running.
   if(S.mv[i]){const cx=x*64|0,cy=y*36|0;for(let gy=Math.max(0,cy-1);gy<=Math.min(35,cy+1);gy++)for(let gx=Math.max(0,cx-1);gx<=Math.min(63,cx+1);gx++)for(let j=S.head[gy*64+gx];j>=0;j=S.next[j]){if(j===i||!S.on[j])continue;const dx=S.x[j]-x,dy=(S.y[j]-y)/RN_A,rr=r+S.r[j];if(dx*dx+dy*dy<rr*rr*.7){r=Math.min(.03,Math.sqrt(r*r+S.r[j]*S.r[j]));S.on[j]=0;}}
    if(S.mv[i]===2)S.mv[i]=0;}
@@ -10923,10 +10941,10 @@ function rnStep(S,P,I,dt,speed,wipe,lo,hi){
   if(x<-.02||x>1.02||y<-.02||y>1.02){S.on[i]=0;continue;}
   S.x[i]=x;S.y[i]=y;S.r[i]=r;S.vx[i]=vx;S.vy[i]=vy;
  }
- for(let i=0;i<RN_TR;i++){if(S.tl[i]<=0)continue;S.tl[i]-=dt;if(wipe){const k=rnCell(S,S.t[i*5+2],S.t[i*5+3]),a=S.polar[k],d=S.rad[k];if(d>.3&&d<.93&&a>=lo&&a<=hi)S.tl[i]=0;}}
+ for(let i=0;i<RN_TR;i++){if(S.tl[i]<=0)continue;S.tl[i]-=dt;if(wipe){const k=rnCell(S,S.t[i*5+2],S.t[i*5+3]),a=S.polar[k],d=S.rad[k];if(d>S.r0&&d<S.r1&&a>=lo&&a<=hi)S.tl[i]=0;}}
  // Film: builds toward fully wet; the blade leaves a thin smear behind it.
  const rate=P.film*I*(1+speed/90)*dt;
- for(let k=0;k<RN_FW*RN_FH;k++){let f=S.film[k]+(1-S.film[k])*Math.min(1,rate);if(wipe){const a=S.polar[k],d=S.rad[k];if(d>.3&&d<.93&&a>=lo&&a<=hi)f=Math.min(f,.035);}S.film[k]=f;S.filmB[k]=f*255|0;}
+ for(let k=0;k<RN_FW*RN_FH;k++){let f=S.film[k]+(1-S.film[k])*Math.min(1,rate);if(wipe){const a=S.polar[k],d=S.rad[k];if(d>S.r0&&d<S.r1&&a>=lo&&a<=hi)f=Math.min(f,.035);}S.film[k]=f;S.filmB[k]=f*255|0;}
 }
 
 function rnWater(W){
@@ -11117,7 +11135,8 @@ function rnInstall(){
  if(typeof gx55Materials==='function'){const gm=gx55Materials;gx55Materials=function(){const M=gm();try{rnPatchComposite(M.composite);}catch(e){console.warn('rn59 composite',e);}return M;};}
  if(typeof gx55Composite==='function'){const gc=gx55Composite;gx55Composite=function(W,L,P){const u=P?.mats?.composite?.uniforms;if(u?.rnOn){u.rnOn.value=0;if(RN.I>0&&L?.player){try{rnPost(W,L,P);}catch(e){console.warn('rn59 post',e);u.rnOn.value=0;}}}return gc(W,L,P);};}
  // Legacy canvas beads are replaced by the drop simulation.
- if(typeof dc36Windshield==='function'){const ws=dc36Windshield;dc36Windshield=function(W,L,dt){if(rnRain(L)){W.dc36RainAt=L.elapsed;W.dc36RainWeather=L.weather;}return ws(W,L,dt);};}
+ if(typeof dc36Windshield==='function'){const ws=dc36Windshield;dc36Windshield=function(W,L,dt){if(rnRain(L)){W.dc36RainAt=L.elapsed;W.dc36RainWeather=L.weather;}const r=ws(W,L,dt);
+  try{if(rnWiperRig(W))W.sc30Wiper.rotation.z=rnWiperAngle(L);}catch(e){console.warn('rn59 wiper',e);}return r;};}
  // Standing water on the asphalt.
  if(typeof gx55RoadEdit==='function'){const re=gx55RoadEdit;gx55RoadEdit=function(W){const edit=re(W);return sh=>{edit(sh);sh.uniforms.rn59Pools=W.rn59Pools||(W.rn59Pools={value:0});
   const from='float cavity=1.0-ag.a;';if(sh.fragmentShader.includes(from))sh.fragmentShader='uniform float rn59Pools;\n'+RN_POOL_GLSL+'\n'+sh.fragmentShader.replace(from,'dip=max(dip,rnPool(wp)*rn59Pools);'+from);};};}
