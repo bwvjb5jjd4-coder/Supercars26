@@ -26,10 +26,14 @@ so triangles are drawn in priority order (wing < other < roof < door/quarter sid
 coloured in `globe.svg`, rendered by `svgr.js`; Castrol/Ford/Dunlop from assets/img). `paint_pm.py` paints and bakes.
 
 ## Ford_penrite -> Grove Racing Penrite livery (both Grove Falcons, #19 and #26), 2026-10-29
-Adapted from the Penrite Mustang launch livery to the Falcon FG X. Texture ships as assets/liveries/Ford_penrite26.* (new name beats browser cache).
+Adapted from the Penrite Mustang launch livery to the Falcon FG X. Texture ships as assets/liveries/Ford_penrite27.* (new name beats browser cache).
 Same flow as Pepsi Max: `dump.js` with 'Ford', `pepsimax/posmap2.py`, `views.py` once, then `python3 penrite/paint_pr.py` and `bc1.py`.
 `penrite/logos.py` builds logos/pr_*.png: the Penrite wordmark and wreath emblem are the real logo already in the game (ef64ee4a7a, from
 penriteoil.com.au's PENRITE_Logo_Long.pdf) upscaled with a re-thresholded alpha edge; Snap-on (snap-on-1), Autodesk (autodesk-4),
 Mack (mack-trucks-1, wordmark only), PPG (ppg-industries-1) and Dunlop (dunlop-1) from github.com/detain/svg-logos; the Australian flag
 and its Commonwealth star from flag-icons 7.6.0 (npm); "SINCE 1926" in Barlow Condensed SemiBold (Google Fonts).
 Not reachable from the cloud as real files, so left off rather than faked: Steadfast, Steeline, ENGEL, UNIT, ACE, ACL, Kangan, Sutton Tools, KENG.
+v2 (2026-10-29, after Riley said v1 looked terrible and the flag was the worst part): the side swooshes are now the real 2:1 Australian
+flag (svg-country-flags 1.2.10 on npm, logos/pr_ausflag21.png) wrapped along the bezier band by `Cv.flag()`: Union Jack at the wide end,
+cloth line rippling with fold shading and a white keyline. PENRITE is the same real wordmark recoloured to race yellow (pr_wordy.png).
+Bigger laurel leaves, slim orange nose band, Snap-on on the rear quarters. Needs scipy (cKDTree). Texture renamed Ford_penrite27.* for cache.

@@ -37,6 +37,7 @@ p2=Image.new('RGBA',(sq.width+24,sq.height+24),(255,255,255,255));p2.alpha_compo
 save(ink(DL+'/png/svg_dunlop-1.png',k=90,lum=True),'dunlop')
 # Ford oval (logo.wine vector render already in the game)
 save(Image.open(IMG+'3952a5b529.png').convert('RGBA'),'ford')
+# Official 2:1 Australian flag: svg-country-flags 1.2.10 (npm), rendered to ../logos/pr_ausflag21.png by `node ../svgr.js au.svg::../logos/pr_ausflag21.png::3000`
 # Australian flag (flag-icons on npm): Union Jack canton and Commonwealth star
 fl=Image.open(DL+'/au.png').convert('RGBA');W,H=fl.size
 save(fl.crop((0,0,W//2,H//2)),'unionjack');save(fl,'ausflag')
@@ -44,3 +45,8 @@ save(fl.crop((0,0,W//2,H//2)),'unionjack');save(fl,'ausflag')
 f=ImageFont.truetype(DL+'/fonts/BarlowCondensed-SemiBold.ttf',300)
 t=Image.new('L',(1800,420),0);ImageDraw.Draw(t).text((20,20),'SINCE 1926',font=f,fill=255);t=t.crop(t.getbbox())
 o=Image.new('RGBA',t.size,(18,18,22,255));o.putalpha(t);save(o,'since')
+# bright race-yellow version of the wordmark (as painted on the car): same letterforms and bevels, colour remapped
+a=np.asarray(Image.open(OUT+'pr_word.png').convert('RGBA'),float);L=a[...,:3]@[0.299,0.587,0.114]
+t=np.clip((L-120)/125,0,1)[...,None];c0=np.array([222,128,8.]);c1=np.array([250,196,24.]);c2=np.array([255,228,96.])
+rgb=np.where(t<0.55,c0+(c1-c0)*(t/0.55),c1+(c2-c1)*((t-0.55)/0.45))
+Image.fromarray(np.dstack([rgb,a[...,3]]).astype(np.uint8)).save(OUT+'pr_wordy.png')
