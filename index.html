@@ -12662,4 +12662,290 @@ function install(){
 // Install after the window-load hooks of earlier layers so these wrappers sit outermost.
 if(document.readyState==='complete')setTimeout(install,0);else window.addEventListener('load',()=>setTimeout(install,0));
 })();
+</script><script id="ui72-interface">
+/* ui72: interface polish on top of ui58.
+   Standings row and car fix, Settings sub-tabs, main menu tile art, tidier inbox,
+   richer Career Home hero, broadcast-style race results, context button prompts
+   and hold Y to restart a session from the pause menu.
+   Display only, apart from the inbox auto-archive (old mail is marked read). */
+(()=>{'use strict';
+const ASSET={"logo":"assets/img/e30432e1ce.jpg","car":"assets/img/a361072489.png","cars":{"48":"assets/img/e19147a5d0.webp","17":"assets/img/699b8a998a.webp","18":"assets/img/7db149f205.webp","55":"assets/img/93d3e4cff2.webp","96":"assets/img/889871ab12.webp","4":"assets/img/cf335e92d3.webp","9":"assets/img/a5e984849b.webp","1":"assets/img/354f0711a4.webp","7":"assets/img/de94211795.webp","88":"assets/img/8766614c66.webp","777":"assets/img/37a17719ab.webp","11":"assets/img/ad1aeec836.webp","14":"assets/img/b0aba2415c.webp","6":"assets/img/6723413a94.webp","38":"assets/img/57751b24ca.webp","26":"assets/img/9a8bbe60d8.webp","10":"assets/img/548cf04269.webp","99":"assets/img/947e21b5c0.webp","2":"assets/img/05ea21718f.webp","19":"assets/img/522ca28a1a.webp","31":"assets/img/fc08636a95.webp","3":"assets/img/76b3755234.webp","888":"assets/img/8ae6eb1ce3.webp","8":"assets/img/67ed2fcc21.webp"}},TRACK_ART={"0":"M31.5,22.4L27.0,23.4L23.2,25.3L20.2,27.8L16.7,32.8L11.1,50.5L9.1,58.7L9.3,61.0L11.4,62.8L14.0,62.9L16.0,61.1L16.4,59.8L16.0,54.3L16.8,50.8L18.6,47.7L21.5,45.8L25.5,45.2L45.9,46.4L49.5,48.2L51.5,52.1L51.3,55.6L48.2,65.1L48.3,67.9L49.0,69.3L50.3,70.5L53.5,72.0L74.5,77.2L78.5,77.6L80.1,75.7L80.8,73.2L81.6,56.5L80.7,52.7L78.6,49.9L75.8,48.2L60.8,46.0L59.0,44.5L58.7,43.2L59.5,41.0L62.8,39.8L89.8,39.5L93.8,41.0L95.4,42.1L99.5,47.2L101.7,48.2L109.1,46.3L110.9,43.3L110.7,40.7L110.1,39.5L108.1,37.5L105.4,36.5L44.7,24.2L35.8,22.6Z","1":"M60.5,77.1L42.4,58.8L43.3,55.1L42.8,52.3L32.2,40.6L26.5,31.0L27.3,30.0L32.8,28.5L32.8,18.8L33.5,17.9L39.8,13.5L49.8,9.0L53.9,11.5L57.9,11.9L60.2,12.9L63.1,15.6L64.3,18.3L65.9,26.4L65.7,28.1L62.6,33.7L61.0,43.0L61.6,48.3L63.2,52.0L66.1,55.8L71.0,60.1L73.0,60.9L77.5,60.9L78.9,61.4L86.6,67.9L89.4,72.4L93.4,86.6L83.8,90.9L82.3,91.0L80.5,89.8L75.6,81.5L74.8,81.5L71.6,85.1L69.3,85.5L68.1,84.9Z","2":"M94.2,32.0L92.9,25.5L89.6,20.5L85.7,16.8L81.7,16.3L78.4,18.4L75.1,22.0L73.8,26.1L72.6,30.9L69.4,34.5L64.9,35.2L61.6,33.1L60.6,28.7L60.8,23.5L58.3,20.6L54.5,20.2L50.0,22.5L44.5,26.4L39.6,30.2L35.6,32.5L32.4,31.2L32.4,27.3L34.7,23.6L36.1,19.9L34.2,17.4L29.8,17.4L25.0,19.3L20.5,22.8L18.4,27.3L18.2,32.6L18.5,37.8L17.4,42.1L15.6,45.0L13.6,46.1L12.6,50.5L14.5,54.2L17.8,56.0L22.4,55.3L26.8,54.1L31.9,54.1L37.0,55.1L42.0,57.2L47.3,58.9L53.3,58.0L58.0,56.2L63.2,54.9L68.6,55.5L72.6,58.9L75.6,62.4L80.2,64.4L85.8,64.3L90.7,61.9L93.8,58.4L93.5,54.7L90.1,52.2L86.4,51.0L84.2,48.4L85.6,44.8L89.4,41.9L93.4,39.2L95.0,35.7Z","4":"M33.4,17.6L35.0,13.6L37.7,11.1L43.7,9.1L45.4,9.1L47.3,10.2L48.3,12.6L48.7,17.8L48.0,39.2L48.6,43.8L49.8,47.9L51.5,50.5L63.7,62.6L68.6,69.0L76.4,75.3L81.0,79.9L82.9,85.6L86.8,89.3L86.5,90.8L85.4,90.9L81.4,88.1L76.3,87.4L74.9,86.8L67.4,80.3L52.2,63.9L44.0,49.7L42.5,49.4L39.7,51.1L38.4,51.2L34.5,48.5L34.4,47.3L35.7,44.0L36.2,40.7L33.3,23.3Z","5":"M29.0,70.0L79.5,47.0L85.6,45.8L96.5,39.1L108.9,33.1L110.9,29.9L110.4,26.6L107.6,24.4L104.2,24.5L93.9,34.0L91.7,35.4L80.8,40.6L74.3,41.5L58.8,47.2L56.7,46.6L55.0,44.6L51.3,24.7L49.7,23.4L47.6,23.7L46.8,24.6L46.5,25.9L47.2,41.4L46.7,43.4L45.3,45.4L36.0,49.9L24.4,48.7L14.1,50.1L12.5,51.0L9.2,55.3L9.0,56.8L10.1,63.8L9.2,71.0L10.0,73.1L12.2,76.0L14.5,76.6Z","6":"M98.3,50.8L95.1,51.7L93.0,53.3L83.6,66.5L82.0,70.6L81.6,73.6L82.2,77.1L84.1,79.5L85.6,79.4L87.6,77.5L95.2,64.1L98.3,60.1L101.8,57.3L109.1,53.6L110.0,51.9L107.8,48.1L99.7,40.5L94.7,33.7L92.7,31.9L90.8,31.2L89.6,31.5L82.3,37.2L80.0,38.0L76.2,38.1L71.0,37.0L65.8,35.2L55.9,29.0L52.7,28.0L50.5,28.9L43.0,35.1L39.1,36.3L36.5,36.3L33.9,35.6L30.3,33.7L20.6,26.7L17.8,25.9L11.9,25.5L9.4,24.2L9.0,23.2L12.5,20.7L17.3,20.4L21.1,20.9L27.0,23.6L35.5,30.2L38.7,31.1L41.0,30.1L48.5,23.9L51.0,23.0L53.7,22.8L58.8,24.4L69.2,29.9L78.7,32.6L80.9,32.1L85.4,27.9L87.5,26.6L90.0,26.0L92.6,26.2L95.1,27.3L97.4,29.0L110.7,44.4L111.0,46.4L109.6,48.1L107.5,49.4L103.3,50.6Z","7":"M9.9,25.4L11.3,20.4L13.1,18.4L15.3,17.2L17.9,16.9L20.3,17.8L23.2,20.5L24.6,23.8L26.2,33.0L29.7,39.4L31.5,45.0L31.9,49.7L30.2,57.8L30.4,61.5L31.7,65.2L35.6,68.6L40.8,69.6L44.8,68.6L48.3,66.1L51.8,62.0L55.1,59.4L58.4,58.3L61.8,58.2L98.8,61.5L103.4,62.3L107.3,64.2L110.0,66.8L111.0,69.8L109.9,74.6L108.0,77.1L104.5,79.6L98.5,81.9L93.2,82.9L17.0,83.1L12.1,82.4L9.4,79.6L9.0,77.2Z","8":"M78.8,23.6L77.9,75.2L77.1,81.5L74.3,85.3L69.9,87.3L52.2,91.0L47.2,90.0L44.4,88.1L42.3,85.3L41.6,83.7L41.2,80.2L52.8,10.5L54.8,9.0L57.4,9.5L59.7,11.4L61.1,15.1L52.8,63.8L52.9,68.3L55.0,70.4L56.3,70.8L58.3,70.5L65.8,68.4L68.5,65.5L69.6,21.1L71.3,18.6L74.4,18.3L77.5,20.2Z","9":"M33.8,47.8L36.0,16.9L37.0,15.8L42.4,15.7L44.0,15.1L45.2,14.1L48.1,9.7L50.0,9.0L51.8,10.0L52.8,11.9L53.3,19.5L52.3,23.9L48.8,32.6L48.6,36.5L49.8,40.1L58.0,54.1L60.4,55.5L62.1,55.1L62.7,54.3L62.9,51.8L61.6,43.9L62.6,39.6L65.1,34.1L67.6,31.9L69.4,31.1L76.8,30.1L79.1,30.8L84.4,36.0L84.2,49.0L85.5,51.4L88.1,53.8L88.5,56.9L87.3,58.9L84.8,60.5L59.6,70.4L57.8,69.8L56.3,68.4L48.7,53.7L47.7,53.1L45.9,53.2L42.0,56.0L40.7,58.3L41.0,60.6L46.1,65.2L47.9,69.4L49.7,89.2L49.4,90.5L48.1,91.0L33.6,86.4L32.3,85.6L31.5,84.3Z","10":"M99.7,64.2L96.2,63.2L91.2,61.3L86.2,59.0L81.6,57.1L77.4,55.5L73.2,53.5L68.6,51.5L63.2,49.5L57.0,47.8L52.1,44.9L52.6,41.3L56.8,37.5L60.6,33.0L62.9,28.7L61.8,25.4L58.7,24.9L55.1,26.6L53.2,24.8L50.2,20.5L47.8,16.6L44.8,13.8L41.0,13.5L35.9,15.1L32.2,17.0L29.3,19.0L28.0,22.1L27.6,27.1L27.0,32.6L24.7,36.7L23.0,39.0L23.9,41.4L22.3,43.9L20.3,45.7L19.2,48.2L17.4,50.5L15.2,51.7L14.0,53.7L15.6,56.3L19.7,58.4L24.7,60.1L31.4,61.9L39.1,64.3L47.5,66.3L55.8,68.5L64.2,70.8L72.6,73.0L81.2,75.0L88.7,76.7L94.7,78.1L97.6,77.0L98.5,74.7L101.0,73.6L103.0,74.3L105.6,76.8L107.6,76.9L109.2,74.8L109.3,71.7L108.0,68.6L104.3,65.9Z","11":"M57.6,51.5L67.3,45.0L79.2,35.9L85.2,33.6L92.6,31.3L98.2,31.5L111.0,34.3L109.8,13.9L107.5,12.2L89.9,17.6L79.6,22.2L72.0,26.4L62.9,31.5L60.3,33.9L56.9,33.4L53.4,35.5L50.6,35.9L49.2,37.3L45.0,38.3L43.2,39.9L40.6,38.7L33.9,43.1L11.1,53.4L9.0,57.3L9.9,67.8L11.8,73.4L16.4,73.6L17.4,79.4L17.4,86.8L19.5,87.8L24.6,83.8L42.9,60.6L45.7,57.8L46.6,58.5L48.3,58.0L52.9,53.4Z","12":"M43.0,30.4L44.9,83.2L46.5,84.6L59.5,87.2L60.7,89.6L61.8,90.4L67.3,90.8L67.8,89.6L67.1,73.3L77.0,26.9L77.2,24.0L76.6,21.2L73.5,17.0L72.4,12.9L69.8,9.3L69.1,9.0L61.2,16.4L51.0,23.2L50.0,23.4L47.0,22.3L46.3,22.5Z","13":"M80.0,24.4L62.8,37.0L59.8,40.0L57.5,44.9L51.7,53.0L51.4,73.1L50.9,75.5L49.9,77.0L47.7,77.6L43.1,77.6L40.3,79.0L38.8,80.5L38.4,87.0L37.7,89.1L36.2,90.6L30.1,91.0L28.1,90.0L26.9,88.4L26.4,85.8L26.4,40.9L27.5,33.7L29.1,31.0L50.7,9.6L52.6,9.0L53.5,10.0L52.8,19.9L54.0,23.9L57.2,29.2L59.0,29.7L63.1,27.5L77.9,13.6L80.5,13.1L87.3,13.1L91.0,13.2L92.6,13.8L93.6,14.8L93.6,16.4L92.8,17.6L89.9,19.7Z","14":"M110.6,63.1L110.4,58.3L108.1,49.6L107.0,14.9L106.3,13.6L53.6,13.3L49.9,15.1L39.3,15.1L37.0,16.3L12.1,40.6L11.6,52.7L9.1,57.3L9.1,83.9L10.3,86.0L12.3,86.7L67.3,86.7L68.4,85.8L68.6,80.0L69.4,78.9L99.1,79.0L100.2,79.8L100.4,84.7L101.0,85.7L109.5,85.8L110.6,85.2L111.0,84.0Z"};
+const $=id=>document.getElementById(id);
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const L=()=>typeof live!=='undefined'?live:null;
+const hasCareer=()=>typeof D!=='undefined'&&!!D;
+const carArt=n=>ASSET.cars?.[String(n)]||ASSET.car;
+const svgUrl=s=>`url("data:image/svg+xml,${encodeURIComponent(s)}")`;
+const btn=(k,t)=>`<i class="u58-btn ${k}">${t}</i>`;
+const UI72=window.UI72={};
+
+/* ---------- Shared style ---------- */
+const css=document.createElement('style');css.id='ui72-style';css.textContent=`
+/* 1. Standings: readable player row */
+.u58 .dc-table tr.mine{background:linear-gradient(90deg,#ff1e3c55,#ff1e3c10)!important}.u58 .dc-table tr.mine td{background:transparent!important;color:#fff!important;opacity:1!important}
+.u58 .dc-table tr.mine td:first-child{box-shadow:inset 4px 0 var(--u58-red)}
+.u58 .dc-table tr.mine td small,.u58 .dc-table tr.mine td .dc-muted{color:#f1c9d0!important}
+.u72-you{display:inline-block;margin-left:8px;padding:2px 6px;background:var(--u58-red);color:#fff;font:700 9px 'UI Inter',sans-serif;letter-spacing:.12em;vertical-align:middle}
+/* 2. Settings sub-tabs */
+.u72-stabs{display:flex;align-items:center;gap:6px;margin:-4px 0 18px;padding-bottom:12px;border-bottom:1px solid #ffffff18;flex-wrap:wrap}
+.u72-stabs button{border:0!important;background:transparent!important;color:var(--u58-dim,#9aa3b5)!important;font:700 14px 'UI Rajdhani',sans-serif!important;letter-spacing:.16em;text-transform:uppercase;padding:9px 16px!important;border-bottom:3px solid transparent!important;border-radius:0!important}
+.u72-stabs button.on{color:#fff!important;border-bottom-color:var(--u58-red,#ff1e3c)!important}
+.u72-stabs .u58-btn{margin:0 4px}
+.u72-spane[hidden]{display:none!important}
+.u72-spane>.dc-field:first-child{margin-top:0}
+.u72-pad{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px 22px;margin-top:6px}
+.u72-pad div{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid #ffffff10;font-size:13px;color:#dfe4ec}
+.u72-pad .u58-btn{flex:none;min-width:34px}
+.u72-pad .u58-btn.stick{background:#2b303c;color:#fff}
+.dc-pause-box .u72-pad div{color:inherit}
+/* 3. Main menu tile art */
+.u58-tile .art.u72-svg{background-size:78% auto!important;background-repeat:no-repeat;background-position:50% 44%!important;opacity:.55}
+.u58-tile .art.u72-svg.low{background-position:50% 70%!important}
+.u58-tile:focus .art.u72-svg,.u58-tile.ui26-pad-focus .art.u72-svg,.u58-tile:hover .art.u72-svg{opacity:1;background-size:84% auto!important}
+.u58-tile .art.u72-duo{background-size:auto 34%,auto 34%!important;background-position:30% 34%,78% 52%!important;background-repeat:no-repeat!important}
+.u58-tile:focus .art.u72-duo,.u58-tile.ui26-pad-focus .art.u72-duo,.u58-tile:hover .art.u72-duo{background-size:auto 42%,auto 42%!important}
+.u72-tilestat{position:absolute!important;left:22px;right:18px;top:120px;font:700 46px/.9 'UI Rajdhani',sans-serif;font-style:italic;color:#fff;text-shadow:0 4px 18px #000}
+.u72-tilestat small{display:block!important;max-height:none!important;opacity:1!important;margin-top:6px!important;font:600 11px 'UI Inter',sans-serif!important;font-style:normal!important;letter-spacing:.14em;text-transform:uppercase;color:#cfd4df}
+/* 4. Inbox */
+.u72-inhead{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+.u72-inhead .dc-btn.on{background:var(--u58-red,#ff1e3c)!important;color:#fff!important;border-color:transparent!important}
+.u72-inhead .sp{flex:1}
+.u72-group{margin-top:18px}
+.u72-group>h4{margin:0 0 4px;font:700 12px 'UI Rajdhani',sans-serif;letter-spacing:.2em;text-transform:uppercase;color:var(--u58-dim,#9aa3b5)}
+.u72-mail{display:grid!important;grid-template-columns:14px 1fr auto;gap:4px 14px;align-items:start;width:100%;padding:16px 4px!important;border:0;border-bottom:1px solid #ffffff12;background:transparent;text-align:left;color:inherit}
+.u72-mail .dot{width:9px;height:9px;border-radius:50%;margin-top:6px;background:transparent}
+.u72-mail.unread .dot{background:var(--u58-red,#ff1e3c);box-shadow:0 0 10px var(--u58-red,#ff1e3c)}
+.u72-mail h3{margin:0;font-size:16px}
+.u72-mail:not(.unread) h3{color:#b9c0cc;font-weight:600}
+.u72-mail .meta{font-size:11px;color:var(--u58-dim,#9aa3b5);letter-spacing:.06em;text-transform:uppercase;margin-top:5px}
+.u72-mail p{grid-column:2/4;margin:4px 0 0;line-height:1.6;color:#aeb6c3;max-height:0;overflow:hidden;transition:max-height .25s}
+.u72-mail.open p{max-height:400px}
+.u72-tag{font:700 9px 'UI Inter',sans-serif;letter-spacing:.12em;text-transform:uppercase;padding:3px 7px;border:1px solid #ffffff2a;color:#cfd4df;white-space:nowrap}
+.u72-tag.imp{background:var(--u58-red,#ff1e3c);border-color:transparent;color:#fff}
+.u72-tag.x{border-color:#ffd21e66;color:#ffd21e}
+.u72-archive{margin-top:22px}
+/* 5. Career Home hero */
+.u72-strip{display:grid;grid-template-columns:120px 1fr 1fr;gap:14px;margin:6px 0 22px;max-width:640px}
+.u72-strip>div{background:#ffffff08;border:1px solid #ffffff14;padding:12px 14px;min-width:0}
+.u72-strip small{display:block;font:700 9px 'UI Inter',sans-serif;letter-spacing:.16em;text-transform:uppercase;color:var(--u58-dim,#9aa3b5);margin-bottom:8px}
+.u72-strip svg{width:100%;height:70px;color:var(--u58-red,#ff1e3c);filter:drop-shadow(0 0 6px #ff1e3c88)}
+.u72-fc{display:flex;gap:10px;justify-content:space-between}
+.u72-fc div{text-align:center;font-size:11px;color:#cfd4df}
+.u72-fc b{display:block;font:700 20px 'UI Rajdhani',sans-serif;color:#fff}
+.u72-fc i{display:block;font-style:normal;color:#7fc4ff;font-size:10px;margin-top:2px}
+.u72-last b{font:700 34px/1 'UI Rajdhani',sans-serif;font-style:italic;color:#fff}
+.u72-last span{display:block;font-size:11px;color:#cfd4df;margin-top:6px;line-height:1.4}
+/* 6. Results */
+.dc-modal .u72-res{width:min(1100px,100%)!important;padding:30px 34px!important;background:linear-gradient(160deg,#151925,#07080d)!important;color:#f4f6fa!important;border:1px solid #ffffff1c!important;border-top:3px solid var(--u58-red,#ff1e3c)!important}
+.u72-res .head{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
+.u72-res .head h2{margin:6px 0 0!important;font:700 44px/1 'UI Rajdhani',sans-serif!important;font-style:italic!important}
+.u72-res .dc-eyebrow{color:var(--u58-red,#ff1e3c)!important}
+.u72-flag{width:54px;height:36px;background:conic-gradient(#fff 25%,#000 0 50%,#fff 0 75%,#000 0) 0 0/18px 18px;border:1px solid #fff4;animation:u72wave 1.4s ease-in-out infinite alternate}
+@keyframes u72wave{from{transform:skewY(-4deg)}to{transform:skewY(4deg)}}
+.u72-podium{display:grid;grid-template-columns:1fr 1.15fr 1fr;align-items:end;gap:14px;margin:26px 0 8px}
+.u72-step{text-align:center;opacity:0;animation:u72up .6s cubic-bezier(.2,.8,.2,1) forwards}
+.u72-step:nth-child(1){animation-delay:.25s}.u72-step:nth-child(2){animation-delay:.05s}.u72-step:nth-child(3){animation-delay:.45s}
+@keyframes u72up{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:none}}
+.u72-step img{width:100%;max-width:300px;height:150px;object-fit:contain;filter:drop-shadow(0 18px 18px #000c)}
+.u72-step .name{font:700 17px 'UI Rajdhani',sans-serif;text-transform:uppercase;letter-spacing:.04em;margin:6px 0 8px}
+.u72-step .name small{display:block;font:500 11px 'UI Inter',sans-serif;color:var(--u58-dim,#9aa3b5);text-transform:none;letter-spacing:0;margin-top:2px}
+.u72-step .block{display:grid;place-items:center;font:700 52px 'UI Rajdhani',sans-serif;font-style:italic;background:linear-gradient(180deg,#262b38,#11141c);border:1px solid #ffffff1c;border-top:3px solid #c0c6d0}
+.u72-step.p1 .block{height:130px;border-top-color:#ffd21e;color:#ffd21e}.u72-step.p2 .block{height:96px}.u72-step.p3 .block{height:74px;border-top-color:#cd7f32}
+.u72-step.me .name{color:var(--u58-red,#ff1e3c)}
+.u72-you3{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:22px 0 6px}
+.u72-you3>div{background:#ffffff08;border:1px solid #ffffff14;padding:14px 16px}
+.u72-you3 small{display:block;font:700 9px 'UI Inter',sans-serif;letter-spacing:.16em;text-transform:uppercase;color:var(--u58-dim,#9aa3b5)}
+.u72-you3 b{display:block;font:700 34px/1.1 'UI Rajdhani',sans-serif;font-style:italic;margin-top:6px}
+.u72-you3 em{font-style:normal;font-size:17px;font-weight:700;margin-left:6px}
+.u72-up{color:#19e07a}.u72-down{color:#ff4d64}.u72-same{color:#9aa3b5}
+.u72-res details{margin-top:14px}
+.u72-res summary{cursor:pointer;font:700 12px 'UI Rajdhani',sans-serif;letter-spacing:.18em;text-transform:uppercase;color:var(--u58-dim,#9aa3b5);padding:8px 0}
+.u72-res .dc-table{max-height:36vh}
+.u72-res .dc-table td,.u72-res .dc-table th{color:#e8ebf1;border-color:#ffffff12}
+.u72-res tr.mine td{background:#ff1e3c30!important}
+/* 7. Context prompts and hold-to-restart */
+#ui26-pad-hints.u72 i.u58-btn{margin-right:2px}
+#ui26-pad-hints.u72{font-family:'UI Inter',sans-serif;font-size:11px;letter-spacing:.04em;background:#07080ded;border-color:#ffffff22}
+#u72-hold{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:30000;display:grid;place-items:center;width:150px;height:150px;border-radius:50%;background:#07080dde;color:#fff;font:700 13px 'UI Rajdhani',sans-serif;letter-spacing:.18em;text-transform:uppercase;text-align:center;pointer-events:none}
+#u72-hold[hidden]{display:none}
+#u72-hold svg{position:absolute;inset:0;width:100%;height:100%;transform:rotate(-90deg)}
+#u72-hold circle{fill:none;stroke-width:6}
+@media(max-width:900px){.u72-strip{grid-template-columns:1fr}.u72-you3{grid-template-columns:1fr 1fr}.u72-podium{gap:6px}.u72-step img{height:70px}}
+`;document.head.appendChild(css);
+
+/* ---------- Car body by livery (BJR #8 races a ZB) ---------- */
+function makeOf(team,driver){try{const m=window.RF49_KEY_MAKE?.[sc27LiveryProfile(team,driver)?.key];if(m&&MFG[m])return m;}catch(_){}return team.manufacturer;}
+UI72.makeOf=makeOf;
+
+/* ---------- 1. Championship standings ---------- */
+if(typeof dcChampionship==='function'){const base=dcChampionship;dcChampionship=function(){
+ let html=base.apply(this,arguments);
+ try{const rows=dcDrivers().map((x,i)=>{const mk=makeOf(x.team,x.d),m=MFG[mk]||MFG[x.team.manufacturer];const me=x.d.id===D.pid;
+  return `<tr class="${me?'mine':''}"><td>${i+1}</td><td><b>#${x.d.number} ${esc(x.d.name)}</b>${me?'<span class="u72-you">You</span>':''}<br><small class="dc-muted">${x.d.age} years · ${esc(x.d.home)}</small></td><td style="border-left:3px solid ${m.colour}">${m.car}<br><small class="dc-muted">${esc(x.team.name)}</small></td><td>${x.d.ovr.toFixed(1)}</td><td>${x.d.pot.toFixed(1)}</td><td><b>${x.d.pts}</b></td><td>${x.d.wins}</td></tr>`;}).join('');
+  html=html.replace(/<tbody>[\s\S]*?<\/tbody>/,`<tbody>${rows}</tbody>`);}catch(_){}
+ return html;};}
+
+/* ---------- 2. Settings sub-tabs ---------- */
+const SET_CATS=[['gameplay','Gameplay'],['controls','Controls'],['audio','Audio'],['graphics','Graphics']];
+let setTab='gameplay';
+function catOf(el){const t=(el.textContent||'').toLowerCase().replace(/\s+/g,' ').slice(0,260);
+ if(/sound mix|^ *volume/.test(t))return 'audio';
+ if(/cockpit suspension/.test(t))return 'graphics';
+ if(/cycles cockpit|steering sensitivity|deadzone|driving assists|classic handling|^ *handling/.test(t))return 'controls';
+ if(/graphics|cinematic|motion blur|cockpit suspension|balanced and high|frame runs/.test(t))return 'graphics';
+ return 'gameplay';}
+function padMap(){const rows=[['a','A','Change camera'],['b','B','Request pit stop'],['x','X','Wipers off / low / high'],['y','Y','Headlights'],['bump','RT','Throttle'],['bump','LT','Brake'],['stick','LS','Steer'],['bump','LB','Reverse (hold)'],['bump','RB','Pit limiter'],['bump','☰','Pause'],['bump','⧉','Hide the speed HUD'],['bump','◂ ▸','Cycle the MFD page']];
+ return `<div class="dc-card u72-padmap" style="margin-top:18px"><h3>Controller layout</h3><div class="u72-pad">${rows.map(([k,b,t])=>`<div>${btn(k,b)}<span>${t}</span></div>`).join('')}</div><p class="dc-note" style="margin-top:12px">In menus: D-pad or left stick to move, A to select, B to go back, LB/RB to switch tabs, LT/RT to switch settings sections. While paused, hold Y to restart the session.</p></div>`;}
+function organizeSettings(){
+ for(const mark of document.querySelectorAll('i[data-u72s]')){const host=mark.parentElement;if(!host)continue;
+  let set=host.querySelector(':scope>.u72-set');
+  if(!set){if(!SET_CATS.some(([k])=>k===setTab))setTab='gameplay';
+   set=document.createElement('div');set.className='u72-set';
+   set.innerHTML=`<div class="u72-stabs">${btn('bump','LT')}${SET_CATS.map(([k,l])=>`<button type="button" class="${k===setTab?'on':''}" data-u72cat="${k}" onclick="UI72.setTab('${k}')">${l}</button>`).join('')}${btn('bump','RT')}</div>${SET_CATS.map(([k])=>`<div class="u72-spane" data-cat="${k}" ${k===setTab?'':'hidden'}></div>`).join('')}`;
+   mark.after(set);set.querySelector('[data-cat="controls"]').dataset.tail='1';set.querySelector('[data-cat="controls"]').insertAdjacentHTML('beforeend',padMap());}
+  const pane=k=>set.querySelector(`.u72-spane[data-cat="${k}"]`);
+  const take=n=>{if(n===mark||n===set)return;if(n.nodeType===3){if(!n.textContent.trim()){n.remove();return;}const p=document.createElement('p');p.className='dc-note';p.textContent=n.textContent.trim();n.replaceWith(p);n=p;}if(n.nodeType!==1)return;
+   if(n.matches('.dc-grid.two')){[...n.children].forEach(col=>[...col.childNodes].forEach(take));n.remove();return;}
+   const camText='Camera: A on the controller (C on the keyboard) cycles cockpit, follow, bonnet and orbit views.';
+   if(/C cycles cockpit/.test(n.textContent)){if(!n.querySelector('input,select,button')){n.textContent=camText;n.className='dc-note';}else{const w=document.createTreeWalker(n,NodeFilter.SHOW_TEXT);let x;while((x=w.nextNode()))if(/C cycles cockpit/.test(x.textContent))x.textContent=camText;}}
+   const k=catOf(n),dest=pane(k),tail=dest.querySelector(':scope>.u72-padmap');if(tail)dest.insertBefore(n,tail);else dest.appendChild(n);};
+  let n=mark.nextSibling;const stray=[];while(n){if(n!==set)stray.push(n);n=n.nextSibling;}
+  stray.forEach(take);}}
+UI72.organize=organizeSettings;
+UI72.setTab=k=>{setTab=k;document.querySelectorAll('.u72-set').forEach(s=>{s.querySelectorAll('[data-u72cat]').forEach(b=>b.classList.toggle('on',b.dataset.u72cat===k));s.querySelectorAll('.u72-spane').forEach(p=>p.hidden=p.dataset.cat!==k);});
+ const b=document.querySelector(`.u72-set [data-u72cat="${k}"]`);if(b&&document.body.classList.contains('ui26-controller-active')){document.querySelector('.ui26-pad-focus')?.classList.remove('ui26-pad-focus');b.focus({preventScroll:true});b.classList.add('ui26-pad-focus');}};
+UI72.stepTab=s=>{const i=SET_CATS.findIndex(([k])=>k===setTab);UI72.setTab(SET_CATS[(i+s+SET_CATS.length)%SET_CATS.length][0]);};
+if(typeof dcSettingsFields==='function'){const base=dcSettingsFields;dcSettingsFields=function(...args){return '<i data-u72s hidden></i>'+base.apply(this,args);};}
+setInterval(organizeSettings,250);
+if(typeof dcSettings==='function'){const base=dcSettings;dcSettings=function(){let html=base.apply(this,arguments);
+ html=html.replace('Tune steering, difficulty, audio and graphics. Settings are also available while paused.','Gameplay, controls, audio and graphics. Use LT and RT (or [ and ]) to switch sections. Settings are also available while paused.');
+ html=html.replace(/<section class="dc-card"><h3>Controls<\/h3>[\s\S]*?<\/section>/,`<section class="dc-card"><h3>Keyboard</h3><p>WASD or arrows: drive and steer. C: camera. R: wipers. H: lights. P: pit request. Space: brake. Esc: pause. T: hide the HUD. M: MFD page.</p><p class="dc-note">The full controller layout is under Settings → Controls.</p><button class="dc-btn ghost" onclick="dcNewCareerPrompt()">Start another career</button></section>`);
+ return html;};}
+
+/* ---------- 3. Main menu tile art ---------- */
+const GEAR_SVG=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"><defs><radialGradient id="g" cx="50%" cy="45%" r="60%"><stop offset="0" stop-color="#ff1e3c"/><stop offset="1" stop-color="#5a0614"/></radialGradient></defs><g fill="none" stroke="url(#g)" stroke-width="7"><path d="M100 28l10 2 4 16 11 5 14-9 14 14-9 14 5 11 16 4 2 10-2 10-16 4-5 11 9 14-14 14-14-9-11 5-4 16-10 2-10-2-4-16-11-5-14 9-14-14 9-14-5-11-16-4-2-10 2-10 16-4 5-11-9-14 14-14 14 9 11-5 4-16z"/><circle cx="100" cy="100" r="30"/></g><g stroke="#ffffff55" stroke-width="3" fill="none"><path d="M40 176h120M58 188h84"/></g></svg>`;
+const TROPHY_SVG=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"><defs><linearGradient id="t" x1="0" x2="1"><stop offset="0" stop-color="#8a6a10"/><stop offset=".45" stop-color="#ffe27a"/><stop offset="1" stop-color="#9c7412"/></linearGradient></defs><path d="M62 30h76v34c0 30-17 50-38 50S62 94 62 64z" fill="url(#t)"/><path d="M62 42H38c0 26 12 38 28 40M138 42h24c0 26-12 38-28 40" fill="none" stroke="url(#t)" stroke-width="7"/><path d="M92 112h16v30H92z" fill="url(#t)"/><path d="M70 142h60l6 20H64z" fill="url(#t)"/><path d="M58 162h84v14H58z" fill="#1b1e27" stroke="#ffe27a66"/><path d="M86 44l6 18h-14z" fill="#ffffff55"/></svg>`;
+function trackSvg(id){const d=TRACK_ART[String(id)];if(!d)return null;return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 100"><path d="${d}" fill="none" stroke="#ff1e3c" stroke-opacity=".35" stroke-width="7" stroke-linejoin="round"/><path d="${d}" fill="none" stroke="#ffffff" stroke-width="2.4" stroke-linejoin="round"/></svg>`;}
+function testTrackId(){try{if(typeof dcTestTrack==='function'){const e=dcTestTrack();if(e)return e.id;}}catch(_){}try{return dcEvent()?.id??0;}catch(_){return 0;}}
+function decorateTiles(){const rail=document.querySelector('#ui26-portal .u58-rail');if(!rail||rail.dataset.u72)return;rail.dataset.u72='1';
+ for(const t of rail.querySelectorAll('.u58-tile')){const title=(t.querySelector('strong')?.textContent||'').toLowerCase(),art=t.querySelector('.art');if(!art)continue;
+  if(title==='instant race'){art.style.backgroundImage=`url('${carArt(19)}')`;}
+  else if(title==='co-op'){art.classList.add('u72-duo');art.style.backgroundImage=`url('${carArt(18)}'),url('${carArt(888)}')`;}
+  else if(title==='test day'){const s=trackSvg(testTrackId());if(s){art.classList.add('u72-svg');art.style.backgroundImage=svgUrl(s);}}
+  else if(title==='standings'){art.classList.add('u72-svg','low');art.style.backgroundImage=svgUrl(TROPHY_SVG);
+   try{const list=dcDrivers(),i=list.findIndex(x=>x.d.id===D.pid);if(i>=0){const s=document.createElement('span');s.className='u72-tilestat';s.innerHTML=`P${i+1}<small>${list[i].d.pts} pts · leader ${list[0].d.pts}</small>`;t.appendChild(s);}}catch(_){}}
+  else if(title==='settings'){art.classList.add('u72-svg');art.style.backgroundImage=svgUrl(GEAR_SVG);}}}
+{const portal=$('ui26-portal');if(portal)new MutationObserver(()=>queueMicrotask(decorateTiles)).observe(portal,{childList:true,subtree:true});}
+
+/* ---------- 4. Inbox ---------- */
+const ARCHIVE_DAYS=14;let inFilter='all',showArchive=false;
+const openMail=new Set();
+function mailAge(m){return (D.year-(m.year||D.year))*365+(D.day-(m.day||0));}
+function mailKind(m){const f=String(m.from||''),t=String(m.title||'');let ceo='';try{ceo=dcTeam().ceo||'';}catch(_){}
+ if(/driver manager/i.test(f)||/contract|offer|seat|season complete|bonus/i.test(t))return 'important';
+ if(ceo&&f===ceo)return /^(P\d+|DNF)/.test(t)?'team':'important';
+ if(/engineer|coach/i.test(f))return 'engineer';
+ if(/travel/i.test(f))return 'travel';
+ return 'series';}
+const KIND_LABEL={important:'Important',team:'Team',engineer:'Engineer',travel:'Travel',series:'Series'};
+function autoArchive(){if(!hasCareer()||!Array.isArray(D.mail))return;let changed=false;for(const m of D.mail)if(m.unread&&mailAge(m)>ARCHIVE_DAYS){m.unread=false;changed=true;}
+ // Repeated weekly mails (same title and sender): only the newest stays unread.
+ const seen=new Set();for(const m of D.mail){const k=m.from+'|'+m.title;if(seen.has(k)&&m.unread){m.unread=false;changed=true;}seen.add(k);}
+ return changed;}
+function mailRow(m,dup){const kind=mailKind(m),open=openMail.has(m.id);
+ return `<button type="button" class="u72-mail ${m.unread?'unread':''} ${open?'open':''}" data-mail="${m.id}" onclick="UI72.mail(${m.id},this)"><span class="dot"></span><span><h3>${esc(m.title)}</h3><div class="meta">${esc(m.from)} · ${esc(dcDateLabel(m.day))}</div></span><span>${kind==='important'?'<span class="u72-tag imp">Important</span>':`<span class="u72-tag">${KIND_LABEL[kind]}</span>`}${dup>1?` <span class="u72-tag x">×${dup}</span>`:''}</span><p>${esc(m.body)}</p></button>`;}
+if(typeof dcInbox==='function'){dcInbox=function(){
+ const list=[],dupes={};for(const m of D.mail){const k=m.from+'|'+m.title;if(dupes[k]){dupes[k].n++;continue;}dupes[k]={m,n:1};list.push(m);}
+ const n=m=>dupes[m.from+'|'+m.title].n;
+ const pass=m=>inFilter==='all'||(inFilter==='unread'?m.unread:inFilter==='important'?mailKind(m)==='important':mailKind(m)===inFilter);
+ const fresh=list.filter(m=>mailAge(m)<=ARCHIVE_DAYS&&pass(m)),old=list.filter(m=>mailAge(m)>ARCHIVE_DAYS&&pass(m));
+ const attention=fresh.filter(m=>m.unread&&mailKind(m)==='important'),week=fresh.filter(m=>!attention.includes(m)&&mailAge(m)<=7),earlier=fresh.filter(m=>!attention.includes(m)&&mailAge(m)>7);
+ const unread=D.mail.filter(m=>m.unread).length;
+ const group=(title,arr)=>arr.length?`<div class="u72-group"><h4>${title}</h4>${arr.map(m=>mailRow(m,n(m))).join('')}</div>`:'';
+ const filters=[['all','All'],['unread','Unread'],['important','Important'],['engineer','Engineer'],['team','Team'],['series','Series']];
+ return `<h1 class="dc-title">Your inbox</h1><p class="dc-sub">${unread?`${unread} unread`:'All caught up'} · Mail older than two weeks moves to the archive and repeated weekly mail is grouped.</p><section class="dc-card"><div class="u72-inhead">${filters.map(([k,l])=>`<button type="button" class="dc-btn ${inFilter===k?'on':''}" onclick="UI72.filter('${k}')">${l}</button>`).join('')}<span class="sp"></span><button type="button" class="dc-btn" onclick="UI72.readAll()">${btn('x','X')} Mark all read</button></div>
+ ${group('Needs your attention',attention)}${group('This week',week)}${group('Earlier',earlier)}${!fresh.length?'<p class="dc-note" style="margin-top:18px">Nothing new here.</p>':''}
+ ${old.length?`<div class="u72-archive"><button type="button" class="dc-btn ghost" onclick="UI72.archive()">${showArchive?'Hide':'Show'} archive (${old.length})</button>${showArchive?group('Archive',old):''}</div>`:''}</section>`;};}
+UI72.mail=(id,el)=>{const m=D.mail.find(x=>x.id===id);if(!m)return;const wasUnread=m.unread;
+ // Opening one mail of a repeated group marks the whole group read.
+ for(const x of D.mail)if(x.from===m.from&&x.title===m.title)x.unread=false;
+ if(openMail.has(id))openMail.delete(id);else openMail.add(id);el.classList.toggle('open',openMail.has(id));el.classList.remove('unread');
+ if(wasUnread){try{dcSave();}catch(_){}refreshBadge();}};
+UI72.filter=k=>{inFilter=k;dcRender();};
+UI72.archive=()=>{showArchive=!showArchive;dcRender();};
+UI72.readAll=()=>{if(!hasCareer())return;D.mail.forEach(m=>m.unread=false);try{dcSave();}catch(_){}dcRender();try{dcToast('Inbox marked as read');}catch(_){}};
+function refreshBadge(){const u=D.mail.filter(m=>m.unread).length;document.querySelectorAll('.dc-side nav button').forEach(b=>{if(/Inbox/.test(b.textContent)){const s=b.querySelector('b');if(s){if(u)s.textContent=u;else s.remove();}}});
+ document.querySelectorAll('.u58-ctabs button,.u58-chq-tabs button,[data-u58tab]').forEach(b=>{if(/^\s*Inbox/i.test(b.textContent)){const s=b.querySelector('b,em,.n');if(s){if(u)s.textContent=u;else s.remove();}}});}
+if(typeof dcRender==='function'){const base=dcRender;dcRender=function(){if(!L()&&autoArchive()){try{dcSave();}catch(_){}}const out=base.apply(this,arguments);organizeSettings();return out;};try{if(typeof render!=='undefined'&&render===base)render=dcRender;}catch(_){}}
+
+/* ---------- 5. Career Home hero ---------- */
+const WX={Dry:'☀',Wet:'☂','Extremely Wet':'⛈'};
+function heroStrip(){let e;try{e=dcEvent();}catch(_){}if(!e)return '';
+ const map=TRACK_ART[String(e.id)]?`<svg viewBox="0 0 120 100"><path d="${TRACK_ART[String(e.id)]}" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></svg>`:'<span class="dc-muted">Map unavailable</span>';
+ const fc=D.weekend&&D.weekend.event===e.id&&Array.isArray(D.weekend.forecast)?D.weekend.forecast:null;
+ const fcHtml=fc?`<div class="u72-fc">${fc.map(f=>`<div>${esc(String(f.day).slice(0,3))}<b>${WX[f.weather]||'☀'} ${Math.round(f.temp)}°</b><i>${Math.round(f.rain)}% rain</i></div>`).join('')}</div>`:'<span style="font-size:12px;color:#cfd4df">Forecast arrives in race week.</span>';
+ const last=[...(D.history||[])].reverse().find(r=>r.year===D.year)||D.history?.[D.history.length-1];
+ const lastHtml=last?`<div class="u72-last"><b>${last.retired?'DNF':'P'+last.position}</b><span>${esc(last.circuit)} · Race ${last.race+1}<br>+${last.points} pts${last.simulated?' · simulated':''}</span></div>`:'<div class="u72-last"><span>Your first result is waiting.</span></div>';
+ return `<div class="u72-strip"><div><small>Circuit</small>${map}</div><div><small>Weekend forecast</small>${fcHtml}</div><div><small>Last result</small>${lastHtml}</div></div>`;}
+if(typeof dcHome==='function'){const base=dcHome;dcHome=function(){const html=base.apply(this,arguments);try{const i=html.indexOf('<section class="dc-hero">');if(i<0)return html;const j=html.indexOf('<div class="dc-actions">',i);if(j<0)return html;return html.slice(0,j)+heroStrip()+html.slice(j);}catch(_){return html;}};}
+
+/* ---------- 6. Race results ---------- */
+let pre=null;
+if(typeof dcCommitRace==='function'){const base=dcCommitRace;dcCommitRace=function(Lr){
+ if(Lr&&!Lr.committed&&Lr.stage==='race'){try{const list=dcDrivers(),i=list.findIndex(x=>x.d.id===D.pid);pre={grid:Lr.entrants.map(x=>x.d.number),rank:i+1,pts:list[i]?.d.pts??0,instant:typeof IR!=='undefined'&&!!IR.active};}catch(_){pre=null;}}
+ return base.apply(this,arguments);};}
+function resultsHtml(r,label){
+ const order=r.order||[],me=order.find(x=>x.position===r.position)||{},pos=r.position;
+ const podium=[order[1],order[0],order[2]].map((x,k)=>x?`<div class="u72-step p${[2,1,3][k]} ${x.number===me.number?'me':''}"><img src="${esc(carArt(x.number))}" alt=""><div class="name">#${x.number} ${esc(x.name)}<small>${x.retired?'DNF':x.points+' pts'}</small></div><div class="block">${[2,1,3][k]}</div></div>`:'<div></div>').join('');
+ const gi=pre?.grid?.indexOf(me.number),start=gi>=0?gi+1:null,gained=start&&!r.retired?start-pos:null;
+ const delta=v=>v>0?`<em class="u72-up">▲ ${v}</em>`:v<0?`<em class="u72-down">▼ ${-v}</em>`:'<em class="u72-same">● 0</em>';
+ let champ='';if(pre&&!pre.instant){try{const i=dcDrivers().findIndex(x=>x.d.id===D.pid)+1;champ=`<div><small>Championship</small><b>P${i} ${delta(pre.rank-i)}</b></div>`;}catch(_){}}
+ return `<div class="dc-card u72-res"><div class="head"><div><div class="dc-eyebrow">Chequered flag / ${esc(r.circuit)} · Race ${(r.race||0)+1}${r.simulated?' · simulated':''}</div><h2>${r.retired?'Race retired':'You finished P'+pos}</h2></div><div class="u72-flag"></div></div>
+ <div class="u72-podium">${podium}</div>
+ <div class="u72-you3"><div><small>Finish</small><b>${r.retired?'DNF':'P'+pos}</b></div><div><small>Started</small><b>${start?'P'+start:'—'} ${gained!=null?delta(gained):''}</b></div><div><small>Points</small><b>+<span id="u72-pts" data-to="${r.points}">0</span></b></div>${champ||`<div><small>Conditions</small><b style="font-size:24px">${esc(r.weather||'')}</b></div>`}</div>
+ <details><summary>Full classification</summary><div class="dc-table"><table><thead><tr><th>Pos</th><th>Driver</th><th>Status</th><th>Points</th></tr></thead><tbody>${order.map(x=>`<tr class="${x.number===me.number?'mine':''}"><td>${x.position}</td><td>#${x.number} ${esc(x.name)}</td><td>${x.retired?'DNF':'Finished'}</td><td>${x.points}</td></tr>`).join('')}</tbody></table></div></details>
+ <button class="dc-btn primary" style="margin-top:20px" onclick="dcOverlay='';dcRender()">${esc(label)} →</button></div>`;}
+function countUp(){const el=$('u72-pts');if(!el||el.dataset.done)return;el.dataset.done='1';const to=+el.dataset.to||0,t0=performance.now();const step=t=>{const k=Math.min(1,(t-t0)/1100);el.textContent=Math.round(to*(1-Math.pow(1-k,3)));if(k<1&&el.isConnected)requestAnimationFrame(step);};requestAnimationFrame(step);}
+if(typeof dcShowResult==='function'){const base=dcShowResult;dcShowResult=function(r){base.apply(this,arguments);
+ try{if(!r||!Array.isArray(r.order)||!r.order.length)return;const label=typeof IR!=='undefined'&&IR.active?'Return to instant weekend':'Return to your career';
+  dcOverlay=`<div class="dc-modal">${resultsHtml(r,label)}</div>`;dcRender();setTimeout(countUp,350);}catch(e){console.warn('ui72 results',e);}};}
+
+/* ---------- 7. Restart, context prompts, extra pad buttons ---------- */
+function canRestart(){const x=L();if(!x||!x.dc||!x.paused||x.coop||x.committed||x.cd66Off)return false;try{if(typeof dcSimBusy!=='undefined'&&dcSimBusy)return false;if(typeof CO!=='undefined'&&CO.race)return false;}catch(_){}return !x.player?.finished;}
+UI72.restart=()=>{if(!canRestart())return;const test=!!L().test;try{dcEndSession(false);dcLaunch(test);try{dcToast(test?'Test session restarted':'Session restarted');}catch(_){}}catch(e){console.warn('ui72 restart',e);try{dcRender();}catch(_){}}};
+if(typeof dcPauseRender==='function'){const base=dcPauseRender;dcPauseRender=function(){const out=base.apply(this,arguments);
+ try{if(dcPauseTab==='Options'&&canRestart()){const host=$('dc-pause-host'),btns=host?.querySelectorAll('.dc-btn');const leave=[...(btns||[])].find(b=>/return to career|End test|Return to/i.test(b.textContent));if(leave&&!host.querySelector('[data-u72r]')){leave.insertAdjacentHTML('afterend',`<button class="dc-btn" data-u72r style="margin-top:10px;display:flex;width:fit-content" onclick="UI72.restart()">Restart session · hold ${btn('y','Y')}</button>`);}}}catch(_){}
+ organizeSettings();
+ return out;};}
+const hold=document.createElement('div');hold.id='u72-hold';hold.hidden=true;hold.innerHTML='<svg viewBox="0 0 150 150"><circle cx="75" cy="75" r="68" stroke="#ffffff22"/><circle id="u72-ring" cx="75" cy="75" r="68" stroke="#f2b705" stroke-dasharray="427" stroke-dashoffset="427"/></svg><span>Restarting<br>session</span>';document.body.appendChild(hold);
+function context(){const x=L(),portal=$('ui26-portal');
+ if(document.querySelector('#ui26-picker:not([hidden])'))return 'picker';
+ if(x&&x.paused)return 'pause';if(x)return 'drive';
+ if(portal&&!portal.hidden)return 'hub';
+ if(document.querySelector('.dc-modal'))return 'modal';
+ if(hasCareer()&&typeof dcTab!=='undefined')return 'career';return 'other';}
+function hintsFor(c){const sel=`<span>${btn('a','A')} Select</span>`,bump=`<span>${btn('bump','LB')}${btn('bump','RB')} Tabs</span>`;
+ const sets=!!document.querySelector('.u72-set')?`<span>${btn('bump','LT')}${btn('bump','RT')} Sections</span>`:'';
+ if(c==='picker')return `<span>${btn('a','A')} Choose</span><span>${btn('b','B')} Cancel</span>`;
+ if(c==='modal')return `<span>${btn('a','A')} Continue</span><span>${btn('b','B')} Close</span>`;
+ if(c==='pause')return `${sel}<span>${btn('b','B')} Resume</span>${bump}${sets}${canRestart()?`<span>Hold ${btn('y','Y')} Restart</span>`:''}`;
+ if(c==='hub')return `${sel}<span>${btn('b','B')} Back</span><span>${btn('bump','LB')}${btn('bump','RB')} Switch</span>`;
+ if(c==='career'){const home=dcTab==='Home';return `${sel}<span>${btn('b','B')} ${home?'Main menu':'Home'}</span>${bump}${sets}${dcTab==='Inbox'?`<span>${btn('x','X')} Mark all read</span>`:''}`;}
+ return `${sel}<span>${btn('b','B')} Back</span>`;}
+let lastHint='',padPrev={},holdStart=0;
+function tick(){
+ const ph=$('ui26-pad-hints');const c=context();
+ if(ph&&c!=='drive'){const h=hintsFor(c);if(h!==lastHint){lastHint=h;ph.classList.add('u72');ph.innerHTML=h;}}
+ let pad=null;try{pad=Array.from(navigator.getGamepads?.()||[]).find(p=>p?.connected);}catch(_){}
+ if(!pad){padPrev={};holdStart=0;hold.hidden=true;return;}
+ const down=i=>i>=6&&i<=7?(pad.buttons[i]?.value||0)>.5:!!pad.buttons[i]?.pressed,edge=i=>down(i)&&!padPrev[i];
+ const menu=c!=='drive';
+ if(menu&&document.querySelector('.u72-set')&&c!=='picker'&&c!=='modal'){if(edge(6))UI72.stepTab(-1);if(edge(7))UI72.stepTab(1);}
+ if(c==='career'&&dcTab==='Inbox'&&edge(2))UI72.readAll();
+ if(c==='pause'&&canRestart()&&down(3)){if(!holdStart)holdStart=performance.now();const k=Math.min(1,(performance.now()-holdStart)/1200);hold.hidden=false;const ring=$('u72-ring');if(ring)ring.setAttribute('stroke-dashoffset',String(427*(1-k)));if(k>=1){holdStart=0;hold.hidden=true;UI72.restart();}}
+ else{holdStart=0;hold.hidden=true;}
+ for(const i of [2,3,6,7])padPrev[i]=down(i);}
+setInterval(tick,50);
+document.addEventListener('keydown',e=>{if(L()&&!L().paused)return;if(!document.querySelector('.u72-set')||/INPUT|TEXTAREA/.test(document.activeElement?.tagName||'')&&document.activeElement.type!=='range')return;if(e.code==='BracketLeft'){UI72.stepTab(-1);e.preventDefault();}else if(e.code==='BracketRight'){UI72.stepTab(1);e.preventDefault();}});
+})();
 </script></body></html>
