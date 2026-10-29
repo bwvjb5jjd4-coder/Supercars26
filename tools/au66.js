@@ -28,12 +28,14 @@ function rms(a){let s=0;for(let i=0;i<a.length;i++)s+=a[i]*a[i];return Math.sqrt
 function scale(a,k){for(let i=0;i<a.length;i++)a[i]*=k;return a;}
 
 /* ---------- Engine voices ----------
+   mk71: the two makes are pushed further apart. Falcon: shorter pipes, more intake and valvetrain,
+   a smoother, higher howl. Commodore: longer pipes, heavier low end, lumpier firing (lump).
    Supercars Gen3: Ford 5.4 DOHC (Coyote family), Chevrolet 5.7 pushrod (ZB/Camaro), Toyota 5.0 DOHC,
    all cross-plane V8s. Firing order decides which bank each pulse goes down: the uneven
    per-bank spacing is where the V8 burble comes from. */
 const PROFILES={
- Ford:{cyl:8,order:[1,0,1,0,0,1,0,1],pipes:[1.95,2.12],tau:.30,drive:2.0,intake:.34,intakeF:190,mech:.05,low:[105,3],mid:[1450,3.5],seed:11},
- Holden:{cyl:8,order:[0,1,0,1,1,0,1,0],pipes:[2.25,2.4],tau:.40,drive:1.7,intake:.26,intakeF:150,mech:.028,low:[88,5],mid:[1150,2.5],seed:23},
+ Ford:{cyl:8,order:[1,0,1,0,0,1,0,1],pipes:[1.82,1.98],tau:.27,drive:2.15,intake:.42,intakeF:225,mech:.062,low:[112,1.8],mid:[1750,4.8],lump:.75,seed:11},
+ Holden:{cyl:8,order:[0,1,0,1,1,0,1,0],pipes:[2.42,2.62],tau:.46,drive:1.6,intake:.2,intakeF:130,mech:.022,low:[78,6.5],mid:[1000,1.8],lump:1.5,seed:23},
  Toyota:{cyl:8,order:[1,0,1,0,0,1,0,1],pipes:[1.78,1.9],tau:.28,drive:2.1,intake:.36,intakeF:210,mech:.045,low:[115,2.5],mid:[1700,4],seed:37},
  BMW:{cyl:6,order:[0,0,0,0,0,0],pipes:[2.05,2.05],tau:.24,drive:2.3,intake:.4,intakeF:240,mech:.06,low:[130,2],mid:[2100,4],seed:41}
 };
@@ -42,7 +44,7 @@ function profileOf(x){const m=x?.team?.manufacturer;return PROFILES[m]?m==='Chev
 function renderEngine(P,rpm,on,sr){
  const R=rng(P.seed*977+rpm*(on?3:7)|0),ev=P.cyl,cyc=120/rpm,N=Math.max(3,Math.round(.7/cyc)),L=Math.round(N*cyc*sr),rpmA=120*N*sr/L;
  const ex=[new Float32Array(L),new Float32Array(L)],ind=new Float32Array(L);
- const lowRev=cl(1-(rpm-900)/2600,0,1),lump=(on?.07:.32)+.22*lowRev;
+ const lowRev=cl(1-(rpm-900)/2600,0,1),lump=((on?.07:.32)+.22*lowRev)*(P.lump||1);
  const tau=P.tau*sr/1000*(on?1:1.7)*(1+.5*lowRev),klen=Math.ceil(tau*16),nf=on?.32:.58;
  const bias=[];{const B=rng(P.seed);for(let k=0;k<ev;k++)bias.push(1+(B()*2-1)*.07);}
  for(let c=0;c<N;c++)for(let k=0;k<ev;k++){
