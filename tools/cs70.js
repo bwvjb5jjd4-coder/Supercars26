@@ -4,7 +4,9 @@ const ir=()=>typeof IR!=='undefined'&&IR.active;
 const quiet=fn=>{const r=dcRender,t=dcToast;dcRender=()=>{};dcToast=()=>{};try{return fn();}finally{dcRender=r;dcToast=t;}};
 const busy=()=>!!(live||D?.activeSession);
 
-/* ---------- Weekend: Drive / Simulate any time, plus whole-weekend simulation ---------- */
+/* ---------- Weekend: Drive / Simulate any session, plus whole-weekend simulation ---------- */
+// Sessions are ordered by key = race*4 + phase (phase 0 practice, 1 qualifying, 2 shootout, 3 race).
+const key=()=>{const w=D.weekend;return w?w.race*4+w.phase:0;};
 // Moves the calendar forward (salary, mail, forecast as normal) until the next session is open.
 function reach(){
  if(!D||live||!dcEvent())return false;
@@ -13,21 +15,21 @@ function reach(){
  return open();
 }
 function skip(){const before=JSON.stringify([D.round,D.weekend?.phase,D.weekend?.race]);dcSkipPhase();return JSON.stringify([D.round,D.weekend?.phase,D.weekend?.race])!==before;}
-function done(){dcTab=dcEvent()&&D.weekend?'Race Weekend':dcTab;dcSave();dcRender();}
+// Simulates quietly (no result pop-ups) until the session with key k is next, or the round ends.
+function upTo(k){const round=D.round;let raced=false;
+ for(let n=0;n<16&&D.round===round&&key()<k;n++){if(!reach())break;const race=D.weekend.phase===3;
+  const r=dcShowResult;dcShowResult=()=>{};let moved;try{moved=quiet(skip);}finally{dcShowResult=r;}if(!moved)break;if(race)raced=true;}
+ return {raced,still:D.round===round&&key()===k};}
+// A session saved part-way through would otherwise block simulating; simulating discards it.
+function ready(){if(live)return false;if(D.activeSession){delete D.activeSession;dcSave();}return true;}
+function finish(raced,msg){dcTab=D.weekend||!raced?'Race Weekend':'Championship';dcSave();dcRender();if(raced&&D.lastClassification)dcShowResult(D.lastClassification);else if(msg)dcToast(msg);}
 const CS={
- drive(){if(busy())return;if(!reach()){dcRender();dcToast('No session to drive right now.');return;}dcRender();dcLaunch(false);},
- sim(){if(busy())return;if(!reach()){dcRender();dcToast('No session to simulate right now.');return;}const race=D.weekend.phase===3;skip();if(!race)done();},
- // to = 'race': simulate practice, qualifying and the shootout, stopping at the grid. to = 'all': the whole weekend.
- run(to){if(busy())return;const round=D.round;let raced=false;
-  for(let n=0;n<16;n++){
-   if(D.round!==round||!reach())break;
-   const w=D.weekend;if(to==='race'&&w.phase===3)break;
-   if(w.phase===3){raced=true;quiet(()=>{const r=dcShowResult;dcShowResult=()=>{};try{skip();}finally{dcShowResult=r;}});continue;}
-   if(!quiet(skip))break;
-  }
-  if(raced&&D.lastClassification){dcTab=D.weekend?'Race Weekend':'Championship';dcSave();dcRender();dcShowResult(D.lastClassification);}
-  else{done();dcToast(to==='race'?'Sessions simulated. The grid is set.':'Weekend simulated.');}
- }
+ drive(k=key()){if(!ready())return;const r=upTo(k);if(!r.still||!reach()){finish(r.raced,'No session to drive right now.');return;}dcRender();dcLaunch(false);},
+ sim(k=key()){if(!ready())return;const r=upTo(k);if(!r.still||!reach()){finish(r.raced,'No session to simulate right now.');return;}
+  if(D.weekend.phase===3){skip();return;}quiet(skip);finish(false,'Session simulated.');},
+ // to = 'race': simulate everything up to the next race's grid. to = 'all': the rest of the weekend.
+ run(to){if(!ready())return;const w=D.weekend,k=to==='race'?(w&&w.phase===3?key():(w?.race||0)*4+3):99,r=upTo(k);
+  finish(r.raced,to==='race'?'Sessions simulated. The grid is set.':'Weekend simulated.');}
 };
 window.CS70=CS;
 
@@ -37,12 +39,14 @@ dcSkipPhase=function(){return ir()?skipPrev():dcSkipPhaseBase();};
 
 const weekendPrev=dcWeekendPage;
 dcWeekendPage=function(){
- const html=weekendPrev();if(ir()||!D||!dcEvent())return html;
- const e=dcEvent(),w=D.weekend,phase=w?.phase||0,races=Math.min(2,e.races);let i=0;
- let out=html.replace(/(<div class="dc-session[^"]*">[\s\S]*?<div class="dc-actions">)([\s\S]*?)(<\/div><\/div>)/g,(m,a,b,c)=>{
-  const k=i++,index=k<3?k:3,isDone=w&&(index<phase||k>=3&&k-3<w.race),active=w?index===phase&&(k<3||k-3===w.race):k===0;
-  if(isDone||!active)return m;
-  return a+`<button class="dc-btn primary" onclick="CS70.drive()">Drive</button><button class="dc-btn" onclick="CS70.sim()">Simulate</button>`+c;});
+ // The earlier wrapper reads dcEvent().races, which throws once the season is over.
+ if(!ir()&&D&&!dcEvent())return dcBaseWeekendPage();
+ const html=weekendPrev();if(ir()||!D)return html;
+ const w=D.weekend,phase=w?.phase||0,cur=key();let i=0;
+ const out=html.replace(/(<div class="dc-session[^"]*">[\s\S]*?<div class="dc-actions">)([\s\S]*?)(<\/div><\/div>)/g,(m,a,b,c)=>{
+  const n=i++,k=n<3?(w?.race||0)*4+n:(n-3)*4+3;
+  if(k<cur)return m;
+  return a+`<button class="dc-btn${k===cur?' primary':''}" onclick="CS70.drive(${k})">Drive</button><button class="dc-btn" onclick="CS70.sim(${k})">Simulate</button>`+c;});
  const ahead=!w||D.day<dcPhaseDay()?`<p class="dc-note" style="margin:6px 0 12px">Drive or Simulate skips ahead to the session day.</p>`:'';
  const bar=`<div class="dc-actions" style="margin:12px 0 4px;flex-wrap:wrap">${phase<3||!w?'<button class="dc-btn" onclick="CS70.run(\'race\')">Simulate to the race</button>':''}<button class="dc-btn" onclick="CS70.run('all')">Simulate whole weekend</button></div>${ahead}`;
  return out.replace('<h3>Your weekend programme</h3>','<h3>Your weekend programme</h3>'+bar);
