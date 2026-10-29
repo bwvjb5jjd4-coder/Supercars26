@@ -85,7 +85,6 @@ for sgn in (-1,1):
     # hero graphics
     c.put('globe',f(0.86),0.50,0.50)
     c.put('max_r',f(-0.08),0.56,1.36,h=0.52)
-    c.put('winterbottom',f(-0.40),0.868,0.42)
     c.put('allgate',f(0.50),0.868,0.20)
     c.put('ford',f(0.62),0.235,0.17)
     c.put('revolution',f(-0.55),0.225,0.30)
