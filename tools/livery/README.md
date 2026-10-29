@@ -24,3 +24,12 @@ but use `pepsimax/posmap2.py`: the Falcon UV atlas has big overlaps (wing, roof,
 so triangles are drawn in priority order (wing < other < roof < door/quarter sides, larger last) and visible panels win.
 `logos.py` builds the stickers (fonts from raw.githubusercontent.com/google/fonts; Pepsi globe from simple-icons 7.0.0
 coloured in `globe.svg`, rendered by `svgr.js`; Castrol/Ford/Dunlop from assets/img). `paint_pm.py` paints and bakes.
+
+## Ford_penrite -> Grove Racing Penrite livery (both Grove Falcons, #19 and #26), 2026-10-29
+Adapted from the Penrite Mustang launch livery to the Falcon FG X. Texture ships as assets/liveries/Ford_penrite26.* (new name beats browser cache).
+Same flow as Pepsi Max: `dump.js` with 'Ford', `pepsimax/posmap2.py`, `views.py` once, then `python3 penrite/paint_pr.py` and `bc1.py`.
+`penrite/logos.py` builds logos/pr_*.png: the Penrite wordmark and wreath emblem are the real logo already in the game (ef64ee4a7a, from
+penriteoil.com.au's PENRITE_Logo_Long.pdf) upscaled with a re-thresholded alpha edge; Snap-on (snap-on-1), Autodesk (autodesk-4),
+Mack (mack-trucks-1, wordmark only), PPG (ppg-industries-1) and Dunlop (dunlop-1) from github.com/detain/svg-logos; the Australian flag
+and its Commonwealth star from flag-icons 7.6.0 (npm); "SINCE 1926" in Barlow Condensed SemiBold (Google Fonts).
+Not reachable from the cloud as real files, so left off rather than faked: Steadfast, Steeline, ENGEL, UNIT, ACE, ACL, Kangan, Sutton Tools, KENG.
