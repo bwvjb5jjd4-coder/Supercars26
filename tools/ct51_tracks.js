@@ -155,13 +155,13 @@ function ct51Lakeside(K,W,M){
 }
 function ct51Water(W){
  // Water only over the lake bed: one quad per terrain cell that dips toward the lake.
- if(W.e.key!=='albert')return;const T=W.sc26Terrain,N=T.N,size=T.size,cell=size/N,y=W.ct51Level,pos=[],uv=[],ix=[];
+ if(W.e.key!=='albert'&&!(typeof ct54WaterGrid==='function'&&ct54WaterGrid(W)))return;const T=W.sc26Terrain,N=T.N,size=T.size,cell=size/N,y=W.ct51Level,pos=[],uv=[],ix=[];
  const wet=new Uint8Array((N+1)*(N+1));for(let j=0;j<=N;j++)for(let i=0;i<=N;i++)wet[j*(N+1)+i]=ct51Lake(W,(i/N-.5)*size,(j/N-.5)*size)>.02?1:0;
  for(let j=0;j<N;j++)for(let i=0;i<N;i++){const k=j*(N+1)+i;if(!(wet[k]||wet[k+1]||wet[k+N+1]||wet[k+N+2]))continue;const x=(i/N-.5)*size,z=(j/N-.5)*size,b=pos.length/3;
   pos.push(x,y,z,x+cell,y,z,x+cell,y,z+cell,x,y,z+cell);uv.push(x/40,z/40,(x+cell)/40,z/40,(x+cell)/40,(z+cell)/40,x/40,(z+cell)/40);ix.push(b,b+2,b+1,b,b+3,b+2);}
  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));g.setIndex(ix);ct48Upright(g);
  const tex=W.texture(256,256,(c,w,h)=>{c.fillStyle='#4f7486';c.fillRect(0,0,w,h);for(let i=0;i<1400;i++){c.fillStyle=W.rnd()<.5?'rgba(255,255,255,.07)':'rgba(10,30,40,.08)';c.fillRect(W.rnd()*w,W.rnd()*h,4+W.rnd()*14,1);}});tex.wrapS=tex.wrapT=THREE.RepeatWrapping;
- const m=new THREE.Mesh(g,new THREE.MeshStandardMaterial({map:tex,color:'#9fb9c4',roughness:.12,metalness:.35}));m.name='Albert Park Lake';m.receiveShadow=true;W.world.add(m);
+ const m=new THREE.Mesh(g,new THREE.MeshStandardMaterial({map:tex,color:'#9fb9c4',roughness:.12,metalness:.35}));m.name=W.e.key==='albert'?'Albert Park Lake':W.e.name+' water';m.receiveShadow=true;W.world.add(m);
 }
 // Park pavilions next to each oval: brick change rooms with a skillion roof and a small stand.
 function ct51Pavilions(K,W,M){

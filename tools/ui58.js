@@ -196,7 +196,7 @@ document.addEventListener('focusin',e=>{if(menuOpen()&&performance.now()-lastNav
 document.addEventListener('click',e=>{if(menuOpen()&&e.target.closest?.('button,summary'))sfx('confirm');},true);
 
 /* ---------- Title screen and tile main menu ---------- */
-const ICON={career:'<path d="M8 40V8m0 2c10-7 18 7 30 0v20c-12 7-20-7-30 0"/>',instant:'<path d="M27 4 10 27h13l-3 17 18-24H25z"/>',coop:'<circle cx="16" cy="15" r="6"/><circle cx="32" cy="15" r="6"/><path d="M5 40c0-8 5-13 11-13s11 5 11 13M21 40c0-8 5-13 11-13s11 5 11 13"/>',test:'<circle cx="24" cy="26" r="15"/><path d="M24 26l8-7M24 6v5M18 4h12"/>',garage:'<path d="M5 20 24 7l19 13v21H5z"/><path d="M13 41V27h22v14M13 33h22"/>',champ:'<path d="M15 6h18v9a9 9 0 0 1-18 0zM15 9H8a6 6 0 0 0 7 8m18-8h7a6 6 0 0 1-7 8M24 24v8m-8 9h16l-2-9H18z"/>',settings:'<circle cx="24" cy="24" r="6"/><path d="M24 4v6m0 28v6M4 24h6m28 0h6M10 10l4 4m20 20 4 4M10 38l4-4m20-20 4-4"/>'};
+const ICON={career:'<path d="M8 40V8m0 2c10-7 18 7 30 0v20c-12 7-20-7-30 0"/>',instant:'<path d="M27 4 10 27h13l-3 17 18-24H25z"/>',coop:'<circle cx="16" cy="15" r="6"/><circle cx="32" cy="15" r="6"/><path d="M5 40c0-8 5-13 11-13s11 5 11 13M21 40c0-8 5-13 11-13s11 5 11 13"/>',test:'<circle cx="24" cy="26" r="15"/><path d="M24 26l8-7M24 6v5M18 4h12"/>',garage:'<path d="M5 20 24 7l19 13v21H5z"/><path d="M13 41V27h22v14M13 33h22"/>',champ:'<path d="M15 6h18v9a9 9 0 0 1-18 0zM15 9H8a6 6 0 0 0 7 8m18-8h7a6 6 0 0 1-7 8M24 24v8m-8 9h16l-2-9H18z"/>',calendar:'<rect x="6" y="10" width="36" height="32" rx="3"/><path d="M6 19h36M15 6v8M33 6v8M13 26h5M22 26h5M31 26h5M13 34h5M22 34h5"/>',settings:'<circle cx="24" cy="24" r="6"/><path d="M24 4v6m0 28v6M4 24h6m28 0h6M10 10l4 4m20 20 4 4M10 38l4-4m20-20 4-4"/>'};
 const icon=k=>`<svg class="ico" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">${ICON[k]}</svg>`;
 function profile(){try{if(!hasCareer())return null;const p=dcPlayer(),t=dcTeam();return {name:p.name,number:p.number,team:t.name,year:D.year,colour:t.livery?.primary};}catch(_){return null;}}
 function carArt(n){return ASSET.cars?.[String(n)]||ASSET.car;}
@@ -211,7 +211,8 @@ function tiles(){const p=profile(),me=p?carArt(p.number):ASSET.car,list=[];
  list.push({k:'coop',title:'Co-Op',sub:'Split-screen race for two controllers. Shootout, then straight to the grid.',art:carArt(888),car:true,go:()=>window.CO63?.open()});
  if(p){list.push({k:'test',title:'Test day',sub:'Private running at the Test Centre. Learn the circuit.',go:()=>{UI26.close();dcNav('Test Centre');}});
   list.push({k:'garage',title:'Garage',sub:'Car management, upgrades and setup.',art:me,car:true,go:()=>{UI26.close();dcNav('Car Management');}});
-  list.push({k:'champ',title:'Standings',sub:'Championship standings, results and the calendar.',go:()=>{UI26.close();dcNav('Championship');}});}
+  list.push({k:'champ',title:'Standings',sub:'Championship standings, results and the calendar.',go:()=>{UI26.close();dcNav('Championship');}});
+  list.push({k:'calendar',title:'Calendar',sub:`Pick the 16 circuits for the ${p.year+1} season.`,go:()=>{UI26.close();dcNav('Calendar');}});}
  list.push({k:'settings',title:'Settings',sub:p?'Handling, difficulty, audio, graphics and penalties.':'Start a career to unlock settings.',go:()=>p?UI26.play('settings'):UI26.about()});
  return list;}
 let tileList=[];
@@ -245,7 +246,7 @@ function bumper(step){
  if(!portal.hidden){if(UI26.page==='hub'&&moveTile(step))sfx('tab');return;}
  const x=L();if(x?.paused&&typeof dcPauseTab!=='undefined'){const i=PAUSE_TABS.indexOf(dcPauseTab);dcPauseTab=PAUSE_TABS[(Math.max(0,i)+step+PAUSE_TABS.length)%PAUSE_TABS.length];dcPauseRender();sfx('tab');return;}
  if(root.querySelector('.dc-modal'))return;
- const TABS=['Home','Race Weekend','Car Management','Test Centre','Championship','Inbox','Personal','Contracts','Settings'],label=b=>[...b.childNodes].filter(n=>n.nodeType===3).map(n=>n.textContent).join('').trim(),nav=[...root.querySelectorAll('.dc-side nav button')].filter(b=>TABS.includes(label(b)));if(!nav.length||typeof dcNav!=='function')return;
+ const TABS=['Home','Race Weekend','Car Management','Test Centre','Championship','Calendar','Inbox','Personal','Contracts','Settings'],label=b=>[...b.childNodes].filter(n=>n.nodeType===3).map(n=>n.textContent).join('').trim(),nav=[...root.querySelectorAll('.dc-side nav button')].filter(b=>TABS.includes(label(b)));if(!nav.length||typeof dcNav!=='function')return;
  let i=nav.findIndex(b=>b.classList.contains('on'));i=(Math.max(0,i)+step+nav.length)%nav.length;const target=label(nav[i]);{dcNav(target);sfx('tab');requestAnimationFrame(()=>{const on=root.querySelector('.dc-side nav button.on');if(on&&document.body.classList.contains('ui26-controller-active')){on.focus({preventScroll:true});}});}}
 document.addEventListener('keydown',e=>{if(/INPUT|SELECT|TEXTAREA/.test(e.target.tagName))return;
  if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Tab'].includes(e.code))lastNav=performance.now();
