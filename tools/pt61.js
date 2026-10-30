@@ -16,7 +16,7 @@
      and AI teams swap too. */
 (()=>{
 'use strict';
-const CLEAR=2.3,LIMIT=60,FLOW=4.2,TOL=61.2,MAXB=300,MAXC=26,MAXL=380,MAXS=480,MAXCARS=4;
+const CLEAR=2.3,LIMIT=60,FLOW=4.2,TOL=61.2,MAXB=440,MAXC=140,MAXL=380,MAXS=520,MAXCARS=4;
 const T=THREE;
 /* ---------- Co-drivers (team id → [seat 0, seat 1]) ---------- */
 const CO_NAMES={
@@ -42,7 +42,7 @@ function swapAllowed(x){const L=live;return isBathurstRace(L)&&!!coDriver(x);}
 function estimate(x,plan,marks){
  const L=live;if(!x||!L)return null;plan=plan||planOf(x);const human=x===L.player&&!L.dc33Auto;
  let litres=clamp(+plan.fuel||0,0,Math.max(0,110-(x.fuel||0)));
- if(!human&&L.stage==='race'&&Number.isFinite(fuelNeed(x)))litres=Math.min(litres,fuelNeed(x));
+ if(!human&&L.stage==='race'&&Number.isFinite(fuelNeed(x)))litres=Math.min(litres,Math.max(fuelNeed(x),window.PL74?.minLitres?.(x)||0));
  const tyres=!!plan.tyre&&plan.tyre!=='None',endurance=['bathurst','sandown'].includes(L.e?.key),minDrop=endurance?8:5;
  const tFuel=litres>0?Math.max(minDrop,litres/FLOW):0,tTyre=tyres?(human?3.4:3.1+Math.abs(Math.sin((x.seed||1)*7.3))*.7):0;
  const d=x.bodyDamage||0,tRep=plan.repair!==false&&d>.5?(d>60?10+(d-60)/40*5:1.5+d/60*4.5):0;
@@ -55,7 +55,8 @@ function estimate(x,plan,marks){
 
 /* ---------- Radio ---------- */
 function say(from,msg,banner){dcRadio(from,msg);if(banner)try{window.UI58?.banner?.('pt61 '+(banner.cls||''),banner.tag||'PIT WALL',banner.text||msg,banner.value||'',banner.ms||4200);}catch(_){}}
-function penalise(x,sec,msg){const L=live;if(!racing(L))return false;if(window.pn57Ok?.()===false)return false;x.penalty=(x.penalty||0)+sec;dcRadio('Race control',msg+' '+sec+' second time penalty for car #'+x.d.number+'.');return true;}
+// kind 'DT' / 'SG': pl74 makes it a drive-through or stop-go served in the lane.
+function penalise(x,sec,msg,kind){const L=live;if(!racing(L))return false;if(kind&&window.PL74)return window.PL74.issue(x,kind,msg,false);if(window.pn57Ok?.()===false)return false;x.penalty=(x.penalty||0)+sec;dcRadio('Race control',msg+' '+sec+' second time penalty for car #'+x.d.number+'.');return true;}
 
 /* ---------- Service (replaces rf41's version, same effects) ---------- */
 dc32Service=function(x,dt,box){
@@ -65,8 +66,7 @@ dc32Service=function(x,dt,box){
   if(L.entrants.some(y=>y!==x&&y.dc32Servicing&&y.team.id===x.team.id))return;
   if(!x.dc32Servicing){
    x.dc32Servicing=true;x.rf41ServiceInitialDamage=x.bodyDamage;const e=estimate(x,plan,human?{long,lat}:null);
-   // AI crews are not perfect either: now and then a slow wheel nut or a car parked off its marks.
-   if(!human&&Math.random()<.14){const slip=.8+Math.random()*1.6;e.extra+=slip;e.total+=slip;}
+   // Crew mistakes (both the player's crew and AI crews) are rolled by pl74 once the stop starts.
    x.pt61Svc={t0:L.elapsed,litres:e.litres,tFuel:e.tFuel,tTyre:e.tTyre,tRep:e.tRep,tSwap:e.tSwap,extra:e.extra,total:e.total,tyres:e.tyres,repair:e.repair,swap:e.swap,done:false,doneAt:0};
    x.rf41ServiceDuration=x.pitClock=e.total;x.pt61Lift=0;
    if(human){const m=e.extra?`Off the marks by ${Math.abs(long).toFixed(1)} metres, crew dragging you back. `:'Good stop on the marks. ';
@@ -117,7 +117,7 @@ function playerRules(L,dt){
  if(stage&&S.visit){const v=S.visit;v.lastF=q.f;if(x.dc32Serviced)v.serviced=true;
   if(!auto&&!S.lim&&!v.warned&&x.dc33PitCommitted&&q.f<.12&&kmh>72){v.warned=true;say('Race engineer','Limiter! Limiter! Speed line coming up.',{cls:'warn',tag:'PIT LIMITER',text:'Press RB / L now',ms:2600});}
   if(!auto&&x.dc33PitCommitted&&q.f>=.12&&q.f<=.86&&kmh>TOL){v.speeding+=dt;v.top=Math.max(v.top||0,kmh);}else v.speeding=0;
-  if(v.speeding>.25&&!v.speedPen){v.speedPen=true;const over=v.top-LIMIT;if(!penalise(x,over>10?10:5,`Pit lane speeding, ${Math.round(v.top)} km/h.`)&&!racing(L))say('Race control',`Pit lane speeding, ${Math.round(v.top)} km/h. Use the limiter (RB / L).`);}
+  if(v.speeding>.25&&!v.speedPen){v.speedPen=true;const over=v.top-LIMIT;if(!penalise(x,over>10?10:5,`Pit lane speeding, ${Math.round(v.top)} km/h.`,over>10?'SG':'DT')&&!racing(L))say('Race control',`Pit lane speeding, ${Math.round(v.top)} km/h. Use the limiter (RB / L).`);}
  }
  if(!stage&&S.wasStage){const v=S.visit;S.visit=null;
   if(v&&!auto&&!v.tele&&v.lastF>.6&&v.lastF<.86&&moved<15)penalise(x,5,'Crossed the solid pit exit line.');
@@ -131,7 +131,7 @@ function playerRules(L,dt){
   else if(x.dc32Serviced&&x.pt61Mark&&!x.pt61Released){const clearing=crewClearing(x),traffic=clearing?null:laneTraffic(x),hold=clearing||!!traffic||!!L.ic59Repair;S.board=hold?(clearing?'crew':'hold'):'go';S.hold=traffic?'traffic':clearing?'crew':L.ic59Repair?'sc':null;
    if(S.board==='go'&&S.lastBoard!=='go')x.pt61GoAt=L.elapsed;
    if(S.board!==S.lastBoard&&S.board!=='crew')say('Crew chief',hold?(traffic?'Hold, hold. Car coming down the lane.':'Hold there.'):'Lollipop up. Go, go, go!',hold?null:{cls:'go',tag:'RELEASE',text:'Go go go',ms:1800});
-   if(Math.hypot(x.pos.x-x.pt61Mark.x,x.pos.z-x.pt61Mark.z)>1.6){x.pt61Released=true;if(traffic&&!L.ic59Repair)penalise(x,5,'Unsafe release.');}}
+   if(Math.hypot(x.pos.x-x.pt61Mark.x,x.pos.z-x.pt61Mark.z)>1.6){x.pt61Released=true;if(traffic&&!L.ic59Repair)penalise(x,5,'Unsafe release.','DT');}}
   else if(!x.dc32Serviced&&(x.pitNow||L.stage==='race'))S.board=Math.abs(long)<60?'in':null;
  }
  S.lastBoard=S.board;
@@ -144,7 +144,7 @@ function playerRules(L,dt){
 function rivalsAndCodrivers(L,dt){
  const p=L.player,race=racing(L),bath=isBathurstRace(L)&&L.started;let order=null;
  for(const x of L.entrants){
-  if(race&&x!==p&&x.pitStage&&!x.pt61Was&&!x.retired){order||=dc32Order(L);const i=order.indexOf(p),j=order.indexOf(x);if(Math.abs(i-j)===1&&!p.pitStage)say('Race engineer',`${surname(x.d.name)} ${j<i?'ahead':'behind'} has boxed.`);}
+  if(race&&x!==p&&x.pitStage&&!x.pt61Was&&!x.retired){order||=dc32Order(L);const i=order.indexOf(p),j=order.indexOf(x);if(Math.abs(i-j)===1&&!p.pitStage&&!window.PL74)say('Race engineer',`${surname(x.d.name)} ${j<i?'ahead':'behind'} has boxed.`);}
   x.pt61Was=!!x.pitStage;
   if(!bath)continue;
   const lap=Math.floor(x.progress);if(x.pt61Lap===undefined)x.pt61Lap=lap;else if(lap>x.pt61Lap){if(x.pt61Co&&x.progress>0)x.pt61CoLaps=(x.pt61CoLaps||0)+(lap-x.pt61Lap);x.pt61Lap=lap;}
@@ -201,19 +201,20 @@ SC25World.prototype.makePit=function(){baseMakePit.call(this);const W=this;if(!W
  // Speed limit lines across the lane.
  for(const f of [.12,.86]){const q=dc32PitAt(W,f);for(const k of [-.5,.5]){const m=W.box(q.p.x+q.v.x*k*.9,q.p.y+.09,q.p.z+q.v.z*k*.9,7.5,.02,.32,k<0?white:W.mat('#e8bd45',.6));m.rotation.y=Math.atan2(q.v.x,q.v.z);}}
  // Box frames for the crew.
- const boxes=W.pit.bays.map(b=>{const q=dc32PitAt(W,b.f);return{x:b.p.x,y:b.p.y,z:b.p.z,fx:q.v.x,fz:q.v.z,gx:q.n.x*side,gz:q.n.z*side};});
+ const boxes=W.pit.bays.map((b,i)=>{const q=dc32PitAt(W,b.f);return{x:b.p.x,y:b.p.y,z:b.p.z,fx:q.v.x,fz:q.v.z,gx:q.n.x*side,gz:q.n.z*side,hl:b.halfLength,team:i};});
  const mat=new T.MeshStandardMaterial({color:'#ffffff',roughness:.72,metalness:.05});
  const suitMat=new T.MeshStandardMaterial({color:'#ffffff',roughness:.62,metalness:0});
  const crew=new T.InstancedMesh(new T.BoxGeometry(1,1,1),mat,MAXB),cyl=new T.InstancedMesh(new T.CylinderGeometry(1,1,1,16),mat.clone(),MAXC);
  const limb=new T.InstancedMesh(new T.CylinderGeometry(1,.82,1,10,1),suitMat,MAXL),sph=new T.InstancedMesh(new T.SphereGeometry(1,12,9),suitMat.clone(),MAXS);
  for(const m of [crew,cyl,limb,sph]){m.name='pt61 pit crew';m.instanceColor=new T.InstancedBufferAttribute(new Float32Array(m.count*3),3);m.instanceMatrix.setUsage(T.DynamicDrawUsage);m.frustumCulled=false;m.castShadow=false;m.receiveShadow=true;m.count=0;W.scene.add(m);}
- const cols=new Map(),helm=new Map();for(const t of S.teams){cols.set(t.id,new T.Color(t.livery?.primary||'#c33'));helm.set(t.id,new T.Color(t.livery?.secondary||'#eeeeee'));}
- W.pt61={boxes,crew,cyl,limb,sph,cols,helm,c:{skin:new T.Color('#c99a7c'),boot:new T.Color('#121316'),glove:new T.Color('#1b1c20'),visor:new T.Color('#0a0c10'),helmet:new T.Color('#16181c'),gun:new T.Color('#3b4046'),can:new T.Color('#c8ccd0'),ext:new T.Color('#d4201c'),jack:new T.Color('#e8bd45'),tyre:new T.Color('#141414'),red:new T.Color('#e01e1e'),green:new T.Color('#1fd060'),white:new T.Color('#eeeeee')}};
+ const cols=new Map(),helm=new Map(),legs=new Map();for(const t of S.teams){const c=new T.Color(t.livery?.primary||'#c33');cols.set(t.id,c);helm.set(t.id,new T.Color(t.livery?.secondary||'#eeeeee'));legs.set(t.id,c.clone().multiplyScalar(.32));}
+ W.pt61={boxes,crew,cyl,limb,sph,cols,helm,legs,c:{belt:new T.Color('#141619'),patch:new T.Color('#f2f2f2'),balac:new T.Color('#101113'),hose:new T.Color('#1d2024'),fuelHose:new T.Color('#2b2f35'),skin:new T.Color('#c99a7c'),boot:new T.Color('#121316'),glove:new T.Color('#1b1c20'),visor:new T.Color('#0a0c10'),helmet:new T.Color('#16181c'),gun:new T.Color('#3b4046'),can:new T.Color('#c8ccd0'),ext:new T.Color('#d4201c'),jack:new T.Color('#e8bd45'),tyre:new T.Color('#141414'),red:new T.Color('#e01e1e'),green:new T.Color('#1fd060'),white:new T.Color('#eeeeee')}};
+ try{W.pt61.clutter=clutter(W,W.pt61,boxes);}catch(e){console.warn('pt61 clutter',e);}
 };
 const baseUpdateCrews=SC25World.prototype.updateCrews;
 SC25World.prototype.updateCrews=function(dt){if(this.pt61){if(this.crewMeshes&&!this.pt61OldHidden){for(const o of Object.values(this.crewMeshes))o.visible=false;this.pt61OldHidden=true;}return;}return baseUpdateCrews?.call(this,dt);};
 const baseDispose=SC25World.prototype.dispose;
-SC25World.prototype.dispose=function(){const P=this.pt61;if(P){for(const m of [P.crew,P.cyl,P.limb,P.sph]){m.removeFromParent();m.geometry.dispose();m.material.dispose();}this.pt61=null;}return baseDispose.call(this);};
+SC25World.prototype.dispose=function(){const P=this.pt61;if(P){for(const m of [P.crew,P.cyl,P.limb,P.sph,...(P.clutter||[])]){m.removeFromParent();m.geometry.dispose();m.material.dispose();}this.pt61=null;}return baseDispose.call(this);};
 const basePose=SC25World.prototype.pose;
 SC25World.prototype.pose=function(x){const r=basePose.call(this,x);if(x?.pt61Lift)r.p.y+=x.pt61Lift;return r;};
 
@@ -225,14 +226,19 @@ SC25World.prototype.pose=function(x){const r=basePose.call(this,x);if(x?.pt61Lif
 const E=new T.Euler(),Q=new T.Quaternion(),P=new T.Vector3(),SC=new T.Vector3(),MX=new T.Matrix4();
 let nb=0,nc=0,nl=0,ns=0,MESH=null,CYL=null,LIMB=null,SPH=null,WX=0,WZ=0,HX=0,HY=0,HZ=0,GX=0,GY=0,GZ=0;
 function put(m,i,x,y,z,pitch,yaw,roll,sx,sy,sz,col){E.set(pitch,yaw,roll,'YXZ');Q.setFromEuler(E);P.set(x,y,z);SC.set(sx,sy,sz);MX.compose(P,Q,SC);m.setMatrixAt(i,MX);m.setColorAt(i,col);}
-function bx(x,y,z,pitch,yaw,roll,sx,sy,sz,col){if(nb<MAXB)put(MESH,nb++,x,y,z,pitch,yaw,roll,sx,sy,sz,col);}
-function cy(x,y,z,pitch,yaw,roll,r,h,col){if(nc<MAXC)put(CYL,nc++,x,y,z,pitch,yaw,roll,r,h,r,col);}
-function sp(x,y,z,rx,ry,rz,col){if(ns<MAXS)put(SPH,ns++,x,y,z,0,QYAW,0,rx,ry,rz,col);}
+let CB=MAXB,CC=MAXC,CL=MAXL,CS=MAXS;
+function bx(x,y,z,pitch,yaw,roll,sx,sy,sz,col){if(nb<CB)put(MESH,nb++,x,y,z,pitch,yaw,roll,sx,sy,sz,col);}
+function cy(x,y,z,pitch,yaw,roll,r,h,col){if(nc<CC)put(CYL,nc++,x,y,z,pitch,yaw,roll,r,h,r,col);}
+function sp(x,y,z,rx,ry,rz,col){if(ns<CS)put(SPH,ns++,x,y,z,0,QYAW,0,rx,ry,rz,col);}
+// A straight piece of hose (cylinder) between two points.
+function tube(x1,y1,z1,x2,y2,z2,r,col){const dx=x2-x1,dy=y2-y1,dz=z2-z1,l=Math.hypot(dx,dy,dz);if(l<.01||nc>=CC)return;put(CYL,nc++,(x1+x2)/2,(y1+y2)/2,(z1+z2)/2,Math.atan2(Math.hypot(dx,dz),dy),Math.atan2(dx,dz),0,r,l,r,col);}
+// A hose that sags between two points, in three pieces.
+function hose(x1,y1,z1,x2,y2,z2,sag,r,col){const p=[0,1/3,2/3,1].map(k=>[x1+(x2-x1)*k,y1+(y2-y1)*k-sag*4*k*(1-k),z1+(z2-z1)*k]);for(let i=0;i<3;i++)tube(p[i][0],Math.max(.03,p[i][1]),p[i][2],p[i+1][0],Math.max(.03,p[i+1][1]),p[i+1][2],r,col);}
 // Person frame: origin at the feet, +z forward, rotated by QYAW about y.
-let QX=0,QY=0,QZ=0,QC=1,QS=0,QYAW=0,LX=0,LY=0,LZ=0;
+let QX=0,QY=0,QZ=0,QC=1,QS=0,QYAW=0,LX=0,LY=0,LZ=0,PLEG=null,PTRIM=null;
 const wx=(lx,lz)=>QX+lx*QC+lz*QS,wz=(lx,lz)=>QZ-lx*QS+lz*QC;
 // A tapered segment from local (x,y,z) along pitch p (0 = straight down, -PI/2 = forward). Leaves its end in LX/LY/LZ.
-function seg(x,y,z,p,len,r,rz,col){const dy=-Math.cos(p)*len,dz=-Math.sin(p)*len;if(nl<MAXL)put(LIMB,nl++,wx(x,z+dz/2),QY+y+dy/2,wz(x,z+dz/2),p,QYAW,0,r,len,rz||r,col);LX=x;LY=y+dy;LZ=z+dz;}
+function seg(x,y,z,p,len,r,rz,col){const dy=-Math.cos(p)*len,dz=-Math.sin(p)*len;if(nl<CL)put(LIMB,nl++,wx(x,z+dz/2),QY+y+dy/2,wz(x,z+dz/2),p,QYAW,0,r,len,rz||r,col);LX=x;LY=y+dy;LZ=z+dz;}
 const POSE=new Float32Array(10),TMP=new Float32Array(10);
 // lean, thighL, kneeL, thighR, kneeR, armL, elbowL, armR, elbowR, spread
 const P_STAND=[.04,0,.06,0,.06,.08,-.18,.08,-.18,.1],P_READY=[.32,-.55,.9,-.25,.45,-.5,-.6,-.5,-.6,.14],
@@ -247,19 +253,25 @@ function person(px,py,pz,yaw,suit,helmet,C){
  // Pelvis height puts the lowest foot or knee on the ground.
  let hip=0;for(let i=1;i<=3;i+=2){const t=p[i],k=p[i+1];hip=Math.max(hip,.44*Math.cos(t)+.07,.44*Math.cos(t)+.44*Math.cos(t+k)+.085);}
  const pz0=Math.max(0,-Math.sin(p[1])*.08,-Math.sin(p[3])*.08)*.5;
- sp(wx(0,pz0),py+hip+.02,wz(0,pz0),.17,.12,.12,suit);
+ const legs=PLEG||suit,trim=PTRIM||helmet;
+ sp(wx(0,pz0),py+hip+.02,wz(0,pz0),.17,.12,.12,legs);
+ bx(wx(0,pz0+.01),py+hip+.1,wz(0,pz0+.01),lean*.5,yaw,0,.36,.075,.25,C.belt);
  // Legs and boots.
  for(let s=-1;s<=1;s+=2){const t=s<0?p[1]:p[3],k=s<0?p[2]:p[4],hx=s*.1;
-  seg(hx,hip,pz0,t,.44,.088,.095,suit);const kx=LX,ky=LY,kz=LZ;sp(wx(kx,kz),py+ky,wz(kx,kz),.075,.075,.075,suit);
-  seg(kx,ky,kz,t+k,.43,.068,.072,suit);const ay=Math.max(.045,LY);bx(wx(LX,LZ+.06),py+ay-.02,wz(LX,LZ+.06),0,yaw,0,.11,.08,.27,C.boot);}
+  seg(hx,hip,pz0,t,.44,.088,.095,legs);const kx=LX,ky=LY,kz=LZ;sp(wx(kx,kz),py+ky,wz(kx,kz),.075,.075,.075,legs);
+  seg(kx,ky,kz,t+k,.43,.068,.072,legs);const ay=Math.max(.045,LY);bx(wx(LX,LZ+.06),py+ay-.02,wz(LX,LZ+.06),0,yaw,0,.11,.08,.27,C.boot);}
  // Torso, shoulders, head.
  const sy=hip+.56*Math.cos(lean),sz=pz0+.56*Math.sin(lean);
  seg(0,sy,sz,lean,.56,.215,.14,suit);
+ // Chest band in the team's second colour, and a sponsor patch on the back.
+ const by=hip+.4*Math.cos(lean),bz=pz0+.4*Math.sin(lean);bx(wx(0,bz),py+by,wz(0,bz),lean,yaw,0,.44,.075,.29,trim);
+ const ky2=hip+.3*Math.cos(lean),kz2=pz0+.3*Math.sin(lean)-.14;bx(wx(0,kz2),py+ky2,wz(0,kz2),lean,yaw,0,.2,.13,.02,C.patch);
  const hy=sy+.2,hz=sz+.06*Math.sin(lean)+.02;
- sp(wx(0,hz),py+hy-.08,wz(0,hz),.06,.07,.06,C.skin);
+ sp(wx(0,hz),py+hy-.08,wz(0,hz),.07,.075,.07,C.balac);
  sp(wx(0,hz+.02),py+hy+.04,wz(0,hz+.02),.115,.125,.12,C.skin);
  sp(wx(0,hz-.005),py+hy+.075,wz(0,hz-.005),.14,.135,.155,helmet);
  bx(wx(0,hz+.125),py+hy+.06,wz(0,hz+.125),0,yaw,0,.2,.07,.03,C.visor);
+ bx(wx(0,hz-.01),py+hy+.205,wz(0,hz-.01),0,yaw,0,.055,.02,.27,suit);
  // Arms and gloves. The right glove ends in HX/HY/HZ, the left in GX/GY/GZ.
  for(let s=-1;s<=1;s+=2){const a=s<0?p[5]:p[7],e=s<0?p[6]:p[8],shx=s*(.2+sp_*.15);
   sp(wx(shx,sz),py+sy-.03,wz(shx,sz),.085,.08,.085,suit);
@@ -296,6 +308,63 @@ function travel(i,cx,cz,workYaw){
 // Final pose: run cycle while moving, otherwise standing at the wall or the job pose at the spot.
 function pose(job){if(RRUN>.01){for(let i=0;i<10;i++)POSE[i]=lerp(P_STAND[i],TMP[i],Math.min(1,RRUN*1.4));return;}blendPose(P_STAND,job,RARR);}
 const PICK=[null,null,null,null],PD=[0,0,0,0];
+/* ---------- Pit lane clutter: every team's box, built once (static instanced meshes) ---------- */
+function clutter(W,Pc,boxes){
+ const side=W.pit.side,C=Pc.c,col=h=>new T.Color(h),G={grey:col('#8d969d'),steel:col('#c3c9ce'),dark:col('#1c2126'),black:col('#0d0e10'),orange:col('#ff6a13'),yellow:col('#f1c40f'),white:col('#f2f2f2'),blue:col('#2459a8'),red:col('#c8161d'),screen:col('#3a8fd8'),wall:col('#b9b6ad'),wallTop:col('#d8d5cc'),pad:col('#8a8d8f'),rubber:col('#121212'),hose:col('#202326'),case:col('#5d666e'),cone:col('#ff5a10')};
+ const sb=new T.InstancedMesh(new T.BoxGeometry(1,1,1),new T.MeshStandardMaterial({color:'#ffffff',roughness:.7,metalness:.15}),4200);
+ const sc=new T.InstancedMesh(new T.CylinderGeometry(1,1,1,14),new T.MeshStandardMaterial({color:'#ffffff',roughness:.6,metalness:.2}),2600);
+ const sk=new T.InstancedMesh(new T.ConeGeometry(1,1,10),new T.MeshStandardMaterial({color:'#ffffff',roughness:.6}),120);
+ const sl=new T.InstancedMesh(new T.CylinderGeometry(1,.82,1,8,1),new T.MeshStandardMaterial({color:'#ffffff',roughness:.62}),1400);
+ const ss=new T.InstancedMesh(new T.SphereGeometry(1,10,7),new T.MeshStandardMaterial({color:'#ffffff',roughness:.62}),2000);
+ for(const m of [sb,sc,sk,sl,ss]){m.name='pt61 pit clutter';m.instanceColor=new T.InstancedBufferAttribute(new Float32Array(m.count*3),3);m.castShadow=false;m.receiveShadow=true;W.scene.add(m);}
+ // Write the static set through the same helpers the animated crew use.
+ const keep=[MESH,CYL,LIMB,SPH,nb,nc,nl,ns,CB,CC,CL,CS];MESH=sb;CYL=sc;LIMB=sl;SPH=ss;nb=nc=nl=ns=0;CB=sb.count;CC=sc.count;CL=sl.count;CS=ss.count;let nk=0;
+ const cone=(x,y,z,r,h,c)=>{if(nk<sk.count)put(sk,nk++,x,y,z,0,0,0,r,h,r,c);};
+ const street=['goldcoast','adelaide','townsville','homebush','newcastle','canberra'].includes(W.e?.key);
+ for(const B of boxes){
+  const yawB=Math.atan2(B.fx,B.fz),H=B.hl,y0=B.y,team=B.team,prim=Pc.cols.get(team)||C.red,sec=Pc.helm.get(team)||C.white;
+  // Box frame: a along the lane, u out from the lane centre (the car sits at u 8.1, the garage opens at 14.6).
+  const at=(a,u)=>{WX=B.x+B.fx*a+B.gx*(u-8.1);WZ=B.z+B.fz*a+B.gz*(u-8.1);};
+  const box=(a,u,y,w,h,d,c,pitch=0,yawOff=0)=>{at(a,u);bx(WX,y0+y,WZ,pitch,yawB+yawOff,0,w,h,d,c);};
+  const can=(a,u,y,r,h,c)=>{at(a,u);cy(WX,y0+y,WZ,0,yawB,0,r,h,c);};
+  // Boom over the box: post at the garage front, arm out over the car, lights and hose reels.
+  box(0,14.2,1.8,.2,3.6,.2,prim);box(0,11.2,3.62,.2,.2,6.4,prim,0,Math.PI/2);box(0,9.2,3.48,.9,.08,.3,G.white,0,Math.PI/2);
+  box(0,13.9,.15,.7,.3,.7,G.dark);for(const k of [-1,1]){at(k*.28,10.4);cy(WX,y0+3.62,WZ,Math.PI/2,yawB,0,.2,.12,G.dark);}
+  at(0,8.6);B.boom={x:WX,y:y0+3.45,z:WZ};
+  // Fuel rig: tank on a frame, hose and dead-man valve.
+  const ra=H-1.7;box(ra,13.9,.06,1.1,.12,1.1,G.dark);for(const i of [-1,1])for(const j of [-1,1])box(ra+i*.42,13.9+j*.42,1.1,.07,2.1,.07,prim);
+  can(ra,13.9,1.85,.4,1.35,G.steel);can(ra,13.9,2.6,.18,.18,G.red);box(ra,13.9,.7,.85,.06,.85,prim);at(ra,13.4);B.rig={x:WX,y:y0+1.15,z:WZ};
+  for(let i=0;i<3;i++)can(ra-1.1-i*.3,14.25,.73,.11,1.45,i<2?G.blue:G.grey);
+  // Tyre sets staged for the stop (Soft yellow / Hard white sidewall stripe), stacks of four.
+  for(let k=0;k<3;k++)for(let t=0;t<4;t++){const a=-H+1.1+k*.82,u=13.35+(k%2)*.12;can(a,u,.15+t*.29,.34,.27,G.rubber);can(a,u,.15+t*.29,.343,.035,k===2?G.white:G.yellow);}
+  // Tyre trolley with a used set.
+  box(-H+3.9,13.6,.12,.9,.06,1.6,G.grey);for(let t=0;t<2;t++)can(-H+3.5+t*.8,13.6,.33,.33,.27,G.rubber);
+  // Roll cabinets: team colour and black, drawers facing the lane.
+  for(const [a,c] of [[1.15,prim],[-.15,G.dark]]){box(a,14.0,.55,.6,1.0,1.1,c);for(let d=0;d<4;d++)box(a,13.69,.25+d*.2,.02,.04,.95,G.steel);box(a,14.0,1.1,.64,.08,1.14,G.black);}
+  // Timing monitor on a stand, flight cases, extinguishers, cones, spare panels and cables.
+  box(2.9,14.1,.8,.06,1.6,.06,G.dark);box(2.9,14.0,1.75,.9,.55,.06,G.black,0,Math.PI/2);box(2.9,13.96,1.75,.8,.46,.02,G.screen,0,Math.PI/2);
+  box(H-.6,14.0,.32,.8,.6,.6,G.case);box(H-.6,14.0,.9,.7,.5,.55,G.case);box(H-3.6,14.1,.3,.6,.55,.5,G.case);
+  can(-H+.55,13.05,.3,.1,.55,G.red);can(H-.4,13.05,.3,.1,.55,G.red);
+  for(const a of [-H+.35,H-.35]){at(a,12.85);cone(WX,y0+.24,WZ,.16,.46,G.cone);}
+  box(-1.6,14.45,.6,1.7,1.05,.05,prim,-.28,Math.PI/2);box(-1.6,13.95,.07,1.9,.08,.55,G.black,0,Math.PI/2);
+  for(const [a,ang] of [[.5,.3],[-2.3,-.2],[3.6,.1]])box(a,13.2,.012,.05,.02,2.6,a<0?G.yellow:G.hose,0,ang);
+  // Crew who are not on the stop: two at the garage front.
+  PLEG=Pc.legs.get(team)||null;PTRIM=sec;
+  for(const [a,u,face] of [[H-2.6,14.3,0],[-H+2.8,14.25,.5]]){at(a,u);blendPose(P_STAND,P_STAND,0);POSE[5]=-.35;POSE[6]=-1.1;POSE[7]=-.3;POSE[8]=-1.2;person(WX,y0+.04,WZ,Math.atan2(-B.gx,-B.gz)+face,prim,sec,C);}
+  // Team stand on the pit wall side: desk, canopy, monitors and two engineers on headsets.
+  // Concrete pit wall between the lane and the track, with the team stand on a pad behind it.
+  // Street circuits already have their own pit wall and fence; elsewhere skip it where the track runs close.
+  at(0,-6.6);const room=W.nearest(new T.Vector3(WX,y0,WZ)).distance;
+  if(!street&&room>13.5){const span=W.pit.length*.46/12+.06;box(0,-4.55,.55,.38,1.1,span,G.wall);box(0,-4.55,1.13,.46,.06,span,G.wallTop);box(0,-6.3,.03,2.6,.06,span*.9,G.pad);
+  const pu=-6.1;box(0,pu,.55,1.0,1.1,2.8,G.dark);box(0,pu,1.12,1.1,.06,2.9,G.grey);box(0,pu,2.75,1.8,.09,3.2,prim);
+  for(const k of [-1,1])box(k*1.45,pu-.75,1.4,.07,2.75,.07,G.steel);
+  for(let k=-1;k<=1;k++){box(k*.9,pu+.2,1.45,.7,.45,.05,G.black,-.15,Math.PI/2);box(k*.9,pu+.17,1.45,.6,.36,.02,G.screen,-.15,Math.PI/2);}
+  for(const k of [-.8,.8]){at(k,pu-.8);blendPose(P_STAND,P_STAND,0);POSE[5]=-.9;POSE[6]=-.9;POSE[7]=-.9;POSE[8]=-.9;POSE[0]=.18;person(WX,y0+.04,WZ,Math.atan2(B.gx,B.gz),prim,sec,C);sp(HX,HY+.25,HZ,.05,.05,.05,G.black);}}
+ }
+ sb.count=nb;sc.count=nc;sk.count=nk;sl.count=nl;ss.count=ns;for(const m of [sb,sc,sk,sl,ss]){m.instanceMatrix.needsUpdate=true;m.instanceColor.needsUpdate=true;m.computeBoundingSphere?.();}
+ [MESH,CYL,LIMB,SPH,nb,nc,nl,ns,CB,CC,CL,CS]=keep;PLEG=PTRIM=null;
+ return [sb,sc,sk,sl,ss];
+}
 function crewFrame(W,L){
  const Pc=W.pt61;if(!Pc)return;MESH=Pc.crew;CYL=Pc.cyl;LIMB=Pc.limb;SPH=Pc.sph;nb=nc=nl=ns=0;const cam=W.camera.position,C=Pc.c,now=L.elapsed;
  for(let i=0;i<MAXCARS;i++){PICK[i]=null;PD[i]=Infinity;}
@@ -318,12 +387,15 @@ function crewFor(W,L,x,Pc,C,now){
  const B=Pc.boxes[x.team.id],suit=Pc.cols.get(x.team.id)||C.red,helm=Pc.helm.get(x.team.id)||C.white,s0=x.pt61Svc,s=s0&&(x.dc32Servicing||s0.done&&now-s0.doneAt<7)?s0:null,waitYaw=Math.atan2(-B.gx,-B.gz);
  const t=s?now-s.t0-s.extra:-1,fuelOn=s&&!s.done&&t>=0&&t<s.tFuel,tyreT=s?t-s.tFuel:-1,tyreOn=s&&!s.done&&s.tTyre&&tyreT>=0&&tyreT<s.tTyre;
  const yaw=x.yaw,c=Math.cos(yaw),sn=Math.sin(yaw),g=Math.sign(c*B.gx-sn*B.gz)||1,carOn=s&&(x.dc32Servicing||s.done);
+ PLEG=Pc.legs.get(x.team.id)||null;PTRIM=helm;const bm=B.boom;
  RX=x;RB=B;RG=g;RNOW=now;RT0=x.pt61CrewT0||0;RBACK=s?.done?s.doneAt+.15:-1;RCAR=carOn?clamp((now-s.t0)/.5,0,1):0;RSUIT=suit;RHELM=helm;RC=C;RWAIT=waitYaw;
  const H=Math.PI/2,midT=s&&s.tTyre?s.tTyre*.55:0;
  // Wheel gunners, each rolling a fresh tyre out beside them.
  for(let w=0;w<4;w++){const sx=w&1?-1:1,az=w<2?1.42:-1.36,wy=yaw+(sx>0?-H:H);travel(w,sx*1.32,az,wy);
   pose(tyreOn||s&&!s.done&&RARR>0&&t>=s.tFuel-.6?P_KNEEL:P_READY);person(RPX,B.y+.04,RPZ,RYAW,suit,helm,C);
-  if(RARR>.3&&carOn&&!s.done)bx(HX,HY,HZ,0,RYAW,0,.09,.11,.3,C.gun);
+  bx(HX,HY,HZ,0,RYAW,0,.09,.11,.3,C.gun);
+  // Air line from the wheel gun up to the boom over the box.
+  if(bm)hose(HX,HY,HZ,bm.x+B.fx*(w<2?.5:-.5),bm.y,bm.z+B.fz*(w<2?.5:-.5),.9,.022,C.hose);
   if(s?.tyres||!s){const roll=RRUN>.01||RARR<1;if(roll||!(tyreT>midT)){const ox=Math.cos(RYAW)*.5,oz=-Math.sin(RYAW)*.5;
      if(roll)cy(RPX+ox*(sx>0?1:-1),B.y+.38,RPZ+oz*(sx>0?1:-1),now*6,RYAW,H,.34,.3,C.tyre);else{carPt(x,sx*1.85,az+.15);cy(WX,B.y+.38,WZ,0,yaw,H,.34,.3,C.tyre);}}
    else{carPt(x,sx*2.2,az+.8);cy(WX,B.y+.17,WZ,0,yaw,0,.34,.3,C.tyre);}}}
@@ -334,7 +406,9 @@ function crewFor(W,L,x,Pc,C,now){
   bx(jx,B.y+.1+lift*.6,jz,0,RYAW,0,.34,.13,1.05,C.jack);bx((jx+HX)/2,(B.y+.25+HY)/2,(jz+HZ)/2,Math.atan2(Math.hypot(HX-jx,HZ-jz),HY-B.y-.25)*-1,RYAW,0,.05,Math.hypot(HX-jx,HY-B.y-.25,HZ-jz),.05,C.jack);}
  // Fuel man with the dump can; extinguisher man stands by during refuelling.
  travel(6,g*1.45,-1.05,yaw+(g>0?-H:H));pose(fuelOn?P_FUEL:P_STAND);person(RPX,B.y+.04,RPZ,RYAW,suit,helm,C);
- if(fuelOn&&RARR>.5){carPt(x,g*1.02,-1.05);bx(WX,B.y+1.2,WZ,0,yaw,-g*.85,.27,.8,.27,C.can);}else bx((HX+GX)/2,(HY+GY)/2-.3,(HZ+GZ)/2,0,RYAW,0,.25,.7,.25,C.can);
+ // The fuel hose runs back to the team's rig at the front of the garage.
+ let cx_=(HX+GX)/2,cy_=(HY+GY)/2-.05,cz_=(HZ+GZ)/2;if(fuelOn&&RARR>.5){carPt(x,g*1.02,-1.05);cx_=WX;cy_=B.y+1.05;cz_=WZ;}
+ bx(cx_,cy_,cz_,0,RYAW,0,.14,.14,.26,C.can);if(B.rig)hose(cx_,cy_,cz_,B.rig.x,B.rig.y,B.rig.z,.55,.05,C.fuelHose);
  travel(7,g*1.95,-2.15,yaw+(g>0?-H-.5:H+.5));pose(fuelOn?P_EXT:P_STAND);person(RPX,B.y+.04,RPZ,RYAW,suit,helm,C);bx(HX,HY-.12,HZ,0,RYAW,0,.16,.46,.16,C.ext);
  // Lollipop man in front of the box: waves the car in, board red until release, raised green on go.
  const go=s?.done&&(x!==L.player||L.dc33Auto?!x.pt61AiHold&&!crewClearing(x):L.pt61?.board==='go'||x.pt61Released),stopped=x.dc32Servicing||s?.done&&!go;
@@ -379,6 +453,7 @@ function paintHud(force){
   else if(S.board==='in'||!x.dc32Serviced&&Math.abs(long)<80){const on=Math.abs(long)<.9&&Math.abs(lat)<.8;parts.push(`<div class="${on?'ok':''}">${on?'On the marks · stop':`Box <b>${long>0?long.toFixed(long<10?1:0)+' m':'over '+(-long).toFixed(1)+' m'}</b>${Math.abs(lat)>.8&&Math.abs(long)<25?` · ${arrow(x,lat)} ${Math.abs(lat).toFixed(1)} m`:''}`}</div>`);}
  }
  if(isBathurstRace(L)&&L.started){const co=coDriver(x);if(co){const req=coReq(L),done=x.pt61CoLaps||0;parts.push(`<div class="${x.pt61Co?'co':''}">${x.pt61Co?surname(co.name)+' driving':'Co-driver '+surname(co.name)} <b>${done}/${req}</b>${L.pitPlan?.swap?' · swap next stop':''}</div>`);}}
+ try{for(const h of window.PL74?.hud?.()||[])parts.push(h);}catch(_){}
  const html=parts.join('');if(html!==last||force){last=html;hud.innerHTML=html;}hud.hidden=!html;
 }
 setInterval(paintHud,100);

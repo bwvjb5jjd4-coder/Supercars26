@@ -9558,7 +9558,7 @@ function detail(k){const L=live,p=L?.player;if(!p)return'';const plan=L.pitPlan|
  if(k==='swap')return window.PT61?.swapText?.()||'';
  if(k==='incident')return (p.bodyDamage||0)>=99.5?'Retire (DNF)':L.stage==='race'&&L.started?'SC · lose a lap':'Back to the pits';
  return'Close';}
-function paint(){if(!M.el)return;M.sel=Math.min(M.sel,opts().length-1);const est=window.PT61?.estimate?.(live?.player);M.el.innerHTML=`<div class="hd">RACE MFD<small>${live?.player?.pitNow?'PIT REQUESTED':'B / P CLOSE'}</small></div>${est?`<div class="est"><span>STOP ${esc(est.order)}</span><b>${est.total.toFixed(1)} s · lane +${Math.round(est.lane)} s</b></div>`:''}${opts().map((o,i)=>`<button type="button" data-i="${i}" class="${i===M.sel?'on':''}"><i>${i+1}</i>${o.t}<b>${esc(detail(o.k))}</b></button>`).join('')}<div class="ft">▲▼ select · ◀▶ change · A confirm · B close</div>`;
+function paint(){if(!M.el)return;M.sel=Math.min(M.sel,opts().length-1);const est=window.PT61?.estimate?.(live?.player);M.el.innerHTML=`<div class="hd">RACE MFD<small>${live?.player?.pitNow?'PIT REQUESTED':'B / P CLOSE'}</small></div>${est?`<div class="est"><span>STOP ${esc(est.order)}</span><b>${est.total.toFixed(1)} s · lane +${Math.round(est.lane)} s</b></div>`:''}${window.PL74?.mfd?.()||''}${opts().map((o,i)=>`<button type="button" data-i="${i}" class="${i===M.sel?'on':''}"><i>${i+1}</i>${o.t}<b>${esc(detail(o.k))}</b></button>`).join('')}<div class="ft">▲▼ select · ◀▶ change · A confirm · B close</div>`;
  M.el.querySelectorAll('button').forEach(b=>b.onclick=()=>{M.sel=+b.dataset.i;choose();});}
 function host(){const h=document.querySelector('.dc-driving')||document.body;if(!M.el||!M.el.isConnected){M.el=document.createElement('div');M.el.id='ic59-mfd';M.el.hidden=true;M.el.setAttribute('role','menu');M.el.setAttribute('aria-label','Race MFD');h.appendChild(M.el);}return M.el;}
 function openMfd(){if(!live?.dc||live.paused)return;host();M.open=true;M.sel=0;M.el.hidden=false;paint();maskHeld();}
@@ -9620,7 +9620,7 @@ window.IC59={reportIncident,openMfd,closeMfd,choose,move,adjust,state:M,opts:OPT
      and AI teams swap too. */
 (()=>{
 'use strict';
-const CLEAR=2.3,LIMIT=60,FLOW=4.2,TOL=61.2,MAXB=300,MAXC=26,MAXL=380,MAXS=480,MAXCARS=4;
+const CLEAR=2.3,LIMIT=60,FLOW=4.2,TOL=61.2,MAXB=440,MAXC=140,MAXL=380,MAXS=520,MAXCARS=4;
 const T=THREE;
 /* ---------- Co-drivers (team id → [seat 0, seat 1]) ---------- */
 const CO_NAMES={
@@ -9646,7 +9646,7 @@ function swapAllowed(x){const L=live;return isBathurstRace(L)&&!!coDriver(x);}
 function estimate(x,plan,marks){
  const L=live;if(!x||!L)return null;plan=plan||planOf(x);const human=x===L.player&&!L.dc33Auto;
  let litres=clamp(+plan.fuel||0,0,Math.max(0,110-(x.fuel||0)));
- if(!human&&L.stage==='race'&&Number.isFinite(fuelNeed(x)))litres=Math.min(litres,fuelNeed(x));
+ if(!human&&L.stage==='race'&&Number.isFinite(fuelNeed(x)))litres=Math.min(litres,Math.max(fuelNeed(x),window.PL74?.minLitres?.(x)||0));
  const tyres=!!plan.tyre&&plan.tyre!=='None',endurance=['bathurst','sandown'].includes(L.e?.key),minDrop=endurance?8:5;
  const tFuel=litres>0?Math.max(minDrop,litres/FLOW):0,tTyre=tyres?(human?3.4:3.1+Math.abs(Math.sin((x.seed||1)*7.3))*.7):0;
  const d=x.bodyDamage||0,tRep=plan.repair!==false&&d>.5?(d>60?10+(d-60)/40*5:1.5+d/60*4.5):0;
@@ -9659,7 +9659,8 @@ function estimate(x,plan,marks){
 
 /* ---------- Radio ---------- */
 function say(from,msg,banner){dcRadio(from,msg);if(banner)try{window.UI58?.banner?.('pt61 '+(banner.cls||''),banner.tag||'PIT WALL',banner.text||msg,banner.value||'',banner.ms||4200);}catch(_){}}
-function penalise(x,sec,msg){const L=live;if(!racing(L))return false;if(window.pn57Ok?.()===false)return false;x.penalty=(x.penalty||0)+sec;dcRadio('Race control',msg+' '+sec+' second time penalty for car #'+x.d.number+'.');return true;}
+// kind 'DT' / 'SG': pl74 makes it a drive-through or stop-go served in the lane.
+function penalise(x,sec,msg,kind){const L=live;if(!racing(L))return false;if(kind&&window.PL74)return window.PL74.issue(x,kind,msg,false);if(window.pn57Ok?.()===false)return false;x.penalty=(x.penalty||0)+sec;dcRadio('Race control',msg+' '+sec+' second time penalty for car #'+x.d.number+'.');return true;}
 
 /* ---------- Service (replaces rf41's version, same effects) ---------- */
 dc32Service=function(x,dt,box){
@@ -9669,8 +9670,7 @@ dc32Service=function(x,dt,box){
   if(L.entrants.some(y=>y!==x&&y.dc32Servicing&&y.team.id===x.team.id))return;
   if(!x.dc32Servicing){
    x.dc32Servicing=true;x.rf41ServiceInitialDamage=x.bodyDamage;const e=estimate(x,plan,human?{long,lat}:null);
-   // AI crews are not perfect either: now and then a slow wheel nut or a car parked off its marks.
-   if(!human&&Math.random()<.14){const slip=.8+Math.random()*1.6;e.extra+=slip;e.total+=slip;}
+   // Crew mistakes (both the player's crew and AI crews) are rolled by pl74 once the stop starts.
    x.pt61Svc={t0:L.elapsed,litres:e.litres,tFuel:e.tFuel,tTyre:e.tTyre,tRep:e.tRep,tSwap:e.tSwap,extra:e.extra,total:e.total,tyres:e.tyres,repair:e.repair,swap:e.swap,done:false,doneAt:0};
    x.rf41ServiceDuration=x.pitClock=e.total;x.pt61Lift=0;
    if(human){const m=e.extra?`Off the marks by ${Math.abs(long).toFixed(1)} metres, crew dragging you back. `:'Good stop on the marks. ';
@@ -9721,7 +9721,7 @@ function playerRules(L,dt){
  if(stage&&S.visit){const v=S.visit;v.lastF=q.f;if(x.dc32Serviced)v.serviced=true;
   if(!auto&&!S.lim&&!v.warned&&x.dc33PitCommitted&&q.f<.12&&kmh>72){v.warned=true;say('Race engineer','Limiter! Limiter! Speed line coming up.',{cls:'warn',tag:'PIT LIMITER',text:'Press RB / L now',ms:2600});}
   if(!auto&&x.dc33PitCommitted&&q.f>=.12&&q.f<=.86&&kmh>TOL){v.speeding+=dt;v.top=Math.max(v.top||0,kmh);}else v.speeding=0;
-  if(v.speeding>.25&&!v.speedPen){v.speedPen=true;const over=v.top-LIMIT;if(!penalise(x,over>10?10:5,`Pit lane speeding, ${Math.round(v.top)} km/h.`)&&!racing(L))say('Race control',`Pit lane speeding, ${Math.round(v.top)} km/h. Use the limiter (RB / L).`);}
+  if(v.speeding>.25&&!v.speedPen){v.speedPen=true;const over=v.top-LIMIT;if(!penalise(x,over>10?10:5,`Pit lane speeding, ${Math.round(v.top)} km/h.`,over>10?'SG':'DT')&&!racing(L))say('Race control',`Pit lane speeding, ${Math.round(v.top)} km/h. Use the limiter (RB / L).`);}
  }
  if(!stage&&S.wasStage){const v=S.visit;S.visit=null;
   if(v&&!auto&&!v.tele&&v.lastF>.6&&v.lastF<.86&&moved<15)penalise(x,5,'Crossed the solid pit exit line.');
@@ -9735,7 +9735,7 @@ function playerRules(L,dt){
   else if(x.dc32Serviced&&x.pt61Mark&&!x.pt61Released){const clearing=crewClearing(x),traffic=clearing?null:laneTraffic(x),hold=clearing||!!traffic||!!L.ic59Repair;S.board=hold?(clearing?'crew':'hold'):'go';S.hold=traffic?'traffic':clearing?'crew':L.ic59Repair?'sc':null;
    if(S.board==='go'&&S.lastBoard!=='go')x.pt61GoAt=L.elapsed;
    if(S.board!==S.lastBoard&&S.board!=='crew')say('Crew chief',hold?(traffic?'Hold, hold. Car coming down the lane.':'Hold there.'):'Lollipop up. Go, go, go!',hold?null:{cls:'go',tag:'RELEASE',text:'Go go go',ms:1800});
-   if(Math.hypot(x.pos.x-x.pt61Mark.x,x.pos.z-x.pt61Mark.z)>1.6){x.pt61Released=true;if(traffic&&!L.ic59Repair)penalise(x,5,'Unsafe release.');}}
+   if(Math.hypot(x.pos.x-x.pt61Mark.x,x.pos.z-x.pt61Mark.z)>1.6){x.pt61Released=true;if(traffic&&!L.ic59Repair)penalise(x,5,'Unsafe release.','DT');}}
   else if(!x.dc32Serviced&&(x.pitNow||L.stage==='race'))S.board=Math.abs(long)<60?'in':null;
  }
  S.lastBoard=S.board;
@@ -9748,7 +9748,7 @@ function playerRules(L,dt){
 function rivalsAndCodrivers(L,dt){
  const p=L.player,race=racing(L),bath=isBathurstRace(L)&&L.started;let order=null;
  for(const x of L.entrants){
-  if(race&&x!==p&&x.pitStage&&!x.pt61Was&&!x.retired){order||=dc32Order(L);const i=order.indexOf(p),j=order.indexOf(x);if(Math.abs(i-j)===1&&!p.pitStage)say('Race engineer',`${surname(x.d.name)} ${j<i?'ahead':'behind'} has boxed.`);}
+  if(race&&x!==p&&x.pitStage&&!x.pt61Was&&!x.retired){order||=dc32Order(L);const i=order.indexOf(p),j=order.indexOf(x);if(Math.abs(i-j)===1&&!p.pitStage&&!window.PL74)say('Race engineer',`${surname(x.d.name)} ${j<i?'ahead':'behind'} has boxed.`);}
   x.pt61Was=!!x.pitStage;
   if(!bath)continue;
   const lap=Math.floor(x.progress);if(x.pt61Lap===undefined)x.pt61Lap=lap;else if(lap>x.pt61Lap){if(x.pt61Co&&x.progress>0)x.pt61CoLaps=(x.pt61CoLaps||0)+(lap-x.pt61Lap);x.pt61Lap=lap;}
@@ -9805,19 +9805,20 @@ SC25World.prototype.makePit=function(){baseMakePit.call(this);const W=this;if(!W
  // Speed limit lines across the lane.
  for(const f of [.12,.86]){const q=dc32PitAt(W,f);for(const k of [-.5,.5]){const m=W.box(q.p.x+q.v.x*k*.9,q.p.y+.09,q.p.z+q.v.z*k*.9,7.5,.02,.32,k<0?white:W.mat('#e8bd45',.6));m.rotation.y=Math.atan2(q.v.x,q.v.z);}}
  // Box frames for the crew.
- const boxes=W.pit.bays.map(b=>{const q=dc32PitAt(W,b.f);return{x:b.p.x,y:b.p.y,z:b.p.z,fx:q.v.x,fz:q.v.z,gx:q.n.x*side,gz:q.n.z*side};});
+ const boxes=W.pit.bays.map((b,i)=>{const q=dc32PitAt(W,b.f);return{x:b.p.x,y:b.p.y,z:b.p.z,fx:q.v.x,fz:q.v.z,gx:q.n.x*side,gz:q.n.z*side,hl:b.halfLength,team:i};});
  const mat=new T.MeshStandardMaterial({color:'#ffffff',roughness:.72,metalness:.05});
  const suitMat=new T.MeshStandardMaterial({color:'#ffffff',roughness:.62,metalness:0});
  const crew=new T.InstancedMesh(new T.BoxGeometry(1,1,1),mat,MAXB),cyl=new T.InstancedMesh(new T.CylinderGeometry(1,1,1,16),mat.clone(),MAXC);
  const limb=new T.InstancedMesh(new T.CylinderGeometry(1,.82,1,10,1),suitMat,MAXL),sph=new T.InstancedMesh(new T.SphereGeometry(1,12,9),suitMat.clone(),MAXS);
  for(const m of [crew,cyl,limb,sph]){m.name='pt61 pit crew';m.instanceColor=new T.InstancedBufferAttribute(new Float32Array(m.count*3),3);m.instanceMatrix.setUsage(T.DynamicDrawUsage);m.frustumCulled=false;m.castShadow=false;m.receiveShadow=true;m.count=0;W.scene.add(m);}
- const cols=new Map(),helm=new Map();for(const t of S.teams){cols.set(t.id,new T.Color(t.livery?.primary||'#c33'));helm.set(t.id,new T.Color(t.livery?.secondary||'#eeeeee'));}
- W.pt61={boxes,crew,cyl,limb,sph,cols,helm,c:{skin:new T.Color('#c99a7c'),boot:new T.Color('#121316'),glove:new T.Color('#1b1c20'),visor:new T.Color('#0a0c10'),helmet:new T.Color('#16181c'),gun:new T.Color('#3b4046'),can:new T.Color('#c8ccd0'),ext:new T.Color('#d4201c'),jack:new T.Color('#e8bd45'),tyre:new T.Color('#141414'),red:new T.Color('#e01e1e'),green:new T.Color('#1fd060'),white:new T.Color('#eeeeee')}};
+ const cols=new Map(),helm=new Map(),legs=new Map();for(const t of S.teams){const c=new T.Color(t.livery?.primary||'#c33');cols.set(t.id,c);helm.set(t.id,new T.Color(t.livery?.secondary||'#eeeeee'));legs.set(t.id,c.clone().multiplyScalar(.32));}
+ W.pt61={boxes,crew,cyl,limb,sph,cols,helm,legs,c:{belt:new T.Color('#141619'),patch:new T.Color('#f2f2f2'),balac:new T.Color('#101113'),hose:new T.Color('#1d2024'),fuelHose:new T.Color('#2b2f35'),skin:new T.Color('#c99a7c'),boot:new T.Color('#121316'),glove:new T.Color('#1b1c20'),visor:new T.Color('#0a0c10'),helmet:new T.Color('#16181c'),gun:new T.Color('#3b4046'),can:new T.Color('#c8ccd0'),ext:new T.Color('#d4201c'),jack:new T.Color('#e8bd45'),tyre:new T.Color('#141414'),red:new T.Color('#e01e1e'),green:new T.Color('#1fd060'),white:new T.Color('#eeeeee')}};
+ try{W.pt61.clutter=clutter(W,W.pt61,boxes);}catch(e){console.warn('pt61 clutter',e);}
 };
 const baseUpdateCrews=SC25World.prototype.updateCrews;
 SC25World.prototype.updateCrews=function(dt){if(this.pt61){if(this.crewMeshes&&!this.pt61OldHidden){for(const o of Object.values(this.crewMeshes))o.visible=false;this.pt61OldHidden=true;}return;}return baseUpdateCrews?.call(this,dt);};
 const baseDispose=SC25World.prototype.dispose;
-SC25World.prototype.dispose=function(){const P=this.pt61;if(P){for(const m of [P.crew,P.cyl,P.limb,P.sph]){m.removeFromParent();m.geometry.dispose();m.material.dispose();}this.pt61=null;}return baseDispose.call(this);};
+SC25World.prototype.dispose=function(){const P=this.pt61;if(P){for(const m of [P.crew,P.cyl,P.limb,P.sph,...(P.clutter||[])]){m.removeFromParent();m.geometry.dispose();m.material.dispose();}this.pt61=null;}return baseDispose.call(this);};
 const basePose=SC25World.prototype.pose;
 SC25World.prototype.pose=function(x){const r=basePose.call(this,x);if(x?.pt61Lift)r.p.y+=x.pt61Lift;return r;};
 
@@ -9829,14 +9830,19 @@ SC25World.prototype.pose=function(x){const r=basePose.call(this,x);if(x?.pt61Lif
 const E=new T.Euler(),Q=new T.Quaternion(),P=new T.Vector3(),SC=new T.Vector3(),MX=new T.Matrix4();
 let nb=0,nc=0,nl=0,ns=0,MESH=null,CYL=null,LIMB=null,SPH=null,WX=0,WZ=0,HX=0,HY=0,HZ=0,GX=0,GY=0,GZ=0;
 function put(m,i,x,y,z,pitch,yaw,roll,sx,sy,sz,col){E.set(pitch,yaw,roll,'YXZ');Q.setFromEuler(E);P.set(x,y,z);SC.set(sx,sy,sz);MX.compose(P,Q,SC);m.setMatrixAt(i,MX);m.setColorAt(i,col);}
-function bx(x,y,z,pitch,yaw,roll,sx,sy,sz,col){if(nb<MAXB)put(MESH,nb++,x,y,z,pitch,yaw,roll,sx,sy,sz,col);}
-function cy(x,y,z,pitch,yaw,roll,r,h,col){if(nc<MAXC)put(CYL,nc++,x,y,z,pitch,yaw,roll,r,h,r,col);}
-function sp(x,y,z,rx,ry,rz,col){if(ns<MAXS)put(SPH,ns++,x,y,z,0,QYAW,0,rx,ry,rz,col);}
+let CB=MAXB,CC=MAXC,CL=MAXL,CS=MAXS;
+function bx(x,y,z,pitch,yaw,roll,sx,sy,sz,col){if(nb<CB)put(MESH,nb++,x,y,z,pitch,yaw,roll,sx,sy,sz,col);}
+function cy(x,y,z,pitch,yaw,roll,r,h,col){if(nc<CC)put(CYL,nc++,x,y,z,pitch,yaw,roll,r,h,r,col);}
+function sp(x,y,z,rx,ry,rz,col){if(ns<CS)put(SPH,ns++,x,y,z,0,QYAW,0,rx,ry,rz,col);}
+// A straight piece of hose (cylinder) between two points.
+function tube(x1,y1,z1,x2,y2,z2,r,col){const dx=x2-x1,dy=y2-y1,dz=z2-z1,l=Math.hypot(dx,dy,dz);if(l<.01||nc>=CC)return;put(CYL,nc++,(x1+x2)/2,(y1+y2)/2,(z1+z2)/2,Math.atan2(Math.hypot(dx,dz),dy),Math.atan2(dx,dz),0,r,l,r,col);}
+// A hose that sags between two points, in three pieces.
+function hose(x1,y1,z1,x2,y2,z2,sag,r,col){const p=[0,1/3,2/3,1].map(k=>[x1+(x2-x1)*k,y1+(y2-y1)*k-sag*4*k*(1-k),z1+(z2-z1)*k]);for(let i=0;i<3;i++)tube(p[i][0],Math.max(.03,p[i][1]),p[i][2],p[i+1][0],Math.max(.03,p[i+1][1]),p[i+1][2],r,col);}
 // Person frame: origin at the feet, +z forward, rotated by QYAW about y.
-let QX=0,QY=0,QZ=0,QC=1,QS=0,QYAW=0,LX=0,LY=0,LZ=0;
+let QX=0,QY=0,QZ=0,QC=1,QS=0,QYAW=0,LX=0,LY=0,LZ=0,PLEG=null,PTRIM=null;
 const wx=(lx,lz)=>QX+lx*QC+lz*QS,wz=(lx,lz)=>QZ-lx*QS+lz*QC;
 // A tapered segment from local (x,y,z) along pitch p (0 = straight down, -PI/2 = forward). Leaves its end in LX/LY/LZ.
-function seg(x,y,z,p,len,r,rz,col){const dy=-Math.cos(p)*len,dz=-Math.sin(p)*len;if(nl<MAXL)put(LIMB,nl++,wx(x,z+dz/2),QY+y+dy/2,wz(x,z+dz/2),p,QYAW,0,r,len,rz||r,col);LX=x;LY=y+dy;LZ=z+dz;}
+function seg(x,y,z,p,len,r,rz,col){const dy=-Math.cos(p)*len,dz=-Math.sin(p)*len;if(nl<CL)put(LIMB,nl++,wx(x,z+dz/2),QY+y+dy/2,wz(x,z+dz/2),p,QYAW,0,r,len,rz||r,col);LX=x;LY=y+dy;LZ=z+dz;}
 const POSE=new Float32Array(10),TMP=new Float32Array(10);
 // lean, thighL, kneeL, thighR, kneeR, armL, elbowL, armR, elbowR, spread
 const P_STAND=[.04,0,.06,0,.06,.08,-.18,.08,-.18,.1],P_READY=[.32,-.55,.9,-.25,.45,-.5,-.6,-.5,-.6,.14],
@@ -9851,19 +9857,25 @@ function person(px,py,pz,yaw,suit,helmet,C){
  // Pelvis height puts the lowest foot or knee on the ground.
  let hip=0;for(let i=1;i<=3;i+=2){const t=p[i],k=p[i+1];hip=Math.max(hip,.44*Math.cos(t)+.07,.44*Math.cos(t)+.44*Math.cos(t+k)+.085);}
  const pz0=Math.max(0,-Math.sin(p[1])*.08,-Math.sin(p[3])*.08)*.5;
- sp(wx(0,pz0),py+hip+.02,wz(0,pz0),.17,.12,.12,suit);
+ const legs=PLEG||suit,trim=PTRIM||helmet;
+ sp(wx(0,pz0),py+hip+.02,wz(0,pz0),.17,.12,.12,legs);
+ bx(wx(0,pz0+.01),py+hip+.1,wz(0,pz0+.01),lean*.5,yaw,0,.36,.075,.25,C.belt);
  // Legs and boots.
  for(let s=-1;s<=1;s+=2){const t=s<0?p[1]:p[3],k=s<0?p[2]:p[4],hx=s*.1;
-  seg(hx,hip,pz0,t,.44,.088,.095,suit);const kx=LX,ky=LY,kz=LZ;sp(wx(kx,kz),py+ky,wz(kx,kz),.075,.075,.075,suit);
-  seg(kx,ky,kz,t+k,.43,.068,.072,suit);const ay=Math.max(.045,LY);bx(wx(LX,LZ+.06),py+ay-.02,wz(LX,LZ+.06),0,yaw,0,.11,.08,.27,C.boot);}
+  seg(hx,hip,pz0,t,.44,.088,.095,legs);const kx=LX,ky=LY,kz=LZ;sp(wx(kx,kz),py+ky,wz(kx,kz),.075,.075,.075,legs);
+  seg(kx,ky,kz,t+k,.43,.068,.072,legs);const ay=Math.max(.045,LY);bx(wx(LX,LZ+.06),py+ay-.02,wz(LX,LZ+.06),0,yaw,0,.11,.08,.27,C.boot);}
  // Torso, shoulders, head.
  const sy=hip+.56*Math.cos(lean),sz=pz0+.56*Math.sin(lean);
  seg(0,sy,sz,lean,.56,.215,.14,suit);
+ // Chest band in the team's second colour, and a sponsor patch on the back.
+ const by=hip+.4*Math.cos(lean),bz=pz0+.4*Math.sin(lean);bx(wx(0,bz),py+by,wz(0,bz),lean,yaw,0,.44,.075,.29,trim);
+ const ky2=hip+.3*Math.cos(lean),kz2=pz0+.3*Math.sin(lean)-.14;bx(wx(0,kz2),py+ky2,wz(0,kz2),lean,yaw,0,.2,.13,.02,C.patch);
  const hy=sy+.2,hz=sz+.06*Math.sin(lean)+.02;
- sp(wx(0,hz),py+hy-.08,wz(0,hz),.06,.07,.06,C.skin);
+ sp(wx(0,hz),py+hy-.08,wz(0,hz),.07,.075,.07,C.balac);
  sp(wx(0,hz+.02),py+hy+.04,wz(0,hz+.02),.115,.125,.12,C.skin);
  sp(wx(0,hz-.005),py+hy+.075,wz(0,hz-.005),.14,.135,.155,helmet);
  bx(wx(0,hz+.125),py+hy+.06,wz(0,hz+.125),0,yaw,0,.2,.07,.03,C.visor);
+ bx(wx(0,hz-.01),py+hy+.205,wz(0,hz-.01),0,yaw,0,.055,.02,.27,suit);
  // Arms and gloves. The right glove ends in HX/HY/HZ, the left in GX/GY/GZ.
  for(let s=-1;s<=1;s+=2){const a=s<0?p[5]:p[7],e=s<0?p[6]:p[8],shx=s*(.2+sp_*.15);
   sp(wx(shx,sz),py+sy-.03,wz(shx,sz),.085,.08,.085,suit);
@@ -9900,6 +9912,63 @@ function travel(i,cx,cz,workYaw){
 // Final pose: run cycle while moving, otherwise standing at the wall or the job pose at the spot.
 function pose(job){if(RRUN>.01){for(let i=0;i<10;i++)POSE[i]=lerp(P_STAND[i],TMP[i],Math.min(1,RRUN*1.4));return;}blendPose(P_STAND,job,RARR);}
 const PICK=[null,null,null,null],PD=[0,0,0,0];
+/* ---------- Pit lane clutter: every team's box, built once (static instanced meshes) ---------- */
+function clutter(W,Pc,boxes){
+ const side=W.pit.side,C=Pc.c,col=h=>new T.Color(h),G={grey:col('#8d969d'),steel:col('#c3c9ce'),dark:col('#1c2126'),black:col('#0d0e10'),orange:col('#ff6a13'),yellow:col('#f1c40f'),white:col('#f2f2f2'),blue:col('#2459a8'),red:col('#c8161d'),screen:col('#3a8fd8'),wall:col('#b9b6ad'),wallTop:col('#d8d5cc'),pad:col('#8a8d8f'),rubber:col('#121212'),hose:col('#202326'),case:col('#5d666e'),cone:col('#ff5a10')};
+ const sb=new T.InstancedMesh(new T.BoxGeometry(1,1,1),new T.MeshStandardMaterial({color:'#ffffff',roughness:.7,metalness:.15}),4200);
+ const sc=new T.InstancedMesh(new T.CylinderGeometry(1,1,1,14),new T.MeshStandardMaterial({color:'#ffffff',roughness:.6,metalness:.2}),2600);
+ const sk=new T.InstancedMesh(new T.ConeGeometry(1,1,10),new T.MeshStandardMaterial({color:'#ffffff',roughness:.6}),120);
+ const sl=new T.InstancedMesh(new T.CylinderGeometry(1,.82,1,8,1),new T.MeshStandardMaterial({color:'#ffffff',roughness:.62}),1400);
+ const ss=new T.InstancedMesh(new T.SphereGeometry(1,10,7),new T.MeshStandardMaterial({color:'#ffffff',roughness:.62}),2000);
+ for(const m of [sb,sc,sk,sl,ss]){m.name='pt61 pit clutter';m.instanceColor=new T.InstancedBufferAttribute(new Float32Array(m.count*3),3);m.castShadow=false;m.receiveShadow=true;W.scene.add(m);}
+ // Write the static set through the same helpers the animated crew use.
+ const keep=[MESH,CYL,LIMB,SPH,nb,nc,nl,ns,CB,CC,CL,CS];MESH=sb;CYL=sc;LIMB=sl;SPH=ss;nb=nc=nl=ns=0;CB=sb.count;CC=sc.count;CL=sl.count;CS=ss.count;let nk=0;
+ const cone=(x,y,z,r,h,c)=>{if(nk<sk.count)put(sk,nk++,x,y,z,0,0,0,r,h,r,c);};
+ const street=['goldcoast','adelaide','townsville','homebush','newcastle','canberra'].includes(W.e?.key);
+ for(const B of boxes){
+  const yawB=Math.atan2(B.fx,B.fz),H=B.hl,y0=B.y,team=B.team,prim=Pc.cols.get(team)||C.red,sec=Pc.helm.get(team)||C.white;
+  // Box frame: a along the lane, u out from the lane centre (the car sits at u 8.1, the garage opens at 14.6).
+  const at=(a,u)=>{WX=B.x+B.fx*a+B.gx*(u-8.1);WZ=B.z+B.fz*a+B.gz*(u-8.1);};
+  const box=(a,u,y,w,h,d,c,pitch=0,yawOff=0)=>{at(a,u);bx(WX,y0+y,WZ,pitch,yawB+yawOff,0,w,h,d,c);};
+  const can=(a,u,y,r,h,c)=>{at(a,u);cy(WX,y0+y,WZ,0,yawB,0,r,h,c);};
+  // Boom over the box: post at the garage front, arm out over the car, lights and hose reels.
+  box(0,14.2,1.8,.2,3.6,.2,prim);box(0,11.2,3.62,.2,.2,6.4,prim,0,Math.PI/2);box(0,9.2,3.48,.9,.08,.3,G.white,0,Math.PI/2);
+  box(0,13.9,.15,.7,.3,.7,G.dark);for(const k of [-1,1]){at(k*.28,10.4);cy(WX,y0+3.62,WZ,Math.PI/2,yawB,0,.2,.12,G.dark);}
+  at(0,8.6);B.boom={x:WX,y:y0+3.45,z:WZ};
+  // Fuel rig: tank on a frame, hose and dead-man valve.
+  const ra=H-1.7;box(ra,13.9,.06,1.1,.12,1.1,G.dark);for(const i of [-1,1])for(const j of [-1,1])box(ra+i*.42,13.9+j*.42,1.1,.07,2.1,.07,prim);
+  can(ra,13.9,1.85,.4,1.35,G.steel);can(ra,13.9,2.6,.18,.18,G.red);box(ra,13.9,.7,.85,.06,.85,prim);at(ra,13.4);B.rig={x:WX,y:y0+1.15,z:WZ};
+  for(let i=0;i<3;i++)can(ra-1.1-i*.3,14.25,.73,.11,1.45,i<2?G.blue:G.grey);
+  // Tyre sets staged for the stop (Soft yellow / Hard white sidewall stripe), stacks of four.
+  for(let k=0;k<3;k++)for(let t=0;t<4;t++){const a=-H+1.1+k*.82,u=13.35+(k%2)*.12;can(a,u,.15+t*.29,.34,.27,G.rubber);can(a,u,.15+t*.29,.343,.035,k===2?G.white:G.yellow);}
+  // Tyre trolley with a used set.
+  box(-H+3.9,13.6,.12,.9,.06,1.6,G.grey);for(let t=0;t<2;t++)can(-H+3.5+t*.8,13.6,.33,.33,.27,G.rubber);
+  // Roll cabinets: team colour and black, drawers facing the lane.
+  for(const [a,c] of [[1.15,prim],[-.15,G.dark]]){box(a,14.0,.55,.6,1.0,1.1,c);for(let d=0;d<4;d++)box(a,13.69,.25+d*.2,.02,.04,.95,G.steel);box(a,14.0,1.1,.64,.08,1.14,G.black);}
+  // Timing monitor on a stand, flight cases, extinguishers, cones, spare panels and cables.
+  box(2.9,14.1,.8,.06,1.6,.06,G.dark);box(2.9,14.0,1.75,.9,.55,.06,G.black,0,Math.PI/2);box(2.9,13.96,1.75,.8,.46,.02,G.screen,0,Math.PI/2);
+  box(H-.6,14.0,.32,.8,.6,.6,G.case);box(H-.6,14.0,.9,.7,.5,.55,G.case);box(H-3.6,14.1,.3,.6,.55,.5,G.case);
+  can(-H+.55,13.05,.3,.1,.55,G.red);can(H-.4,13.05,.3,.1,.55,G.red);
+  for(const a of [-H+.35,H-.35]){at(a,12.85);cone(WX,y0+.24,WZ,.16,.46,G.cone);}
+  box(-1.6,14.45,.6,1.7,1.05,.05,prim,-.28,Math.PI/2);box(-1.6,13.95,.07,1.9,.08,.55,G.black,0,Math.PI/2);
+  for(const [a,ang] of [[.5,.3],[-2.3,-.2],[3.6,.1]])box(a,13.2,.012,.05,.02,2.6,a<0?G.yellow:G.hose,0,ang);
+  // Crew who are not on the stop: two at the garage front.
+  PLEG=Pc.legs.get(team)||null;PTRIM=sec;
+  for(const [a,u,face] of [[H-2.6,14.3,0],[-H+2.8,14.25,.5]]){at(a,u);blendPose(P_STAND,P_STAND,0);POSE[5]=-.35;POSE[6]=-1.1;POSE[7]=-.3;POSE[8]=-1.2;person(WX,y0+.04,WZ,Math.atan2(-B.gx,-B.gz)+face,prim,sec,C);}
+  // Team stand on the pit wall side: desk, canopy, monitors and two engineers on headsets.
+  // Concrete pit wall between the lane and the track, with the team stand on a pad behind it.
+  // Street circuits already have their own pit wall and fence; elsewhere skip it where the track runs close.
+  at(0,-6.6);const room=W.nearest(new T.Vector3(WX,y0,WZ)).distance;
+  if(!street&&room>13.5){const span=W.pit.length*.46/12+.06;box(0,-4.55,.55,.38,1.1,span,G.wall);box(0,-4.55,1.13,.46,.06,span,G.wallTop);box(0,-6.3,.03,2.6,.06,span*.9,G.pad);
+  const pu=-6.1;box(0,pu,.55,1.0,1.1,2.8,G.dark);box(0,pu,1.12,1.1,.06,2.9,G.grey);box(0,pu,2.75,1.8,.09,3.2,prim);
+  for(const k of [-1,1])box(k*1.45,pu-.75,1.4,.07,2.75,.07,G.steel);
+  for(let k=-1;k<=1;k++){box(k*.9,pu+.2,1.45,.7,.45,.05,G.black,-.15,Math.PI/2);box(k*.9,pu+.17,1.45,.6,.36,.02,G.screen,-.15,Math.PI/2);}
+  for(const k of [-.8,.8]){at(k,pu-.8);blendPose(P_STAND,P_STAND,0);POSE[5]=-.9;POSE[6]=-.9;POSE[7]=-.9;POSE[8]=-.9;POSE[0]=.18;person(WX,y0+.04,WZ,Math.atan2(B.gx,B.gz),prim,sec,C);sp(HX,HY+.25,HZ,.05,.05,.05,G.black);}}
+ }
+ sb.count=nb;sc.count=nc;sk.count=nk;sl.count=nl;ss.count=ns;for(const m of [sb,sc,sk,sl,ss]){m.instanceMatrix.needsUpdate=true;m.instanceColor.needsUpdate=true;m.computeBoundingSphere?.();}
+ [MESH,CYL,LIMB,SPH,nb,nc,nl,ns,CB,CC,CL,CS]=keep;PLEG=PTRIM=null;
+ return [sb,sc,sk,sl,ss];
+}
 function crewFrame(W,L){
  const Pc=W.pt61;if(!Pc)return;MESH=Pc.crew;CYL=Pc.cyl;LIMB=Pc.limb;SPH=Pc.sph;nb=nc=nl=ns=0;const cam=W.camera.position,C=Pc.c,now=L.elapsed;
  for(let i=0;i<MAXCARS;i++){PICK[i]=null;PD[i]=Infinity;}
@@ -9922,12 +9991,15 @@ function crewFor(W,L,x,Pc,C,now){
  const B=Pc.boxes[x.team.id],suit=Pc.cols.get(x.team.id)||C.red,helm=Pc.helm.get(x.team.id)||C.white,s0=x.pt61Svc,s=s0&&(x.dc32Servicing||s0.done&&now-s0.doneAt<7)?s0:null,waitYaw=Math.atan2(-B.gx,-B.gz);
  const t=s?now-s.t0-s.extra:-1,fuelOn=s&&!s.done&&t>=0&&t<s.tFuel,tyreT=s?t-s.tFuel:-1,tyreOn=s&&!s.done&&s.tTyre&&tyreT>=0&&tyreT<s.tTyre;
  const yaw=x.yaw,c=Math.cos(yaw),sn=Math.sin(yaw),g=Math.sign(c*B.gx-sn*B.gz)||1,carOn=s&&(x.dc32Servicing||s.done);
+ PLEG=Pc.legs.get(x.team.id)||null;PTRIM=helm;const bm=B.boom;
  RX=x;RB=B;RG=g;RNOW=now;RT0=x.pt61CrewT0||0;RBACK=s?.done?s.doneAt+.15:-1;RCAR=carOn?clamp((now-s.t0)/.5,0,1):0;RSUIT=suit;RHELM=helm;RC=C;RWAIT=waitYaw;
  const H=Math.PI/2,midT=s&&s.tTyre?s.tTyre*.55:0;
  // Wheel gunners, each rolling a fresh tyre out beside them.
  for(let w=0;w<4;w++){const sx=w&1?-1:1,az=w<2?1.42:-1.36,wy=yaw+(sx>0?-H:H);travel(w,sx*1.32,az,wy);
   pose(tyreOn||s&&!s.done&&RARR>0&&t>=s.tFuel-.6?P_KNEEL:P_READY);person(RPX,B.y+.04,RPZ,RYAW,suit,helm,C);
-  if(RARR>.3&&carOn&&!s.done)bx(HX,HY,HZ,0,RYAW,0,.09,.11,.3,C.gun);
+  bx(HX,HY,HZ,0,RYAW,0,.09,.11,.3,C.gun);
+  // Air line from the wheel gun up to the boom over the box.
+  if(bm)hose(HX,HY,HZ,bm.x+B.fx*(w<2?.5:-.5),bm.y,bm.z+B.fz*(w<2?.5:-.5),.9,.022,C.hose);
   if(s?.tyres||!s){const roll=RRUN>.01||RARR<1;if(roll||!(tyreT>midT)){const ox=Math.cos(RYAW)*.5,oz=-Math.sin(RYAW)*.5;
      if(roll)cy(RPX+ox*(sx>0?1:-1),B.y+.38,RPZ+oz*(sx>0?1:-1),now*6,RYAW,H,.34,.3,C.tyre);else{carPt(x,sx*1.85,az+.15);cy(WX,B.y+.38,WZ,0,yaw,H,.34,.3,C.tyre);}}
    else{carPt(x,sx*2.2,az+.8);cy(WX,B.y+.17,WZ,0,yaw,0,.34,.3,C.tyre);}}}
@@ -9938,7 +10010,9 @@ function crewFor(W,L,x,Pc,C,now){
   bx(jx,B.y+.1+lift*.6,jz,0,RYAW,0,.34,.13,1.05,C.jack);bx((jx+HX)/2,(B.y+.25+HY)/2,(jz+HZ)/2,Math.atan2(Math.hypot(HX-jx,HZ-jz),HY-B.y-.25)*-1,RYAW,0,.05,Math.hypot(HX-jx,HY-B.y-.25,HZ-jz),.05,C.jack);}
  // Fuel man with the dump can; extinguisher man stands by during refuelling.
  travel(6,g*1.45,-1.05,yaw+(g>0?-H:H));pose(fuelOn?P_FUEL:P_STAND);person(RPX,B.y+.04,RPZ,RYAW,suit,helm,C);
- if(fuelOn&&RARR>.5){carPt(x,g*1.02,-1.05);bx(WX,B.y+1.2,WZ,0,yaw,-g*.85,.27,.8,.27,C.can);}else bx((HX+GX)/2,(HY+GY)/2-.3,(HZ+GZ)/2,0,RYAW,0,.25,.7,.25,C.can);
+ // The fuel hose runs back to the team's rig at the front of the garage.
+ let cx_=(HX+GX)/2,cy_=(HY+GY)/2-.05,cz_=(HZ+GZ)/2;if(fuelOn&&RARR>.5){carPt(x,g*1.02,-1.05);cx_=WX;cy_=B.y+1.05;cz_=WZ;}
+ bx(cx_,cy_,cz_,0,RYAW,0,.14,.14,.26,C.can);if(B.rig)hose(cx_,cy_,cz_,B.rig.x,B.rig.y,B.rig.z,.55,.05,C.fuelHose);
  travel(7,g*1.95,-2.15,yaw+(g>0?-H-.5:H+.5));pose(fuelOn?P_EXT:P_STAND);person(RPX,B.y+.04,RPZ,RYAW,suit,helm,C);bx(HX,HY-.12,HZ,0,RYAW,0,.16,.46,.16,C.ext);
  // Lollipop man in front of the box: waves the car in, board red until release, raised green on go.
  const go=s?.done&&(x!==L.player||L.dc33Auto?!x.pt61AiHold&&!crewClearing(x):L.pt61?.board==='go'||x.pt61Released),stopped=x.dc32Servicing||s?.done&&!go;
@@ -9983,6 +10057,7 @@ function paintHud(force){
   else if(S.board==='in'||!x.dc32Serviced&&Math.abs(long)<80){const on=Math.abs(long)<.9&&Math.abs(lat)<.8;parts.push(`<div class="${on?'ok':''}">${on?'On the marks · stop':`Box <b>${long>0?long.toFixed(long<10?1:0)+' m':'over '+(-long).toFixed(1)+' m'}</b>${Math.abs(lat)>.8&&Math.abs(long)<25?` · ${arrow(x,lat)} ${Math.abs(lat).toFixed(1)} m`:''}`}</div>`);}
  }
  if(isBathurstRace(L)&&L.started){const co=coDriver(x);if(co){const req=coReq(L),done=x.pt61CoLaps||0;parts.push(`<div class="${x.pt61Co?'co':''}">${x.pt61Co?surname(co.name)+' driving':'Co-driver '+surname(co.name)} <b>${done}/${req}</b>${L.pitPlan?.swap?' · swap next stop':''}</div>`);}}
+ try{for(const h of window.PL74?.hud?.()||[])parts.push(h);}catch(_){}
  const html=parts.join('');if(html!==last||force){last=html;hud.innerHTML=html;}hud.hidden=!html;
 }
 setInterval(paintHud,100);
@@ -12947,5 +13022,273 @@ function tick(){
  for(const i of [2,3,6,7])padPrev[i]=down(i);}
 setInterval(tick,50);
 document.addEventListener('keydown',e=>{if(L()&&!L().paused)return;if(!document.querySelector('.u72-set')||/INPUT|TEXTAREA/.test(document.activeElement?.tagName||'')&&document.activeElement.type!=='range')return;if(e.code==='BracketLeft'){UI72.stepTab(-1);e.preventDefault();}else if(e.code==='BracketRight'){UI72.stepTab(1);e.preventDefault();}});
+})();
+</script><script id="pl74-pitlane">
+/* pl74 · Pit lane rules, strategy and consequences.
+   - Pit window: compulsory stops (Settings / Instant Race "stops") must be made inside a lap window.
+     A stop counts only with four new tyres and, at enduros and long races, fuel added (minimum drop
+     time). A stop outside the window does not count. Miss the window and it is a black flag.
+   - Penalties are served in the lane: drive-throughs (speeding, unsafe release) and stop-gos (big
+     speeding). Serve within 3 laps (laps behind the safety car do not count) or it is a black flag.
+     Too late in the race to serve and it becomes the time it would have cost.
+   - Driving through another team's pit box is a drive-through every time, even with penalties off.
+   - Strategy: AI cars pick early, normal or late stops, cover a rival's undercut, and most of them
+     dive in when the safety car comes out. Teammates double-stack and the second car queues.
+     Far-away AI cars lose time on cold tyres after a stop, like the cars near you.
+   - Pit wall: the race MFD shows the window, the rule for this race, any penalty to serve and where
+     you would rejoin if you boxed now, and the engineer calls undercuts and safety car decisions.
+   - Crew mistakes: a stuck wheel nut, a slipping jack, a hanging fuel rig or a loose wheel. Lower
+     rated teams make more of them.
+   - Driver: leaving the box needs about half throttle. Floor it and the wheels spin, barely touch it
+     and the engine stalls. */
+(()=>{
+'use strict';
+const SER_LAPS=3,COLD={Soft:82,Hard:87,Wet:45};
+const racing=L=>!!L?.dc&&L.stage==='race'&&L.started&&L.phase==='racing';
+const lenM=L=>L.e.lengthKm*1000;
+const lapNo=x=>Math.floor(Math.max(0,x.progress||0))+1;
+const surname=n=>String(n||'').trim().split(/\s+/).at(-1);
+const rnd=(a,b)=>a+Math.random()*(b-a);
+const underSc=L=>!!(L.ic59Sc||L.scTrain);
+const human=(L,x)=>x===L.player&&!L.dc33Auto;
+const humans=L=>{const s=new Set([L.player]);try{if(window.CO63?.pl&&L.co63)for(const p of window.CO63.pl)if(p?.x)s.add(p.x);}catch(_){}return s;};
+const st=L=>L.pl74||(L.pl74={visit:null,visits:0,intr:0,sc:false,said:{},spin:0,stall:0,goSeen:false,launchDone:false,prevV:0});
+function banner(cls,tag,text,value,ms){try{window.UI58?.banner?.('pt61 '+(cls||''),tag,text,value||'',ms||4200);}catch(_){}}
+function say(from,msg,b){dcRadio(from,msg);if(b)banner(b.cls,b.tag,b.text,b.value,b.ms);}
+
+/* ---------- Rules for this race ---------- */
+function rules(L){
+ if(L.pl74R&&L.pl74R.laps===L.laps)return L.pl74R;
+ const p=L.player;if(p)rf41InitStop(p,L);
+ const n=p?.rf41MinStops||0,laps=L.laps||0,endu=['bathurst','sandown'].includes(L.e.key)||L.e.type==='enduro',km=laps*L.e.lengthKm;
+ const open=Math.max(2,Math.ceil(laps*.18)),close=Math.min(laps-1,Math.max(open+2,laps-Math.max(2,Math.ceil(laps*.15))));
+ return L.pl74R={on:L.stage==='race'&&n>0&&laps>=5,n,laps,open,close,fuel:endu||km>=150,minDrop:endu?8:5};
+}
+const minLitres=x=>{const L=live;if(!L?.dc||L.stage!=='race')return 0;const R=rules(L);return R.on&&R.fuel&&(x.rf41MinStops||0)>(x.rf41ValidStops||0)?10:0;};
+function ruleText(R){return R.fuel?`4 tyres + fuel · ${R.minDrop}s min drop`:'4 new tyres';}
+
+/* ---------- Pit wall prediction ---------- */
+function laneTime(L,sc){const W=sc25Engine;if(!W?.pit)return 20;const lapT=sc?lenM(L)/24:L.e.realLap||90;return W.pit.length/(60/3.6)-W.pit.length/(lenM(L)/lapT);}
+function predict(L,x,sc){
+ const W=sc25Engine;if(!W?.pit||!x||L.stage!=='race'||!L.started)return null;sc=sc??underSc(L);
+ const e=window.PT61?.estimate?.(x),stop=e?e.total:6,lapT=sc?lenM(L)/24:(L.e.realLap||90),cold=sc?0:L.weather==='Dry'?1.6:1;
+ const loss=Math.max(2,laneTime(L,sc)+stop+cold),order=dc32Order(L).filter(y=>!y.retired),now=order.indexOf(x)+1;
+ let pos=1,ahead=null,ag=Infinity,behind=null,bg=Infinity,traffic=null;
+ const rejoin=x.progress-loss/lapT;
+ for(const y of order){if(y===x)continue;const d=((y.progress||0)-(x.progress||0))*lapT+loss;
+  if(d>0){pos++;if(d<ag){ag=d;ahead=y;}}else if(-d<bg){bg=-d;behind=y;}
+  // Anyone on the road just ahead of where you come out, whatever lap they are on.
+  const ph=(((y.progress-rejoin)%1)+1)%1*lapT;if(!y.pitStage&&ph<1.3&&(!traffic||ph<traffic.g))traffic={y,g:ph};}
+ return{pos,now,loss,ahead,ag,behind,bg,traffic,sc};
+}
+function predictText(p){if(!p)return'';const a=p.ahead?`${p.ag.toFixed(1)}s behind #${p.ahead.d.number}`:'leading';const t=p.traffic?' · traffic':(p.behind&&p.bg<1)?` · #${p.behind.d.number} close behind`:'';return `P${p.pos} · ${a}${t}`;}
+
+/* ---------- Penalties served in the lane ---------- */
+const PEN_NAME={DT:'Drive-through',SG:'10 second stop-go'};
+function pending(x){return x?.pl74Pen?.[0]||null;}
+function issue(x,kind,why,always){
+ const L=live;if(!racing(L)||!x||x.finished||x.cd66)return false;if(!always&&window.pn57Ok?.()===false)return false;
+ if(!humans(L).has(x)||(x===L.player&&L.dc33Auto)){x.penalty=(x.penalty||0)+Math.round(laneTime(L,false)+(kind==='SG'?12:2));return true;}
+ const left=(L.laps||0)-lapNo(x);
+ if(left<SER_LAPS){const sec=Math.round(laneTime(L,false)+(kind==='SG'?12:2));x.penalty=(x.penalty||0)+sec;
+  say('Race control',`${why} ${PEN_NAME[kind]} for car #${x.d.number}. Too late to serve, so ${sec} seconds are added.`,{cls:'warn',tag:'RACE CONTROL',text:'+'+sec+' s',value:PEN_NAME[kind],ms:5000});return true;}
+ const S=st(L);(x.pl74Pen||=[]).push({kind,why,laps:0,lap:lapNo(x),visit:x.pitStage?S.visits:-1});
+ say('Race control',`${why} ${PEN_NAME[kind]} for car #${x.d.number}. Serve it within ${SER_LAPS} laps.`,{cls:'warn',tag:'PENALTY',text:PEN_NAME[kind],value:'Serve in '+SER_LAPS+' laps',ms:5200});
+ if(x===L.player)setTimeout(()=>{if(live===L&&pending(x))dcRadio('Race engineer',kind==='DT'?'Drive-through. Come down the lane at the limit and do not stop.':'Stop-go. Stop in our box, ten seconds, no work on the car.');},2600);
+ return true;
+}
+function dsq(L,x,why){
+ if(x.pl74Dsq||x.retired)return;x.pl74Dsq=why;x.pl74Pen=[];x.retired=true;x.v=x.speed=0;x.pitNow=false;
+ say('Race control',`Black flag, car #${x.d.number}. ${why}. Disqualified.`,{cls:'warn',tag:'BLACK FLAG',text:'Disqualified',value:'#'+x.d.number,ms:7000});
+}
+function eligible(L,x){const p=pending(x);return p&&p.visit!==st(L).visits?p:null;}
+
+/* ---------- Service: penalties in the box, stop rules, crew mistakes ---------- */
+function inBox(W,x){const box=W.pit.bays[x.team.id],q=dc32PitNear(W,x.pos),long=(q.f-box.f)*W.pit.length,lat=q.lane*W.pit.side-8.1;return long>-Math.min(3.5,box.halfLength-1)&&long<Math.min(7.5,box.halfLength-1)&&Math.abs(lat)<2.6;}
+const baseService=dc32Service;
+dc32Service=function(x,dt,box){
+ const L=live,W=sc25Engine;if(!L?.dc||!W?.pit)return baseService.apply(this,arguments);
+ const S=st(L),pen=human(L,x)&&racing(L)?eligible(L,x):null;
+ if(pen&&!x.dc32Serviced){
+  if(pen.kind==='DT'){if(inBox(W,x)&&Math.abs(x.v)<.45&&!S.said.dtStop){S.said.dtStop=1;say('Race engineer','Do not stop, it is a drive-through. Keep going.');}return;}
+  if(inBox(W,x)&&Math.abs(x.v)<.45){const v=S.visit;if(v){if(!v.sgT){v.sgT=0;say('Crew chief','Stop-go. Ten seconds, hands off the car.',{cls:'warn',tag:'STOP-GO',text:'Hold 10 s',ms:3000});}
+    v.sgT+=dt;x.pl74Hold=true;x.v=x.speed=0;
+    if(v.sgT>=10){v.sgDone=true;x.pl74Hold=false;x.dc32Serviced=true;x.pitNow=false;x.pt61Svc={t0:L.elapsed-10,done:true,doneAt:L.elapsed-3,litres:0,tFuel:0,tTyre:0,tRep:0,tSwap:0,extra:0,total:10,tyres:false};x.pt61Mark={x:x.pos.x,z:x.pos.z};x.pt61Released=false;if(L.pt61)L.pt61.stopTime=10;}}
+   return;}
+  return;
+ }
+ const was=x.dc32Servicing,before=x.rf41ValidStops||0;
+ if(human(L,x)&&inBox(W,x)&&!x.dc32Serviced&&Math.abs(x.v)<.45&&L.entrants.some(y=>y!==x&&y.team.id===x.team.id&&y.dc32Servicing)&&!S.said.stack){S.said.stack=L.elapsed;const m=L.entrants.find(y=>y!==x&&y.team.id===x.team.id);say('Crew chief',`Double stack. Hold there, #${m.d.number} is still on the jacks.`,{tag:'DOUBLE STACK',text:'Wait for #'+m.d.number,ms:3000});}
+ const r=baseService.apply(this,arguments);
+ if(x.dc32Servicing&&!was)startStop(L,x);
+ if(x.dc32Serviced&&x.pt61Svc&&!x.pt61Svc.pl74Done){x.pt61Svc.pl74Done=1;finishStop(L,x,before);}
+ return r;
+};
+function startStop(L,x){
+ const s=x.pt61Svc;if(!s||s.pl74)return;s.pl74=1;const me=human(L,x);
+ const base=+x.team.base||78,p=clamp(.05+(84-base)*.006,.03,.14)*(underSc(L)?1.25:1);
+ if(Math.random()>=p)return;
+ const opts=[];if(s.tyres)opts.push('nut','nut','jack','loose');if(s.litres>0)opts.push('fuel','fuel');if(!opts.length)return;
+ const k=opts[Math.floor(Math.random()*opts.length)],corner=['Front left','Front right','Rear left','Rear right'][Math.floor(Math.random()*4)];let d=0,msg='';
+ if(k==='nut'){d=rnd(1.2,3.8);s.tTyre+=d;msg=`${corner} wheel nut is stuck.`;}
+ else if(k==='jack'){d=rnd(1.4,3.2);s.tTyre+=d;msg='Rear jack slipped and dropped the car. Lifting it again.';}
+ else if(k==='fuel'){d=rnd(1.5,4.5);s.tFuel+=d;msg='Fuel rig is hanging on, it will not disconnect.';}
+ else{x.pl74Loose={corner,m:0,off:false,said:false};}
+ s.total+=d;x.pitClock=(x.pitClock||0)+d;x.rf41ServiceDuration=(x.rf41ServiceDuration||0)+d;s.pl74Err=k;
+ if(me&&msg)say('Crew chief',msg+' Hold the brake.',{cls:'warn',tag:'PIT STOP',text:'Problem',value:'+'+d.toFixed(1)+' s',ms:3400});
+}
+function finishStop(L,x,before){
+ const s=x.pt61Svc,me=human(L,x),R=rules(L);
+ if(s.tyres&&!s.pl74Err&&x.pl74Loose)x.pl74Loose=null;
+ if(s.tyres&&s.pl74Err!=='loose')x.pl74Loose=null;
+ if((x.rf41ValidStops||0)>before&&R.on&&racing(L)){const lap=lapNo(x),inWin=lap>=R.open&&lap<=R.close,fuelOk=!R.fuel||(s.litres||0)>=1;
+  if(!inWin||!fuelOk){x.rf41ValidStops--;if(me)say('Race engineer',!inWin?`That stop was outside the window, laps ${R.open} to ${R.close}. It does not count.`:'No fuel went in, so that does not count as the compulsory stop.',{cls:'warn',tag:'PIT WINDOW',text:'Stop not counted',ms:4200});}
+  else if(me){const left=(x.rf41MinStops||0)-x.rf41ValidStops;if(left<=0)say('Race engineer','That is the compulsory stop done.');else say('Race engineer',`Stop counted. ${left} more to go.`);}}
+}
+
+/* ---------- Driver: hold, stall and wheelspin ---------- */
+const scratch={};
+const baseManual=dcManualStep;
+dcManualStep=function(x,dt,input){const L=live;if(!L?.dc||x!==L.player||L.dc33Auto||!input)return baseManual(x,dt,input);const S=st(L);
+ if(x.pl74Hold||S.stall>0){if(S.stall>0)S.stall=Math.max(0,S.stall-dt);Object.assign(scratch,input);scratch.throttle=0;scratch.brake=1;scratch.steer=0;baseManual(x,dt,scratch);x.v=x.speed=0;return;}
+ const v0=x.v||0,r=baseManual(x,dt,input);
+ if(S.spin>0){S.spin=Math.max(0,S.spin-dt);if(x.v>v0+dt*2.4){x.v=v0+dt*2.4;x.speed=Math.abs(x.v)*3.6;}}
+ if(x.pl74Loose?.off&&!x.pitStage&&x.v>19.5){x.v=19.5;x.speed=x.v*3.6;}
+ return r;};
+function launch(L,input,dt){
+ const x=L.player,S=st(L);if(!x||L.dc33Auto)return;
+ const waiting=x.pitStage&&x.dc32Serviced&&x.pt61Mark&&!x.pt61Released;if(!waiting){S.goSeen=false;S.launchDone=false;S.launchT=undefined;return;}
+ if(L.pt61?.board!=='go'||S.launchDone)return;if(!S.goSeen){S.goSeen=true;S.goAt=L.elapsed;}
+ const thr=+input?.throttle||0;if(thr<.04&&S.launchT===undefined){if(L.elapsed-S.goAt>3&&!S.said.slow){S.said.slow=1;dcRadio('Crew chief','Go, go! You are clear!');}return;}
+ // Judge the launch on the first quarter second of throttle (a trigger takes a moment to squeeze).
+ if(S.launchT===undefined){S.launchT=0;S.launchMax=0;}S.launchT+=dt;S.launchMax=Math.max(S.launchMax,thr);if(S.launchT<.25)return;
+ S.launchDone=true;const pad=(()=>{try{return Array.from(navigator.getGamepads?.()||[]).some(p=>p?.connected);}catch(_){return false;}})();const m=S.launchMax;S.launchT=undefined;
+ if(!pad)return;
+ if(m>.95){S.spin=1.2;say('Driver','Too much wheelspin.',{cls:'warn',tag:'PIT EXIT',text:'Wheelspin',ms:1800});}
+ else if(m<.22&&Math.random()<.6){S.stall=2.4;say('Crew chief','Stalled! Clutch in, we are restarting it.',{cls:'warn',tag:'PIT EXIT',text:'Stalled',value:'+2.4 s',ms:2600});}
+}
+
+/* ---------- Grip: loose and lost wheels ---------- */
+const baseGrip=dcTyreGrip;
+dcTyreGrip=function(x){const g=baseGrip.apply(this,arguments),l=x?.pl74Loose;return l?g*(l.off?.5:.9):g;};
+
+/* ---------- AI: strategy, covering, safety car ---------- */
+function setupStrategies(L){
+ const R=rules(L),H=humans(L);if(!R.on)return;
+ for(const x of L.entrants){if(H.has(x))continue;rf41InitStop(x,L);if(x.rf41MinStops!==1)continue;
+  const r=Math.random(),style=r<.3?'early':r<.75?'normal':'late';x.pl74Style=style;
+  let lap=style==='early'?R.open+1+Math.floor(Math.random()*3):style==='late'?R.close-1-Math.floor(Math.random()*3):x.rf45StopLap;
+  x.rf45StopLap=clamp(Math.round(lap||R.open+2),R.open+1,Math.max(R.open+1,R.close-1));}
+}
+function needsStop(x){return (x.rf41MinStops||0)>(x.rf41ValidStops||0);}
+function onPitEntry(L,y){
+ const R=rules(L),H=humans(L),p=L.player;if(underSc(L))return;
+ const order=dc32Order(L).filter(z=>!z.retired),i=order.indexOf(y),lapT=L.e.realLap||90;
+ for(const [j,chance] of [[i-1,.6],[i+1,.28]]){const x=order[j];if(!x||H.has(x)||x.pitStage||x.pitNow||x.retired)continue;
+  const gap=Math.abs((x.progress-y.progress)*lapT),lap=lapNo(x);
+  if(gap<2.6&&R.on&&needsStop(x)&&lap>=R.open&&lap<R.close&&Math.random()<chance){x.pitNow=true;x.pl74Cover=true;x.pitPlan||={tyre:L.weather==='Dry'?'Hard':'Wet',fuel:75,aero:x.aero,repair:true};}}
+ // The engineer calls it when a car next to you on the road boxes.
+ if(y!==p&&!H.has(y)&&p&&!p.pitStage&&!p.retired){const a=order.indexOf(p),gap=(y.progress-p.progress)*lapT;
+  if(Math.abs(a-i)===1&&Math.abs(gap)<4.5){const pr=predict(L,p,false),need=R.on&&needsStop(p),win=R.on&&lapNo(p)>=R.open&&lapNo(p)<=R.close;
+   const call=gap>0?(need||!R.on?`Box this lap to cover the undercut, you would come out ${predictText(pr)}.`:'We have already stopped, stay out.'):(need&&win?'Stay out and push. Overcut them on fresh air.':'Stay out.');
+   say('Race engineer',`${surname(y.d.name)} ${gap>0?'ahead':'behind'} has boxed, ${Math.abs(gap).toFixed(1)} seconds ${gap>0?'up the road':'back'}. ${call}`,{tag:'PIT WALL',text:(gap>0?'Car ahead':'Car behind')+' boxed',value:'#'+y.d.number,ms:4200});}}
+}
+function onSafetyCar(L){
+ const R=rules(L),H=humans(L),p=L.player;let boxing=0;
+ for(const x of L.entrants){if(H.has(x)||x.pitStage||x.retired||x.finished)continue;const lap=lapNo(x),win=!R.on||lap>=R.open-1&&lap<=R.close,need=R.on&&needsStop(x),w=x.rdWear||0;
+  const chance=need&&win?.85:w>40?.6:w>20?.3:.08;if(L.laps-lap<2)continue;
+  if(Math.random()<chance){x.pitNow=true;x.pl74ScStop=true;boxing++;x.pitPlan||={tyre:L.weather==='Dry'?'Hard':'Wet',fuel:75,aero:x.aero,repair:true};}}
+ if(p&&!p.retired&&!p.pitStage&&!L.dc33Auto){const pr=predict(L,p,true),stay=dc32Order(L).filter(z=>!z.retired).indexOf(p)+1,need=R.on&&needsStop(p);
+  say('Race engineer',`Safety car. ${boxing} cars are coming in. Box now and you rejoin ${predictText(pr)}, stay out and you hold P${stay}${need?' but still owe the stop':''}. Your call.`,{tag:'SAFETY CAR',text:'Box or stay out?',value:'Box → P'+(pr?.pos||'?'),ms:6500});}
+}
+// Far-away AI cars (path model) also lose time while new tyres are cold.
+const baseAI=dcAIStep;
+dcAIStep=function(x,dt){const p0=x.progress,r=baseAI.apply(this,arguments),L=live;
+ if(L?.dc&&!x.ai62&&!x.pitStage&&racing(L)&&!underSc(L)&&Number.isFinite(p0)){const d=x.progress-p0;if(d>0&&d<.05){const lo=COLD[x.tyre]||82,t=x.tyreTemp??lo,cold=t<lo?.13*Math.pow(clamp((lo-t)/(lo-25),0,1),1.15):0,loose=x.pl74Loose?(x.pl74Loose.off?.55:.93):1,f=(1-cold*.55)*loose;if(f<1)x.progress=p0+d*f;}}
+ return r;};
+
+/* ---------- Per step ---------- */
+function step(L,dt,input){
+ const S=st(L),W=sc25Engine,x=L.player,R=rules(L),H=humans(L);if(!W?.pit)return;
+ if(racing(L)&&!S.setup){S.setup=true;setupStrategies(L);
+  if(R.on&&x&&!L.dc33Auto)say('Race engineer',`Pit window is laps ${R.open} to ${R.close}. ${R.n>1?R.n+' stops':'One stop'}, ${ruleText(R)}. Miss it and it is a black flag.`,{tag:'PIT WINDOW',text:`Laps ${R.open}–${R.close}`,value:ruleText(R),ms:5200});}
+ // Pit entries for strategy calls.
+ for(const y of L.entrants){if(y.pitStage&&!y.pl74In&&racing(L)&&!y.retired)onPitEntry(L,y);y.pl74In=!!y.pitStage;}
+ // Safety car decisions.
+ const sc=!!L.ic59Sc;if(sc&&!S.sc&&racing(L))onSafetyCar(L);S.sc=sc;
+ if(!x||x.retired||x.finished)return;
+ // Visits to the pit lane (serving penalties).
+ const q=x.pitStage?dc32PitNear(W,x.pos):null;
+ if(x.pitStage&&!S.visit){S.visits++;S.visit={id:S.visits,lastF:q.f,stopped:false};S.said.dtStop=0;S.said.stack=0;S.said.slow=0;S.intr=0;}
+ if(x.pitStage&&S.visit){S.visit.lastF=q.f;if(x.dc32Servicing)S.visit.serviced=true;}
+ if(!x.pitStage&&S.visit){const v=S.visit,p=pending(x);S.visit=null;x.pl74Hold=false;
+  if(p&&p.visit!==v.id&&v.lastF>.85&&racing(L)){
+   if(p.kind==='DT'&&!v.serviced){x.pl74Pen.shift();say('Race control',`Car #${x.d.number} has served the drive-through.`,{cls:'go',tag:'PENALTY',text:'Served',ms:2600});}
+   else if(p.kind==='SG'&&v.sgDone){x.pl74Pen.shift();say('Race control',`Car #${x.d.number} has served the stop-go.`,{cls:'go',tag:'PENALTY',text:'Served',ms:2600});}}}
+ // Penalty laps (not behind the safety car).
+ const lap=lapNo(x);if(S.lap===undefined)S.lap=lap;
+ if(lap>S.lap){S.lap=lap;if(racing(L)&&!underSc(L)&&!x.pitStage)for(const p of x.pl74Pen||[]){p.laps++;
+   if(p.laps>=SER_LAPS&&!L.dc33Auto){if(window.pn57Ok?.()!==false||p.always)dsq(L,x,`${PEN_NAME[p.kind]} not served`);else{x.pl74Pen=[];}break;}
+   if(p.laps===SER_LAPS-1)say('Race engineer',`Last lap to serve the ${PEN_NAME[p.kind].toLowerCase()}. Box this lap.`,{cls:'warn',tag:'PENALTY',text:'Serve this lap',ms:3600});}}
+ // Pit window.
+ if(R.on&&racing(L)){
+  for(const y of L.entrants){if(y.retired||y.finished||!needsStop(y))continue;const l=lapNo(y);
+   if(H.has(y)&&y===x&&!L.dc33Auto){
+    if(l===R.close-2&&S.said.win!==l){S.said.win=l;say('Race engineer',`Pit window closes in two laps. We still owe ${(y.rf41MinStops||0)-(y.rf41ValidStops||0)} stop.`,{cls:'warn',tag:'PIT WINDOW',text:'Closes in 2 laps',ms:3600});}
+    if(l===R.close&&S.said.win!==l){S.said.win=l;say('Race engineer','Box this lap! Last lap of the window!',{cls:'warn',tag:'BOX BOX',text:'Last lap of window',ms:4200});y.pitNow=true;}
+    if(l>R.close&&!y.pitStage&&!y.pl74Missed){y.pl74Missed=true;if(window.pn57Ok?.()!==false)dsq(L,y,'Compulsory pit stop not made inside the window');else say('Race control','Compulsory stop missed. Penalties are off, so no action.');}}
+   else if(!H.has(y)&&l>=R.close-1-((y.rf41MinStops||0)-(y.rf41ValidStops||0))&&!y.pitStage)y.pitNow=true;}}
+ // Driving through another team's box: always a drive-through.
+ if(x.pitStage&&q&&!L.dc33Auto&&!x.cd66){const u=q.lane*W.pit.side,own=W.pit.bays[x.team.id];let other=-1;
+  if(u>6.6&&Math.abs((q.f-own.f)*W.pit.length)>own.halfLength+2.5)for(let i=0;i<W.pit.bays.length;i++){const b=W.pit.bays[i];if(b!==own&&Math.abs((q.f-b.f)*W.pit.length)<b.halfLength-2){other=i;break;}}
+  S.inOther=other>=0?other:null;if(other<0)S.intr=0;
+  if(other>=0&&Math.abs(x.v)>.8){S.intr+=Math.abs(x.v)*dt;if(S.intr>6&&S.intrVisit!==S.visits){S.intrVisit=S.visits;const t=L.entrants.find(e=>e.team?.id===other)?.team.name||'another team';
+    if(racing(L)){const ok=issue(x,'DT',`Drove through the ${t} pit box.`,true);if(ok){const p=x.pl74Pen?.at(-1);if(p)p.always=true;}}
+    else say('Race control',`You drove through the ${t} box. In a race that is a drive-through.`,{cls:'warn',tag:'PIT LANE',text:'Not your box',ms:3200});}}}
+ else S.inOther=null;
+ // Loose wheel after a bad stop.
+ for(const y of L.entrants){const l=y.pl74Loose;if(!l||y.pitStage||y.retired)continue;l.m+=Math.max(0,(y.progress-(l.p??y.progress)))*lenM(L);l.p=y.progress;
+  if(!l.said&&l.m>250){l.said=true;if(human(L,y))say('Race engineer',`${l.corner} wheel is loose! Box this lap, box this lap!`,{cls:'warn',tag:'LOOSE WHEEL',text:l.corner,value:'Box now',ms:5200});y.pitNow=true;y.pitPlan||={tyre:L.weather==='Dry'?'Hard':'Wet',fuel:0,aero:y.aero,repair:true};}
+  if(!l.off&&l.m>2600){l.off=true;if(human(L,y))say('Race engineer','The wheel has come off! Bring it back slowly.',{cls:'warn',tag:'WHEEL OFF',text:l.corner,ms:5200});else if(Math.random()<.25)try{dcSafety('Car #'+y.d.number+' lost a wheel.');}catch(_){}}}
+ // Exit speed line: the limiter is still on.
+ if(x.pitStage&&q&&L.pt61?.lim&&q.f>.9&&!S.said.limOff&&!L.dc33Auto){S.said.limOff=1;say('Race engineer','Limiter off! You are past the line.');}
+ if(!x.pitStage)S.said.limOff=0;
+ launch(L,input,dt);
+}
+
+/* ---------- Hooks ---------- */
+const basePhysics=dcPhysics;
+dcPhysics=function(dt,input,auto=false){const L=live;if(!L?.dc)return basePhysics.apply(this,arguments);
+ const r=basePhysics.apply(this,arguments);if(live!==L)return r;try{step(L,dt,input);}catch(e){if(!L.pl74Err){L.pl74Err=1;console.warn('pl74',e);}}return r;};
+const baseHud=dcPaintHUD;
+dcPaintHUD=function(...a){const r=baseHud.apply(this,a);try{const L=live,el=document.getElementById('dc-status');if(L?.dc&&L.player?.pl74Dsq&&el)el.textContent='DISQUALIFIED · '+L.player.pl74Dsq.toUpperCase()+' · ESC TO SIMULATE';}catch(_){}return r;};
+DC_SNAPSHOT_KEYS.push('pl74Pen','pl74Dsq','pl74Loose','pl74Style');
+
+/* ---------- MFD and HUD text ---------- */
+const css=document.createElement('style');css.textContent=`
+#ic59-mfd .pl74{display:flex;justify-content:space-between;gap:8px;padding:3px 9px;font:700 10.5px 'UI Rajdhani',sans-serif;letter-spacing:.05em;color:#c9d1dc;background:#ffffff08;border-top:1px solid #ffffff10;white-space:nowrap}
+#ic59-mfd .pl74 b{color:#fff;font-variant-numeric:tabular-nums}
+#ic59-mfd .pl74.open b{color:#55e39a}#ic59-mfd .pl74.due b{color:#ffd23f}#ic59-mfd .pl74.pen{background:#b3121b55}#ic59-mfd .pl74.pen b{color:#ffd0d0}
+#pt61-hud .pen{background:#b3121b;border-color:#ff6a6a}#pt61-hud .nb{background:#b3121b;border-color:#ff6a6a;animation:pt61b .4s steps(2) infinite}`;
+document.head.appendChild(css);
+function mfd(){
+ const L=live,x=L?.player;if(!L?.dc||!x||L.stage!=='race')return'';const R=rules(L),out=[];
+ if(R.on){const lap=lapNo(x),done=x.rf41ValidStops||0,n=x.rf41MinStops||0,cls=done>=n?'':lap>=R.open?(lap>=R.close-2?'due':'open'):'';
+  out.push(`<div class="pl74 ${cls}"><span>WINDOW L${R.open}–${R.close} · ${ruleText(R).toUpperCase()}</span><b>${done>=n?'DONE':lap<R.open?'OPENS L'+R.open:lap>R.close?'CLOSED':'OPEN'} · ${done}/${n}</b></div>`);}
+ const p=pending(x);if(p)out.push(`<div class="pl74 pen"><span>${PEN_NAME[p.kind].toUpperCase()}</span><b>${Math.max(0,SER_LAPS-p.laps)} LAP${SER_LAPS-p.laps===1?'':'S'} TO SERVE</b></div>`);
+ if(L.started&&!x.pitStage&&!x.retired){const pr=predict(L,x);if(pr)out.push(`<div class="pl74"><span>BOX NOW${pr.sc?' (SC)':''} · LOSE ${pr.loss.toFixed(0)}s</span><b>${predictText(pr)}</b></div>`);}
+ return out.join('');
+}
+function hud(){
+ const L=live,x=L?.player,out=[];if(!L?.dc||!x||L.dc33Auto)return out;const S=L.pl74||{},p=pending(x);
+ if(S.inOther!=null&&x.pitStage)out.push(`<div class="nb">Not your box!</div>`);
+ if(x.pl74Hold&&S.visit?.sgT!==undefined)out.push(`<div class="pen">Stop-go <b>${Math.max(0,10-S.visit.sgT).toFixed(1)}</b></div>`);
+ else if(p)out.push(`<div class="pen">${PEN_NAME[p.kind]} · <b>${Math.max(0,SER_LAPS-p.laps)}</b> laps</div>`);
+ if(S.stall>0)out.push(`<div class="pen">Stalled <b>${S.stall.toFixed(1)}</b></div>`);
+ else if(x.pitStage&&x.dc32Serviced&&!x.pt61Released&&L.pt61?.board==='go'&&!S.launchDone)out.push(`<div class="ok">Launch · half throttle</div>`);
+ if(x.pl74Loose?.said)out.push(`<div class="nb">${x.pl74Loose.off?'Wheel off':'Loose wheel'} · box</div>`);
+ return out;
+}
+window.PL74={rules,predict,predictText,issue,mfd,hud,minLitres,pending:()=>pending(live?.player),dsq,state:()=>live?.pl74};
 })();
 </script></body></html>
