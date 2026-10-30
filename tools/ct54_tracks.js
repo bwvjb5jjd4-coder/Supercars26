@@ -104,9 +104,22 @@ function ct54(W){return CT54_KEYS.includes(W?.e?.key);}
 // ---------- Real elevation along the lap (permanent circuits) ----------
 const ct54Height=SC25World.prototype.height;
 SC25World.prototype.height=function(t){
- const E=this.data?.elev;if(!E||!ct49C(this))return ct54Height.call(this,t);
- const n=E.length,a=(((t%1)+1)%1)*n,i=Math.floor(a)%n,u=a-Math.floor(a),s=u*u*(3-2*u);return E[i]+(E[(i+1)%n]-E[i])*s;
+ const E=ct54Elev(this);if(!E)return ct54Height.call(this,t);
+ // Catmull-Rom through the samples: the slope carries on through each sample, so the road has no steps.
+ const n=E.length,a=(((t%1)+1)%1)*n,i=Math.floor(a)%n,u=a-Math.floor(a),p0=E[(i+n-1)%n],p1=E[i],p2=E[(i+1)%n],p3=E[(i+2)%n];
+ return p1+.5*u*(p2-p0+u*(2*p0-5*p1+4*p2-p3+u*(3*(p1-p2)+p3-p0)));
 };
+// Elevation profiles come from a terrain model that also catches buildings, bridges and grandstands
+// beside the road. Smooth them over a real road's length scale; the flat reclaimed and desert
+// venues get a longer window and a flatter profile.
+const CT54_ELEV={yas:{sigma:160,scale:.45},bahrain:{sigma:110,scale:.8},cota:{sigma:70},phillip:{sigma:60}};
+function ct54Elev(W){
+ const d=W.data,E=d?.elev;if(!E||!ct49C(W))return null;if(d.ct54Elev)return d.ct54Elev;
+ const c=CT54_ELEV[W.e.key]||{},n=E.length,step=(d.mappedLength||n*10)/n,sg=Math.max(1,(c.sigma||50)/step),R=Math.ceil(sg*3),w=[];
+ for(let k=-R;k<=R;k++)w.push(Math.exp(-k*k/(2*sg*sg)));const ws=w.reduce((a,b)=>a+b,0);
+ let out=E.map((_,i)=>{let v=0;for(let k=-R;k<=R;k++)v+=E[((i+k)%n+n)%n]*w[k+R];return v/ws;});
+ const mean=out.reduce((a,b)=>a+b,0)/n;out=out.map(v=>mean+(v-mean)*(c.scale??1));
+ return d.ct54Elev=out;}
 
 // ---------- Real water: sea, lakes and harbour from the map polygons ----------
 // Rasterised once per circuit into a depth grid (metres inside the shoreline), then sampled.
