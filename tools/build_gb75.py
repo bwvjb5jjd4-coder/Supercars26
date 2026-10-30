@@ -7,7 +7,7 @@ f=pathlib.Path(sys.argv[1]) if len(sys.argv)>1 else root/'index.html'
 html=f.read_text()
 js=(root/'tools/gb75.js').read_text()
 for ext in ('dds.gz.bin','webp'):
-    html=html.replace('assets/liveries/Holden_redbull.'+ext,'assets/liveries/Holden_redbull21.'+ext)
+    for old in ('Holden_redbull.','Holden_redbull20.'):html=html.replace('assets/liveries/'+old+ext,'assets/liveries/Holden_redbull21.'+ext)
 html=re.sub(r'<script id="gb75-grille">.*?</script>','',html,flags=re.S)
 i=html.rindex('</body>')
 html=html[:i]+'<script id="gb75-grille">\n'+js+'</script>'+html[i:]
