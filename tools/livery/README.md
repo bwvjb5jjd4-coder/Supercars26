@@ -37,3 +37,12 @@ v2 (2026-10-29, after Riley said v1 looked terrible and the flag was the worst p
 flag (svg-country-flags 1.2.10 on npm, logos/pr_ausflag21.png) wrapped along the bezier band by `Cv.flag()`: Union Jack at the wide end,
 cloth line rippling with fold shading and a white keyline. PENRITE is the same real wordmark recoloured to race yellow (pr_wordy.png).
 Bigger laurel leaves, slim orange nose band, Snap-on on the rear quarters. Needs scipy (cKDTree). Texture renamed Ford_penrite27.* for cache.
+
+## Holden_redbull -> 2020 Red Bull Holden ZB (#88 and #888), 2026-10-30
+Texture ships as assets/liveries/Holden_redbull20.* (new name beats browser cache). Files in `redbull20/`:
+`logos.py` builds logos/rb_*.png (Red Bull wordmark, twin bulls + sun and single bull from svg-logos redbullenergydrink.svg,
+Caltex hallmark, IVECO, HP, Dunlop from svg-logos; Holden, GEARWRENCH, mtaa super, Havoline, ACDelco from assets/img).
+`posmap_s.py` = posmap.py with smooth, outward vertex normals (don't run views.py's flip afterwards, it is a no-op anyway).
+`paint_rb20.py` paints. Every texel is owned by the single view that faces it best (side/top/front/rear, plus oblique
+front-corner views for stickers only), so seams are crisp and stickers are never half-faded across a crease.
+Grille: tools/gb75.js (build_gb75.py) paints the two chrome wing bars gloss black and adds a white Holden script under the badge.
