@@ -10,7 +10,9 @@ const QS66={
  stage:{practice:1.006,qualifying:1,shootout:.998},
  spread:.4,noise:.0045,
  // Tyre-model quasi-steady lap per circuit (ai62LapEstimate at AI62.use .89), seconds.
- lap:{sydney:97.81,albert:125.83,taupo:95.6,symmons:65.26,perth:58.16,darwin:77.93,townsville:83.27,ipswich:77.96,bend:122.03,bathurst:139.74,goldcoast:93.87,sandown:82.66,adelaide:83.63,homebush:99.98}
+ lap:{sydney:97.81,albert:125.83,taupo:95.6,symmons:65.26,perth:58.16,darwin:77.93,townsville:83.27,ipswich:77.96,bend:122.03,bathurst:139.74,goldcoast:93.87,sandown:82.66,adelaide:83.63,homebush:99.98,
+  // ct54 circuits: ai62LapEstimate x1.078 (the ratio this table has to the estimate at Sydney, Homebush, Bathurst, Symmons).
+  winton:87.09,phillip:94.93,lakeside:59.71,cota:147.86,yas:158.29,bahrain:138.1,newcastle:94.86,canberra:108.13}
 };
 function qs66Hash(s){let h=2166136261;for(const c of String(s)){h^=c.charCodeAt(0);h=Math.imul(h,16777619);}return ((h>>>0)%100000)/100000;}
 // Standard-normal-ish draw from a stable seed.
