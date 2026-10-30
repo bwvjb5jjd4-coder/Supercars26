@@ -105,7 +105,10 @@ for sgn in (-1,1):
     c.poly(F([(2.85,0.05),(2.85,0.13),(2.05,0.145),(1.15,0.16),(1.15,0.05)]),C_NAVY)
     c.poly(F([(2.85,0.13),(2.40,0.14),(2.85,0.155)]),C_LIGHT)
     # --- navy doors; a round sun behind the bull's shoulders (as in the Red Bull mark) ---
-    c.poly(F([(1.15,1.6),(1.15,0.16),(1.10,0.0),(-0.30,0.0),(-0.30,1.6)]),C_NAVY)
+    c.poly(F([(1.45,1.6),(1.40,0.80),(1.02,0.16),(1.0,0.0),(-0.30,0.0),(-0.30,1.6)]),C_NAVY)
+    # the door's leading edge rakes forward into the white guard: royal and light blades ahead of it
+    c.poly(F([(1.55,0.79),(1.40,0.80),(1.02,0.16),(1.12,0.16)]),C_ROYAL)
+    c.poly(F([(1.63,0.783),(1.58,0.787),(1.15,0.16),(1.19,0.16)]),C_LIGHT)
     c.circle(f(0.80),0.605,0.31,C_YEL)
     # lighter facets on the doors (the 2020 'fragment' pattern)
     c.poly(F([(0.95,0.95),(0.62,0.95),(0.80,0.86)]),C_ROYAL)
@@ -143,13 +146,13 @@ for sgn in (-1,1):
     # --- stickers ---
     c.put('bull',f(0.60),0.525,1.02,flip=flip)
     c.put('word_k',f(-0.56),0.465,0.86)
-    c.put('holden_k',f(-0.80),0.815,1.08,rot=7*sgn)   # raked like the shards under it
+    c.put('holden_k',f(-0.80),0.815,1.08,rot=3*sgn)   # a slight rake with the shards under it
     c.put('gw_k',f(1.66),0.655,0.36,rot=6*sgn)
     c.put('dunlop',f(1.40),0.735,0.15,rot=5*sgn)
     c.put(mtaa1,f(0.02),0.225,0.36)
     c.put('iveco_n',f(-1.93),0.585,0.30)
     c.put('havoline',f(-1.95),0.36,0.34)
-    c.put('hp',f(-1.52),1.07,0.14)
+    c.put('hp',f(-1.64),1.02,0.14)
     c.im.save('side%d.png'%sgn)
     cvs.append(c)
 # ================= top: bonnet (read from the nose) =================
@@ -224,6 +227,10 @@ def owners(cs):
 OWNER=owners([c for c in cvs if not c.logo_only])
 for c in cvs:
     if not c.logo_only:c.apply()
+# the guard's royal band as one 3D surface rule, so its lower edge runs clean across the side/top/front seams
+zz=np.clip(z,1.6,2.6);yb=np.interp(zz,[1.6,1.85,2.12,2.32,2.55,2.6],[0.735,0.685,0.585,0.49,0.462,0.46])
+gd=(ax>0.62)&(z>1.6)&(z<2.6)&(y>0.3)&(y<1.0)&~((z<2.6)&(ax<0.7)&(y>0.78))
+mix(WHITE,gd*1.0);mix(ROYAL,gd*edge(y-yb));mix(LIGHT,gd*edge(y-yb+0.013)*edge(yb-y))
 OWNER=owners(cvs)
 for c in cvs:
     if not c.logo_only:c.apply(c.lg)
