@@ -26,8 +26,8 @@ function gb75Materials(){
  gb75Script=new T.MeshStandardMaterial({map:tex,transparent:true,alphaTest:.04,depthWrite:false,roughness:.3,metalness:0,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-2});
 }
 function gb75ScriptGeo(){
- // 0.19 m wide script under the badge, just proud of the slats (z 2.526); baked offset keeps the ph47 crumple working
- const w=.19,h=w/4,g=new T.PlaneGeometry(w,h);g.translate(0,.477,2.531);return g;
+ // 0.25 m wide script under the badge, just proud of the slats (z 2.526); baked offset keeps the ph47 crumple working
+ const w=.25,h=w/4,g=new T.PlaneGeometry(w,h);g.translate(0,.466,2.533);return g;
 }
 let gb75Geo=null;
 const gb75Car=sc25Car;

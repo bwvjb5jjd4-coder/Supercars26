@@ -102,9 +102,9 @@ for sgn in (-1,1):
     c.poly(F([(1.60,0.815),(1.25,0.84),(1.15,0.86),(1.15,0.90),(1.45,0.86)]),C_MID)
     c.poly(F([(2.85,0.05),(2.85,0.13),(2.05,0.145),(1.15,0.16),(1.15,0.05)]),C_NAVY)
     c.poly(F([(2.85,0.13),(2.40,0.14),(2.85,0.155)]),C_LIGHT)
-    # --- the sun rising behind the front wheel, then the navy door slicing across it ---
-    c.circle(f(0.42),0.56,0.85,C_YEL)
-    c.poly(F([(0.99,1.6),(0.95,0.95),(0.87,0.10),(0.82,0.0),(-0.30,0.0),(-0.30,1.6)]),C_NAVY)
+    # --- navy doors; a round sun behind the bull's shoulders (as in the Red Bull mark) ---
+    c.poly(F([(1.15,1.6),(1.15,0.16),(1.10,0.0),(-0.30,0.0),(-0.30,1.6)]),C_NAVY)
+    c.circle(f(0.80),0.655,0.31,C_YEL)
     # lighter facets on the doors (the 2020 'fragment' pattern)
     c.poly(F([(0.95,0.95),(0.62,0.95),(0.80,0.86)]),C_ROYAL)
     c.poly(F([(0.40,0.95),(0.05,0.95),(0.18,0.84)]),C_ROYAL)
@@ -116,15 +116,19 @@ for sgn in (-1,1):
     # facets down the B-pillar edge
     c.poly(F([(0.13,1.6),(0.21,1.6),(0.17,1.0),(-0.03,0.63),(-0.08,0.63),(0.12,1.0)]),C_LIGHT)
     c.poly(F([(0.25,0.98),(0.02,0.66),(0.12,0.90)]),C_ROYAL)
-    # jagged ridge between the wordmark and HOLDEN (navy peaks, royal and light flanks)
-    ridge=[(-0.08,0.63),(-0.25,0.62),(-0.42,0.655),(-0.55,0.618),(-0.73,0.668),(-0.88,0.612),(-1.06,0.655),(-1.22,0.598),(-1.42,0.618),(-1.70,0.585),(-1.95,0.575)]
-    c.poly(F(ridge+[(-1.95,0.55),(-0.95,0.40),(-0.25,0.40)]),C_LIGHT)
-    rd=[(a,b-0.016) for a,b in ridge]
-    c.poly(F(rd+[(-1.75,0.55),(-0.95,0.40),(-0.25,0.40)]),C_ROYAL)
-    rn=[(a,b-0.034) for a,b in ridge[:7]]
-    c.poly(F(rn+[(-1.30,0.50),(-0.95,0.40),(-0.25,0.40)]),C_NAVY)
-    # navy below the ridge down to the sill on the rear door
-    c.poly(F([(-0.25,0.64),(-0.95,0.56),(-0.97,0.05),(-0.25,0.05)]),C_NAVY)
+    # swept shards rising out of the navy under HOLDEN: light, royal and navy blades raking back
+    c.poly(F([(-0.05,0.62),(-0.97,0.555),(-0.97,0.05),(-0.05,0.05)]),C_NAVY)
+    for col_,sh in ((C_LIGHT,[((-0.02,0.63),(-0.46,0.745),(-0.34,0.60)),((-0.28,0.60),(-0.86,0.735),(-0.72,0.585)),
+                               ((-0.64,0.585),(-1.22,0.705),(-1.06,0.572)),((-1.00,0.572),(-1.62,0.655),(-1.40,0.566)),
+                               ((-1.30,0.566),(-2.35,0.598),(-1.80,0.552))]),
+                    (C_ROYAL,[((-0.04,0.615),(-0.40,0.705),(-0.30,0.598)),((-0.26,0.598),(-0.78,0.700),(-0.66,0.584)),
+                               ((-0.60,0.584),(-1.12,0.672),(-0.98,0.570)),((-0.95,0.570),(-1.52,0.625),(-1.30,0.562)),
+                               ((-1.25,0.562),(-2.10,0.580),(-1.70,0.550))]),
+                    (C_NAVY,[((-0.05,0.605),(-0.33,0.662),(-0.26,0.592)),((-0.24,0.592),(-0.66,0.660),(-0.58,0.580)),
+                              ((-0.55,0.580),(-1.00,0.640),(-0.92,0.566)),((-0.90,0.566),(-1.36,0.598),(-1.20,0.556))])):
+        for p0,p1,p2 in sh:c.poly(F([p0,p1,p2,(p2[0],p2[1]-0.03),(p0[0],p0[1]-0.03)]),col_)
+    # a long light spear over the rear arch
+    c.poly(F([(-0.90,0.60),(-1.95,0.628),(-1.10,0.592)]),C_PALE)
     # rear bumper corner: navy facets from the bottom
     c.poly(F([(-1.72,0.05),(-1.80,0.18),(-2.10,0.13),(-2.35,0.24),(-2.60,0.20),(-2.85,0.30),(-2.85,0.05)]),C_NAVY)
     c.poly(F([(-1.80,0.18),(-2.10,0.13),(-2.35,0.24),(-2.20,0.19),(-2.00,0.21)]),C_ROYAL)
@@ -158,6 +162,17 @@ for s_ in (-1,1):
 tf.put('twin',0,-1.74,1.16)
 tf.put('word_k',0,-2.13,1.22)
 cvs.append(tf)
+# ================= roof (reads from behind, like the real car): CALTEX, hallmark, big navy Holden lion =================
+rf=Cv((0,1,0),(0,0,1),-0.8,0.8,-1.2,0.6,(y>1.15)&(ax<0.70)&(z>-1.1)&(z<0.6))
+for s_ in (-1,1):
+    G=lambda pts:[(a*s_,b) for a,b in pts]
+    rf.poly(G([(0.40,0.6),(0.80,0.6),(0.80,0.10)]),C_LIGHT)
+    rf.poly(G([(0.52,0.6),(0.80,0.6),(0.80,0.30)]),C_ROYAL)
+    rf.poly(G([(0.50,-1.2),(0.80,-1.2),(0.80,-0.80)]),C_ROYAL)
+rf.put(cword,0,0.37,0.34)
+rf.put(hall,0,0.15,0.27)
+rf.put('lion_n',0,-0.42,0.84)
+cvs.append(rf)
 # ================= front face =================
 fr=Cv((0,0,1),(0,1,0),-1.05,1.05,0.0,0.95,(z>1.9))
 for s_ in (-1,1):
@@ -186,13 +201,12 @@ for s_ in (-1,1):
     rr.poly(G([(0.58,1.4),(1.05,1.4),(1.05,0.0),(0.66,0.0),(0.60,0.30),(0.58,0.62)]),C_WHITE)
     rr.poly(G([(0.58,1.4),(0.62,1.4),(0.62,0.62),(0.65,0.30),(0.60,0.30),(0.58,0.62)]),C_ROYAL)
     rr.poly(G([(0.62,1.4),(0.64,1.4),(0.64,0.62),(0.62,0.62)]),C_LIGHT)
-rr.put('holden_w',0,0.562,0.46)
-rr.put('word_k',0.0,0.418,0.38)
+rr.put('holden_w',0,0.825,0.50)
+rr.put('word_k',0.0,0.425,0.38)
 rr.put(bs,-0.46,0.43,0.24)
 rr.put(bs,0.46,0.43,0.24,flip=True)
 for s_ in (-1,1):
-    rr.put(mtaa1.copy(),0.20*s_,0.855,0.17)
-    rr.put('acdelco_w',0.20*s_,0.795,0.15)
+    rr.put(mtaa1.copy() if s_<0 else 'acdelco_w',0.20*s_,0.685,0.16)
 cvs.append(rr)
 # boot lid / rear deck from above: navy lid, white quarter tops that meet the white rear corners
 tr=Cv((0,1,0),(0,0,1),-1.05,1.05,-2.8,-1.0,(y>0.75)&(z<-1.0)&~wing0)
@@ -211,8 +225,11 @@ OWNER=owners([c for c in cvs if not c.logo_only])
 for c in cvs:
     if not c.logo_only:c.apply()
 OWNER=owners(cvs)
-for c in cvs:c.apply(c.lg)
+for c in cvs:
+    if not c.logo_only:c.apply(c.lg)
 OWNER=None
+for c in cvs:
+    if c.logo_only:c.apply(c.lg)     # corner stickers win over the seam so they are never cut
 # ---------- rear wing: black blade, navy endplates with mtaa super ----------
 wing=(z<-1.98)&(y>1.12)
 col[wing]=WINGB

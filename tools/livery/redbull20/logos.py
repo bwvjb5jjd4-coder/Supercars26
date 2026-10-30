@@ -30,6 +30,7 @@ for nm,c in (('iveco_w','#ffffff'),('iveco_n',NAVY)):
 hp=open(SVG+'hp-2.svg').read().replace('<path ','<path fill="#0096d6" ');open(TMP+'hp.svg','w').write(hp);jobs.append(TMP+'hp.svg::'+TMP+'hp.png::1600')
 dl=open(SVG+'dunlop-1.svg').read();dl=dl.replace('<path d="m0 0h2499.6v494h-2499.6z" fill="#ffe100"/>','')
 open(TMP+'dunlop.svg','w').write(dl);jobs.append(TMP+'dunlop.svg::'+TMP+'dunlop.png::2400')
+jobs.append(SVG+'holden-2019-.svg::'+TMP+'lionring.png::3000')
 subprocess.run(['node',HERE+'/../svgr.js']+jobs,check=True,env={**os.environ,'NODE_PATH':subprocess.run(['npm','root','-g'],capture_output=True,text=True).stdout.strip()})
 def crop(im):return im.crop(im.getbbox())
 def keyline(im,px,col=(255,255,255)):
@@ -76,4 +77,30 @@ recol(gw,(17,18,22)).save(OUT+'gw_k.png')     # all black (front guards)
 mt=L(IMG+'dcdc065439.png');mt.save(OUT+'mtaa_w.png')
 hv=L(IMG+'c0f351584f.png');hv.resize((hv.width*3,hv.height*3),Image.LANCZOS).save(OUT+'havoline.png')
 ac=L(IMG+'0f19a59240.png');recol(ac,(255,255,255)).save(OUT+'acdelco_w.png')
+# roof lion: the holes of the 2019 roundel (lion head + mane) as a solid navy shape, ring dropped
+lr=crop(Image.open(TMP+'lionring.png').convert('RGBA'));A=np.asarray(lr)[...,3].astype(float)/255
+H_,W_=A.shape;yy,xx=np.mgrid[0:H_,0:W_];cy,cx=H_/2,W_/2;R=min(H_,W_)/2
+r=np.hypot(yy-cy,xx-cx);inner=np.clip((R*0.85-r)/2,0,1)
+L_=np.zeros((H_,W_,4),np.uint8);L_[...,0]=27;L_[...,1]=26;L_[...,2]=85;L_[...,3]=(A*inner*255).astype(np.uint8)
+crop(Image.fromarray(L_)).save(OUT+'lion_n.png')
+# GEARWRENCH cleaned up: the web raster is distressed; close the speckle holes, flat white/orange, no (R)
+g=Image.open(OUT+'gw_wo.png').convert('RGBA')
+from scipy import ndimage as _nd
+B=np.asarray(g)[...,3]>90;h=B.shape[0];small=(h*0.07)**2
+lab,nl=_nd.label(~B);sz=_nd.sum(np.ones_like(B),lab,range(1,nl+1))
+for i,v in enumerate(sz):
+    if v<small:B[lab==i+1]=True        # fill the distress speckles inside the letters
+lab,nl=_nd.label(B);sz=_nd.sum(B,lab,range(1,nl+1))
+for i,v in enumerate(sz):
+    if v<small*0.5:B[lab==i+1]=False   # drop stray specks
+a=Image.fromarray((B*255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(1.0)).point(lambda v:0 if v<90 else (255 if v>165 else (v-90)*255//75))
+G=np.asarray(g).astype(float);orange=(G[...,0]>150)&(G[...,2]<120)&(G[...,1]<200)
+# column where orange starts = WRENCH
+oc=np.nonzero(orange.any(0))[0];split=oc.min()
+out=np.zeros(G.shape,np.uint8);out[...,:3]=255;out[:,split:,0]=243;out[:,split:,1]=146;out[:,split:,2]=0;out[...,3]=np.asarray(a)
+lab,nl=_nd.label(out[...,3]>0);objs=_nd.find_objects(lab)
+for i,sl in enumerate(objs):
+    if sl[0].stop<out.shape[0]*0.45 and sl[1].start>out.shape[1]*0.95:out[sl][lab[sl]==i+1,3]=0   # (R)
+g2=crop(Image.fromarray(out));g2.save(OUT+'gw_wo.png')
+k=np.asarray(g2).copy();k[...,:3]=(17,18,22);Image.fromarray(k).save(OUT+'gw_k.png')
 print('ok')
