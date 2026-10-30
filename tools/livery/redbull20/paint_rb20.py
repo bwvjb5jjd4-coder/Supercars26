@@ -46,6 +46,23 @@ class Cv:
         big=Image.new('RGBA',((X1-X0)*k,(Y1-Y0)*k),c[:3]+(0,))
         ImageDraw.Draw(big).polygon([((u-X0)*k,(v-Y0)*k) for u,v in P],fill=c)
         s.im.alpha_composite(big.resize((X1-X0,Y1-Y0),Image.BOX),(X0,Y0))
+    def arc(s,logo,ca,cb,r0,h,flip_dir=False):
+        # bend a sticker round a circle centred (ca,cb): baseline radius r0, letter height h, centred on top dead centre
+        from scipy.ndimage import map_coordinates
+        lg=np.asarray(Image.open(LG+logo+'.png').convert('RGBA'),np.float32);lg[...,:3]*=lg[...,3:4]/255
+        Hs,Ws=lg.shape[:2];span=(h*Ws/Hs)/(r0+h/2)
+        r1=r0+h;X0,Y0=s.px(ca-r1,cb+r1);X1,Y1=s.px(ca+r1,cb+r0*math.cos(span/2)-0.01)
+        X0,Y0,X1,Y1=int(X0),int(Y0),int(X1)+1,int(Y1)+1
+        yy,xx=np.mgrid[Y0:Y1,X0:X1].astype(np.float64)
+        da=(xx+0.5)/S+s.a0-ca;db=(s.b1-(yy+0.5)/S)-cb
+        th=np.arctan2(da,db);rr=np.hypot(da,db)
+        u=(th/span+0.5)*(Ws-1);v=(r1-rr)/h*(Hs-1)
+        out=np.zeros(yy.shape+(4,),np.float32)
+        for k in range(4):out[...,k]=map_coordinates(lg[...,k],[v,u],order=1,cval=0)
+        ok=(u>=0)&(u<=Ws-1)&(v>=0)&(v<=Hs-1);out[~ok]=0
+        rgb=np.where(out[...,3:4]>0,out[...,:3]*255/np.maximum(out[...,3:4],1e-6),0)
+        im=Image.fromarray(np.dstack([rgb,out[...,3:4]]).clip(0,255).astype(np.uint8),'RGBA')
+        s.lg.alpha_composite(im,(X0,Y0))
     def circle(s,a,b,r,c,steps=180):
         s.poly([(a+r*math.cos(t*2*math.pi/steps),b+r*math.sin(t*2*math.pi/steps)) for t in range(steps)],c)
     def apply(s,layer=None):
@@ -107,8 +124,9 @@ for sgn in (-1,1):
     # --- navy doors; a round sun behind the bull's shoulders (as in the Red Bull mark) ---
     c.poly(F([(1.45,1.6),(1.40,0.80),(1.02,0.16),(1.0,0.0),(-0.30,0.0),(-0.30,1.6)]),C_NAVY)
     # the door's leading edge rakes forward into the white guard: royal and light blades ahead of it
-    c.poly(F([(1.55,0.79),(1.40,0.80),(1.02,0.16),(1.12,0.16)]),C_ROYAL)
-    c.poly(F([(1.63,0.783),(1.58,0.787),(1.15,0.16),(1.19,0.16)]),C_LIGHT)
+    # a deep-blue facet between navy and royal so the door steps into the guard band instead of a hard cut
+    c.poly(F([(1.47,0.80),(1.40,0.80),(1.02,0.16),(1.07,0.16)]),c4((NAVY+ROYAL)/2))
+    c.poly(F([(1.60,0.80),(1.47,0.80),(1.07,0.16),(1.16,0.16)]),C_ROYAL)
     c.circle(f(0.80),0.605,0.31,C_YEL)
     # lighter facets on the doors (the 2020 'fragment' pattern)
     c.poly(F([(0.95,0.95),(0.62,0.95),(0.80,0.86)]),C_ROYAL)
@@ -147,8 +165,7 @@ for sgn in (-1,1):
     c.put('bull',f(0.60),0.525,1.02,flip=flip)
     c.put('word_k',f(-0.56),0.465,0.86)
     c.put('holden_k',f(-0.80),0.815,1.08,rot=3*sgn)   # a slight rake with the shards under it
-    c.put('gw_k',f(1.66),0.655,0.36,rot=6*sgn)
-    c.put('dunlop',f(1.40),0.735,0.15,rot=5*sgn)
+    c.arc('gw_wo',f(1.62),0.30,0.44,0.062)   # GEARWRENCH bent round the front wheel arch
     c.put(mtaa1,f(0.02),0.225,0.36)
     c.put('iveco_n',f(-1.93),0.585,0.30)
     c.put('havoline',f(-1.95),0.36,0.34)
@@ -228,8 +245,10 @@ OWNER=owners([c for c in cvs if not c.logo_only])
 for c in cvs:
     if not c.logo_only:c.apply()
 # the guard's royal band as one 3D surface rule, so its lower edge runs clean across the side/top/front seams
-zz=np.clip(z,1.6,2.6);yb=np.interp(zz,[1.6,1.85,2.12,2.32,2.55,2.6],[0.735,0.685,0.585,0.49,0.462,0.46])
-gd=(ax>0.62)&(z>1.6)&(z<2.6)&(y>0.3)&(y<1.0)&~((z<2.6)&(ax<0.7)&(y>0.78))
+# (from just ahead of the door's royal facet; the band dips over the wheel arch so GEARWRENCH sits on royal)
+zz=np.clip(z,1.15,2.6);yb=np.interp(zz,[1.15,1.4,1.62,1.85,2.12,2.32,2.55,2.6],[0.60,0.645,0.67,0.635,0.575,0.49,0.462,0.46])
+zd=1.16+(y-0.16)/0.64*0.44
+gd=(ax>0.62)&(z>zd)&(z<2.6)&(y>0.3)&(y<1.0)&~((ax<0.7)&(y>0.78))
 mix(WHITE,gd*1.0);mix(ROYAL,gd*edge(y-yb));mix(LIGHT,gd*edge(y-yb+0.013)*edge(yb-y))
 OWNER=owners(cvs)
 for c in cvs:
