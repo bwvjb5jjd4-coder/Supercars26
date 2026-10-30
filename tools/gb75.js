@@ -29,15 +29,21 @@ function gb75Materials(){
 // (raycast straight back from the nose at every vertex, 1 mm proud), bowed into a gentle smile, so it follows the slats.
 const GB75_W=.30,GB75_H=GB75_W/4,GB75_Y=.462,GB75_K=.45;
 function gb75ScriptGeo(level){
- level.updateMatrixWorld(true);const inv=level.matrixWorld.clone().invert(),hits=[];
- level.traverse(o=>{if(o.isMesh&&!o.userData.gb75Script&&!o.material.transparent&&o.visible)hits.push(o);});
- const g=new T.PlaneGeometry(GB75_W,GB75_H,96,24),P=g.attributes.position,rc=new T.Raycaster(),o=new T.Vector3(),d=new T.Vector3(0,0,-1).transformDirection(level.matrixWorld),v=new T.Vector3();
+ // Rays run straight back (-z) in the car's own frame, so instead of raycasting the whole car (that froze session
+ // loading for minutes) the few triangles under the script's patch are gathered once and hit-tested in x/y.
+ level.updateMatrixWorld(true);const inv=level.matrixWorld.clone().invert(),m4=new T.Matrix4(),a=new T.Vector3(),b=new T.Vector3(),c=new T.Vector3(),tri=[];
+ const x0=-GB75_W/2-.01,x1=GB75_W/2+.01,y0=GB75_Y-GB75_H/2-.01,y1=GB75_Y+GB75_H/2+GB75_K*(GB75_W/2)**2+.01,zMin=2.0,zMax=3.4;
+ level.traverse(o=>{if(!o.isMesh||o.userData.gb75Script||o.material.transparent||!o.visible)return;
+  const g=o.geometry,P=g.attributes.position,I=g.index?g.index.array:null,n=I?I.length:P.count;m4.multiplyMatrices(inv,o.matrixWorld);
+  for(let t=0;t<n;t+=3){a.fromBufferAttribute(P,I?I[t]:t).applyMatrix4(m4);b.fromBufferAttribute(P,I?I[t+1]:t+1).applyMatrix4(m4);c.fromBufferAttribute(P,I?I[t+2]:t+2).applyMatrix4(m4);
+   if(Math.max(a.x,b.x,c.x)<x0||Math.min(a.x,b.x,c.x)>x1||Math.max(a.y,b.y,c.y)<y0||Math.min(a.y,b.y,c.y)>y1||Math.max(a.z,b.z,c.z)<zMin||Math.min(a.z,b.z,c.z)>zMax)continue;
+   tri.push(a.x,a.y,a.z,b.x,b.y,b.z,c.x,c.y,c.z);}});
+ const front=(x,y)=>{let best=-Infinity;for(let k=0;k<tri.length;k+=9){const ax=tri[k],ay=tri[k+1],bx=tri[k+3],by=tri[k+4],cx=tri[k+6],cy=tri[k+7],d=(by-cy)*(ax-cx)+(cx-bx)*(ay-cy);if(Math.abs(d)<1e-12)continue;
+  const u=((by-cy)*(x-cx)+(cx-bx)*(y-cy))/d,v=((cy-ay)*(x-cx)+(ax-cx)*(y-cy))/d,w=1-u-v;if(u<0||v<0||w<0)continue;const z=u*tri[k+2]+v*tri[k+5]+w*tri[k+8];if(z>best&&z<=zMax&&z>=zMin)best=z;}return best;};
+ const g=new T.PlaneGeometry(GB75_W,GB75_H,96,24),P=g.attributes.position;
  for(let i=0;i<P.count;i++){
-  const x=P.getX(i),y=P.getY(i)+GB75_Y+GB75_K*P.getX(i)**2;
-  o.set(x,y,3.4).applyMatrix4(level.matrixWorld);rc.set(o,d);rc.far=1.4;
-  const h=rc.intersectObjects(hits,false)[0];let z=2.533;
-  if(h){v.copy(h.point).applyMatrix4(inv);z=v.z+.001;}
-  P.setXYZ(i,x,y,z);
+  const x=P.getX(i),y=P.getY(i)+GB75_Y+GB75_K*P.getX(i)**2,h=front(x,y);
+  P.setXYZ(i,x,y,h>-Infinity?h+.001:2.533);
  }
  // one smooth skin over the slat faces: each column takes the frontmost slat face in it (the strip follows the grille's
  // sweep without diving into the gaps, which shredded the letters at an angle), then a light sideways smooth
