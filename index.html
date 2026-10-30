@@ -12975,6 +12975,10 @@ function gb75Materials(){
   x.clearRect(0,0,c.width,c.height);x.drawImage(img,(c.width-w)/2,(c.height-h)/2,w,h);x.globalCompositeOperation='source-in';x.fillStyle='#eceef0';x.fillRect(0,0,c.width,c.height);tex.needsUpdate=true;};
  img.src='assets/img/6bb14b7642.png';
  gb75Script=new T.MeshStandardMaterial({map:tex,transparent:true,alphaTest:.04,depthWrite:false,roughness:.42,metalness:0,polygonOffset:true,polygonOffsetFactor:-1,polygonOffsetUnits:-1});
+ gb75Script.onBeforeCompile=sh=>{
+  sh.vertexShader=sh.vertexShader.replace('#include <common>','#include <common>\nattribute float gbSlat;varying float vGbSlat;').replace('#include <begin_vertex>','#include <begin_vertex>\nvGbSlat=gbSlat;');
+  sh.fragmentShader=sh.fragmentShader.replace('#include <common>','#include <common>\nvarying float vGbSlat;').replace('#include <alphatest_fragment>','diffuseColor.rgb*=mix(.22,1.,smoothstep(.3,.7,vGbSlat));\n#include <alphatest_fragment>');};
+ gb75Script.customProgramCacheKey=()=>'gb75slat';
 }
 // The script is painted onto the grille itself: a finely divided strip is laid onto the frontmost grille surface
 // (raycast straight back from the nose at every vertex, 1 mm proud), bowed into a gentle smile, so it follows the slats.
@@ -12991,15 +12995,18 @@ function gb75ScriptGeo(level){
    tri.push(a.x,a.y,a.z,b.x,b.y,b.z,c.x,c.y,c.z);}});
  const front=(x,y)=>{let best=-Infinity;for(let k=0;k<tri.length;k+=9){const ax=tri[k],ay=tri[k+1],bx=tri[k+3],by=tri[k+4],cx=tri[k+6],cy=tri[k+7],d=(by-cy)*(ax-cx)+(cx-bx)*(ay-cy);if(Math.abs(d)<1e-12)continue;
   const u=((by-cy)*(x-cx)+(cx-bx)*(y-cy))/d,v=((cy-ay)*(x-cx)+(ax-cx)*(y-cy))/d,w=1-u-v;if(u<0||v<0||w<0)continue;const z=u*tri[k+2]+v*tri[k+5]+w*tri[k+8];if(z>best&&z<=zMax&&z>=zMin)best=z;}return best;};
- const g=new T.PlaneGeometry(GB75_W,GB75_H,96,24),P=g.attributes.position;
+ const g=new T.PlaneGeometry(GB75_W,GB75_H,96,60),P=g.attributes.position,Hz=new Float32Array(P.count);
  for(let i=0;i<P.count;i++){
-  const x=P.getX(i),y=P.getY(i)+GB75_Y+GB75_K*P.getX(i)**2,h=front(x,y);
+  const x=P.getX(i),y=P.getY(i)+GB75_Y+GB75_K*P.getX(i)**2,h=front(x,y);Hz[i]=h;
   P.setXYZ(i,x,y,h>-Infinity?h+.001:2.533);
  }
  // one smooth skin over the slat faces: each column takes the frontmost slat face in it (the strip follows the grille's
  // sweep without diving into the gaps, which shredded the letters at an angle), then a light sideways smooth
- const C=97,Rw=25,F=[];for(let c=0;c<C;c++){let m=-9;for(let r=0;r<Rw;r++)m=Math.max(m,P.getZ(r*C+c));F.push(m);}
+ const C=97,Rw=61,F=[];for(let c=0;c<C;c++){let m=-9;for(let r=0;r<Rw;r++)m=Math.max(m,P.getZ(r*C+c));F.push(m);}
  for(let c=0;c<C;c++){let t=0,n=0;for(let d=-3;d<=3;d++){const k=c+d;if(k>=0&&k<C){t+=F[k];n++;}}for(let r=0;r<Rw;r++)P.setZ(r*C+c,t/n+.0015);}
+ // paint only lands on the slat faces: where the grille surface sits more than 2.5 mm behind the nearest slat face (within 1 cm up or down) it's a gap: the paint there sits in the slat's shadow, so the letters read but the slats show through
+ const sl=new Float32Array(P.count);for(let r=0;r<Rw;r++)for(let c=0;c<C;c++){const i=r*C+c;let m=-Infinity;for(let d=-8;d<=8;d++){const rr=r+d;if(rr>=0&&rr<Rw)m=Math.max(m,Hz[rr*C+c]);}sl[i]=Hz[i]>-Infinity&&Hz[i]>=m-.0025?1:0;}
+ g.setAttribute('gbSlat',new T.BufferAttribute(sl,1));
  g.computeVertexNormals();return g;
 }
 const gb75Car=sc25Car;

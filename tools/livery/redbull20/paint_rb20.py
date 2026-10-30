@@ -165,13 +165,15 @@ for sgn in (-1,1):
     c.put('bull',f(0.60),0.525,1.02,flip=flip)
     c.put('word_k',f(-0.56),0.465,0.86)
     c.put('holden_k',f(-0.80),0.815,1.08,rot=3*sgn)   # a slight rake with the shards under it
-    c.arc('gw_wo',f(1.62),0.30,0.44,0.062)   # GEARWRENCH bent round the front wheel arch
     c.put(mtaa1,f(0.02),0.225,0.36)
     c.put('iveco_n',f(-1.93),0.585,0.30)
     c.put('havoline',f(-1.95),0.36,0.34)
     c.put('hp',f(-1.64),1.02,0.14)
     c.im.save('side%d.png'%sgn)
     cvs.append(c)
+    # GEARWRENCH bent round the front wheel arch, in its own sticker-only view so no seam can cut it
+    g_=Cv((sgn,0,0),(0,1,0),-2.8,2.8,0.0,1.6,(x*sgn>0.3)&nothood&(z>1.0)&(z<2.3)&(y>0.4)&(y<0.95));g_.logo_only=True
+    g_.arc('gw_smooth',f(1.60),0.30,0.445,0.058);cvs.append(g_)
 # ================= top: bonnet (read from the nose) =================
 tf=Cv((0,1,0),(0,0,-1),-1.0,1.0,-2.7,-0.6,(y>0.6)&(z>0.6))
 for s_ in (-1,1):
@@ -203,7 +205,7 @@ for s_ in (-1,1):
     fr.poly(G([(0.60,0.455),(1.05,0.455),(1.05,0.468),(0.63,0.468)]),C_LIGHT)
 
     fr.poly(G([(0.50,0.165),(1.05,0.165),(1.05,0.18),(0.52,0.178)]),C_LIGHT)
-fr.put('gw_wo',0,0.362,0.52)
+fr.put('gw_smooth',0,0.362,0.52)
 cvs.append(fr)
 # front corners (oblique views, stickers only): IVECO in the lozenge, CALTEX + hallmark on the white
 for s_ in (-1,1):
