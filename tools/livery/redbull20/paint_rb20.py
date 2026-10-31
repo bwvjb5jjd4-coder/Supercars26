@@ -13,6 +13,10 @@ WHITE=hexc('#f3f4f6');RED=hexc('#d6203a');YEL=hexc('#fcc800');INK=hexc('#121316'
 # RB_SCHEME=pink paints the same design as the "Bathurst" pink livery (lv78): every blue becomes a pink, navy stickers go deep pink
 # RB_SCHEME=goldcoast: ocean blue, turquoise/seafoam shards, sand panels, sunset roof, surf along the sills, Surfers Paradise skyline
 import os;SCHEME=os.environ.get('RB_SCHEME','');PINK=SCHEME=='pink';GC=SCHEME=='goldcoast'
+# RB_SCHEME=adf: the navy becomes Auscam camo. Paint twice with RB_NAVY=#000000 and #ffffff; adf_camo.py recovers the exact navy
+# coverage from the two and lays the camo (seamless 3D pattern) into it. Khaki panels, olive shards, olive roof with the flag.
+ADF=SCHEME=='adf'
+if ADF:NAVY=hexc(os.environ.get('RB_NAVY','#000000'));ROYAL=hexc('#4f5a2c');MID=hexc('#6c7440');LIGHT=hexc('#99996a');PALE=hexc('#cfc4a0');WHITE=hexc('#d2c29a');DEEP=(43,49,33);OLIVE=hexc('#4b5530')
 if GC:NAVY=hexc('#0b3a5e');ROYAL=hexc('#0f9fb4');MID=hexc('#35c2c4');LIGHT=hexc('#7fdcd2');PALE=hexc('#c6f1ea');WHITE=hexc('#efdcb2');DEEP=tuple(int(v) for v in NAVY);FOAM=hexc('#f7fbfa')
 if PINK:NAVY=hexc('#e0187d');ROYAL=hexc('#ff4fa6');MID=hexc('#ff7dbd');LIGHT=hexc('#ffaed5');PALE=hexc('#ffdced');DEEP=(150,10,82)
 def c4(v):return tuple(int(t) for t in v)+(255,)
@@ -28,6 +32,7 @@ def mix(c,a):
 # white roof panel with a royal keyline where it meets the navy pillars
 mix(ROYAL,edge(0.695-ax)*edge(y-1.14))
 mix(WHITE,edge(0.675-ax)*edge(y-1.15))
+if ADF:mix(OLIVE,edge(0.675-ax)*edge(y-1.15))   # matte olive roof
 if GC:
     # sunset roof: burnt orange over the rear window fading to gold at the windscreen
     t=np.clip((z+1.1)/1.7,0,1)[:,None];sky=np.where(t<0.5,hexc('#ea5f2a')*(1-2*t)+hexc('#ff9b3a')*(2*t),hexc('#ff9b3a')*(2-2*t)+hexc('#ffd35c')*(2*t-1))
@@ -42,8 +47,8 @@ class Cv:
     def px(s,a,b):return ((a-s.a0)*S,(s.b1-b)*S)
     def put(s,logo,a,b,w,h=None,flip=False,rot=0):
         lg=Image.open(LG+logo+'.png').convert('RGBA') if isinstance(logo,str) else logo
-        if (PINK or GC) and isinstance(logo,str) and logo.endswith('_n'):lg=recol(lg,DEEP)
-        if PINK and isinstance(logo,str) and logo in TONAL:lg=tone(lg)
+        if (PINK or GC or ADF) and isinstance(logo,str) and logo.endswith('_n'):lg=recol(lg,DEEP)
+        if (PINK or ADF) and isinstance(logo,str) and logo in TONAL:lg=tone(lg)
         if flip:lg=lg.transpose(Image.FLIP_LEFT_RIGHT)
         W=int(w*S);H=int(W*lg.height/lg.width) if h is None else int(h*S)
         lg=lg.resize((W,H),Image.LANCZOS)
@@ -91,7 +96,7 @@ class Cv:
         col[k]=col[k]*(1-al[:,None])+rgb*al[:,None]
 def logo(f):
     im=Image.open(LG+f+'.png').convert('RGBA')
-    return tone(im) if PINK and f in TONAL else im
+    return tone(im) if (PINK or ADF) and f in TONAL else im
 # pink scheme: Red Bull marks go tonal, red -> deep berry and yellow/white -> white (the green channel tells them apart)
 TONAL=('bull','sun','twin','word','word_k')
 def tone(im):
@@ -100,6 +105,12 @@ def tone(im):
     return Image.fromarray(np.dstack([rgb,a[...,3:]]).clip(0,255).astype(np.uint8),'RGBA')
 def crop(im):return im.crop(im.getbbox())
 def recol(im,c):o=Image.new('RGBA',im.size,tuple(c)+(255,));o.putalpha(im.split()[3]);return o
+def stencil_text(t,colr):
+    from PIL import ImageFont
+    fnt=ImageFont.truetype(os.path.join(os.path.dirname(os.path.abspath(__file__)),'fonts/SairaStencilOne-Regular.ttf'),300)
+    b=fnt.getbbox(t);im=Image.new('RGBA',(b[2]-b[0]+20,b[3]-b[1]+20),(0,0,0,0));ImageDraw.Draw(im).text((10-b[0],10-b[1]),t,font=fnt,fill=tuple(colr)+(255,))
+    return im
+stencil=stencil_text('LEST WE FORGET',DEEP) if ADF else None
 def row(parts,gap):
     # lay images side by side, vertically centred
     H=max(i.height for i in parts);W=sum(i.width for i in parts)+gap*(len(parts)-1);o=Image.new('RGBA',(W,H),(0,0,0,0));X=0
@@ -146,7 +157,7 @@ for sgn in (-1,1):
     # a deep-blue facet between navy and royal so the door steps into the guard band instead of a hard cut
     c.poly(F([(1.47,0.80),(1.40,0.80),(1.02,0.16),(1.07,0.16)]),c4((NAVY+ROYAL)/2))
     c.poly(F([(1.60,0.80),(1.47,0.80),(1.07,0.16),(1.16,0.16)]),C_ROYAL)
-    c.circle(f(0.80),0.605,0.31,C_WHITE if PINK else C_YEL)
+    c.circle(f(0.80),0.605,0.31,C_WHITE if (PINK or ADF) else C_YEL)
     # lighter facets on the doors (the 2020 'fragment' pattern)
     c.poly(F([(0.95,0.95),(0.62,0.95),(0.80,0.86)]),C_ROYAL)
     c.poly(F([(0.40,0.95),(0.05,0.95),(0.18,0.84)]),C_ROYAL)
@@ -196,6 +207,12 @@ for sgn in (-1,1):
                        (-2.23,0.12,0.06),(-2.31,0.18,0.05),(-2.38,0.10,0.06),(-2.47,0.14,0.05),(-2.55,0.08,0.07)]
         for z0,h,w in sky:c.poly(F([(z0,base-0.01),(z0,base+h),(z0-w,base+h),(z0-w,base-0.01)]),C_NAVY)
         q=-1.89-0.0275;c.poly(F([(q+0.008,0.98),(q,1.08),(q-0.008,0.98)]),C_NAVY)   # Q1 spire
+    if ADF:
+        # rear quarter: a small Australian flag with LEST WE FORGET stencilled over it
+        fl=Image.open(LG.replace('rb_','pr_')+'ausflag21.png').convert('RGBA')
+        if flip:fl=fl.transpose(Image.FLIP_LEFT_RIGHT)   # hoist always leads, like a flag on a moving vehicle
+        c.put(fl,f(-1.70),0.785,0.30)
+        c.put(stencil,f(-1.70),0.92,0.32)
     # --- stickers ---
     c.put('bull',f(0.60),0.525,1.02,flip=flip)
     c.put('word_k',f(-0.56),0.465,0.86)
@@ -203,7 +220,7 @@ for sgn in (-1,1):
     c.put(mtaa1,f(0.02),0.225,0.36)
     c.put('iveco_w' if GC else 'iveco_n',f(-1.93),0.585,0.30)   # white on the Gold Coast skyline
     c.put('havoline',f(-1.95),0.36,0.34)
-    c.put('hp',f(-1.64),1.02,0.14)
+    c.put('hp',f(-1.64),1.045 if ADF else 1.02,0.14)
     c.im.save('side%d.png'%sgn)
     cvs.append(c)
     # GEARWRENCH bent round the front wheel arch, in its own sticker-only view so no seam can cut it
@@ -228,7 +245,11 @@ for s_ in (-1,1):
     rf.poly(G([(0.50,-1.2),(0.80,-1.2),(0.80,-0.80)]),C_ROYAL)
 rf.put(cword,0,0.37,0.34)
 rf.put(hall,0,0.15,0.27)
-rf.put('lion_n',0,-0.50,0.96)
+if ADF:
+    fl=Image.open(LG.replace('rb_','pr_')+'ausflag21.png').convert('RGBA')   # the real 2:1 Australian flag
+    fb=Image.new('RGBA',(fl.width+60,fl.height+60),c4(PALE));fb.alpha_composite(fl,(30,30))   # thin khaki border
+    rf.put(fb,0,-0.52,0.92)
+else:rf.put('lion_n',0,-0.50,0.96)
 cvs.append(rf)
 # ================= front face =================
 fr=Cv((0,0,1),(0,1,0),-1.05,1.05,0.0,0.95,(z>1.9))
