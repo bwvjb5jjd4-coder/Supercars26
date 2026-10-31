@@ -1,10 +1,15 @@
-"""Embed tools/ap73.js (safety car autopilot button) into index.html as the last script."""
-import re,pathlib
+"""Embed tools/ap73.js (Simulate / autopilot with driving styles) into index.html.
+Replaces the existing ap73 script in place, or adds it as the last script.
+Usage: python3 tools/build_ap73.py [path/to/index.html]"""
+import re,sys,pathlib
 root=pathlib.Path(__file__).resolve().parent.parent
-html=(root/'index.html').read_text()
+target=pathlib.Path(sys.argv[1]) if len(sys.argv)>1 else root/'index.html'
+html=target.read_text()
 js=(root/'tools/ap73.js').read_text()
-html=re.sub(r'<script id="ap73-autopilot">.*?</script>','',html,flags=re.S)
-i=html.rindex('</body>')
-html=html[:i]+'<script id="ap73-autopilot">\n'+js+'</script>'+html[i:]
-(root/'index.html').write_text(html)
-print('ok',len(html))
+tag='<script id="ap73-autopilot">\n'+js+'</script>'
+pat=re.compile(r'<script id="ap73-autopilot">.*?</script>',re.S)
+if pat.search(html):html=pat.sub(lambda m:tag,html,count=1)
+else:
+    i=html.rindex('</body>');html=html[:i]+tag+html[i:]
+target.write_text(html)
+print('ok',target,len(html))
