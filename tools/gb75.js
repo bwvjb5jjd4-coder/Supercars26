@@ -58,6 +58,19 @@ function gb75ScriptGeo(level){
  g.setAttribute('gbSlat',new T.BufferAttribute(sl,1));
  g.computeVertexNormals();return g;
 }
+// The bonnet crumple and dents the painted panels get on the GPU (rf41, also given to trim by dm71), so the bars and
+// script move with the grille they sit on.
+const GB75_DAMAGE=`float gbBon=smoothstep(1.0,1.5,position.z)*smoothstep(.5,.76,position.y);
+ transformed.y+=gbBon*rf41Crumple*(.045*sin(position.x*14.0+position.z*11.0)-.075);
+ transformed.z-=gbBon*rf41Crumple*(.035+.025*sin(position.x*9.0));
+ float gbDent=max(0.0,1.0-length((position.xz-rf41Dent.xy)*vec2(1.0,.8))/.85)*rf41Dent.z*step(.28,position.y);
+ transformed.x-=sign(rf41Dent.x)*gbDent*.12;transformed.y-=gbDent*.035;transformed.z-=sign(rf41Dent.y)*gbDent*.08;`;
+function gb75Damage(mat,state){
+ if(!state?.crumple||!state?.dent)return;const before=mat.onBeforeCompile,key=mat.customProgramCacheKey();
+ mat.onBeforeCompile=function(sh,r){before?.call(this,sh,r);sh.uniforms.rf41Crumple=state.crumple;sh.uniforms.rf41Dent=state.dent;
+  sh.vertexShader='uniform float rf41Crumple;uniform vec4 rf41Dent;\n'+sh.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\n'+GB75_DAMAGE);};
+ mat.customProgramCacheKey=()=>key+'|gb75dmg';
+}
 const gb75Car=sc25Car;
 sc25Car=function(E,team,driver){
  const car=gb75Car(E,team,driver),u=car.userData;
@@ -65,12 +78,29 @@ sc25Car=function(E,team,driver){
  let key='';try{key=sc27LiveryProfile(team,driver)?.key||'';}catch(e){}
  if(key!=='redbull')return car;
  gb75Materials();
+ // Each car gets its own copies: the crash crumple (ph47) binds a material to the first car that wears it, so shared
+ // bars and script followed the other Red Bull car's damage and floated off this one's crushed nose.
+ const mat=gb75Mat.clone(),script=gb75Script.clone();script.onBeforeCompile=gb75Script.onBeforeCompile;script.customProgramCacheKey=gb75Script.customProgramCacheKey;
+ gb75Damage(mat,u.dc35State);gb75Damage(script,u.dc35State);
+ // a crumpled grille is coarser than the finely divided script, so give the paint a little more depth bias to stay on top
+ script.polygonOffsetFactor=-4;script.polygonOffsetUnits=-8;
  (u.dc35Chassis||[]).forEach((level,i)=>{
   const chrome=[];level.traverse(o=>{if(o.isMesh&&o.userData.dc35Bucket==='badge_chrome')chrome.push(o);});
   for(const o of chrome){const s=gb75SplitBars(o.geometry);if(!s.bars)continue;o.geometry=s.rest;
-   const bars=new T.Mesh(s.bars,gb75Mat);bars.name='Gloss black grille bars';bars.castShadow=false;bars.receiveShadow=true;bars.userData.dc35Bucket='badge_black';o.parent.add(bars);}
-  if(i<2){const g=gb75ScriptGeo(level);if(g.attributes.position.count){const m=new T.Mesh(g,gb75Script);m.name='Painted Holden grille script';m.userData.gb75Script=true;m.renderOrder=2;m.castShadow=false;m.receiveShadow=true;level.add(m);}}
+   const bars=new T.Mesh(s.bars,mat);bars.name='Gloss black grille bars';bars.castShadow=false;bars.receiveShadow=true;bars.userData.dc35Bucket='badge_black';o.parent.add(bars);}
+  if(i<2){const g=gb75ScriptGeo(level);if(g.attributes.position.count){const m=new T.Mesh(g,script);m.name='Painted Holden grille script';m.userData.gb75Script=true;m.renderOrder=2;m.castShadow=false;m.receiveShadow=true;level.add(m);}}
  });
  return car;
+};
+// Dents pressed into the panels on the CPU (dc36, mirrored onto trim by dm71) press the painted script in too;
+// dm71 leaves transparent meshes alone, and the script is one.
+const gb75Running=SC25World.prototype.applyRunningDamage;
+SC25World.prototype.applyRunningDamage=function(car,x){
+ gb75Running.call(this,car,x);const u=car?.userData;if(!u?.dc35Car||x.retired||!u.dc35Chassis)return;
+ const rev=x.sc30DamageRevision||0;if(u.gb75Rev===rev)return;u.gb75Rev=rev;const dents=x.sc30Dents||[];
+ for(const chassis of u.dc35Chassis)for(const m of chassis.children){if(!m.userData.gb75Script)continue;
+  const p=m.geometry.attributes.position;if(!m.userData.gb75Base){if(!dents.length)continue;m.userData.gb75Base=p.array.slice();}const base=m.userData.gb75Base;p.array.set(base);
+  for(const d of dents)for(let i=0;i<p.count;i++){const xx=base[i*3],yy=base[i*3+1],zz=base[i*3+2],f=Math.max(0,1-Math.hypot((xx-d.x)*.9,(yy-.65)*.65,(zz-d.z)*.8)/.95)*d.strength;if(yy>.28)p.setXYZ(i,xx-Math.sign(d.x||1)*f*.16,yy-f*.045,zz-Math.sign(d.z||1)*f*.08);}
+  p.needsUpdate=true;m.geometry.computeBoundingSphere();}
 };
 })();
