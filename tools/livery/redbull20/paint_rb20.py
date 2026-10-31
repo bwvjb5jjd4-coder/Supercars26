@@ -11,7 +11,9 @@ def hexc(h):return np.array([int(h[i:i+2],16) for i in (1,3,5)],float)
 NAVY=hexc('#1b1a55');ROYAL=hexc('#2b3ea6');MID=hexc('#4166cc');LIGHT=hexc('#86a8e8');PALE=hexc('#c9d8f4')
 WHITE=hexc('#f3f4f6');RED=hexc('#d6203a');YEL=hexc('#fcc800');INK=hexc('#121316');WINGB=hexc('#111216')
 # RB_SCHEME=pink paints the same design as the "Bathurst" pink livery (lv78): every blue becomes a pink, navy stickers go deep pink
-import os;PINK=os.environ.get('RB_SCHEME')=='pink'
+# RB_SCHEME=goldcoast: ocean blue, turquoise/seafoam shards, sand panels, sunset roof, surf along the sills, Surfers Paradise skyline
+import os;SCHEME=os.environ.get('RB_SCHEME','');PINK=SCHEME=='pink';GC=SCHEME=='goldcoast'
+if GC:NAVY=hexc('#0b3a5e');ROYAL=hexc('#0f9fb4');MID=hexc('#35c2c4');LIGHT=hexc('#7fdcd2');PALE=hexc('#c6f1ea');WHITE=hexc('#efdcb2');DEEP=tuple(int(v) for v in NAVY);FOAM=hexc('#f7fbfa')
 if PINK:NAVY=hexc('#e0187d');ROYAL=hexc('#ff4fa6');MID=hexc('#ff7dbd');LIGHT=hexc('#ffaed5');PALE=hexc('#ffdced');DEEP=(150,10,82)
 def c4(v):return tuple(int(t) for t in v)+(255,)
 C_NAVY,C_ROYAL,C_MID,C_LIGHT,C_PALE,C_WHITE,C_YEL=map(c4,(NAVY,ROYAL,MID,LIGHT,PALE,WHITE,YEL))
@@ -26,6 +28,10 @@ def mix(c,a):
 # white roof panel with a royal keyline where it meets the navy pillars
 mix(ROYAL,edge(0.695-ax)*edge(y-1.14))
 mix(WHITE,edge(0.675-ax)*edge(y-1.15))
+if GC:
+    # sunset roof: burnt orange over the rear window fading to gold at the windscreen
+    t=np.clip((z+1.1)/1.7,0,1)[:,None];sky=np.where(t<0.5,hexc('#ea5f2a')*(1-2*t)+hexc('#ff9b3a')*(2*t),hexc('#ff9b3a')*(2-2*t)+hexc('#ffd35c')*(2*t-1))
+    a=edge(0.675-ax)*edge(y-1.15);col=col*(1-a[:,None])+sky*a[:,None]
 S=1000.0
 OWNER=None
 class Cv:
@@ -36,7 +42,7 @@ class Cv:
     def px(s,a,b):return ((a-s.a0)*S,(s.b1-b)*S)
     def put(s,logo,a,b,w,h=None,flip=False,rot=0):
         lg=Image.open(LG+logo+'.png').convert('RGBA') if isinstance(logo,str) else logo
-        if PINK and isinstance(logo,str) and logo.endswith('_n'):lg=recol(lg,DEEP)
+        if (PINK or GC) and isinstance(logo,str) and logo.endswith('_n'):lg=recol(lg,DEEP)
         if PINK and isinstance(logo,str) and logo in TONAL:lg=tone(lg)
         if flip:lg=lg.transpose(Image.FLIP_LEFT_RIGHT)
         W=int(w*S);H=int(W*lg.height/lg.width) if h is None else int(h*S)
@@ -174,12 +180,28 @@ for sgn in (-1,1):
     # navy sill strip with royal speed line
     c.poly(F([(0.87,0.0),(0.87,0.155),(-0.95,0.165),(-0.95,0.0)]),C_NAVY)
     c.poly(F([(0.80,0.17),(-0.90,0.185),(-0.90,0.172),(0.40,0.163)]),C_LIGHT)
+    if GC:
+        # surf: a seafoam swell along the sills with a white breaking crest curling forward
+        zz=np.linspace(2.85,-2.85,400);ph=((zz+2.85)/0.95)%1.0
+        crest=0.20+0.075*np.where(ph<0.78,ph/0.78,(1-ph)/0.22)**1.6
+        c.poly(F([(2.85,0.0)]+list(zip(zz,crest-0.012))+[(-2.85,0.0)]),c4(LIGHT))
+        c.poly(F([(2.85,0.0)]+list(zip(zz,crest-0.04))+[(-2.85,0.0)]),C_ROYAL)
+        c.poly(F([(2.85,0.0)]+list(zip(zz,0.11+0.02*np.sin(zz*7)))+[(-2.85,0.0)]),C_NAVY)
+        c.poly(F(list(zip(zz,crest+0.006))+list(zip(zz[::-1],(crest-0.012)[::-1]))),c4(FOAM))
+        for z0 in np.arange(2.85-0.95*0.78,-2.85,-0.95):   # foam curl dropping off the front of each crest
+            c.poly(F([(z0,0.275),(z0+0.05,0.262),(z0+0.075,0.235),(z0+0.06,0.205),(z0+0.035,0.215),(z0+0.045,0.24),(z0+0.02,0.258)]),c4(FOAM))
+        # Surfers Paradise skyline across the rear quarter (Q1 is the tall one with the spire)
+        base=0.64;sky=[(-1.42,0.10,0.07),(-1.50,0.17,0.06),(-1.57,0.13,0.05),(-1.63,0.22,0.06),(-1.70,0.15,0.05),(-1.76,0.27,0.05),
+                       (-1.82,0.19,0.06),(-1.89,0.34,0.055),(-1.95,0.21,0.05),(-2.02,0.26,0.06),(-2.09,0.16,0.05),(-2.16,0.23,0.055),
+                       (-2.23,0.12,0.06),(-2.31,0.18,0.05),(-2.38,0.10,0.06),(-2.47,0.14,0.05),(-2.55,0.08,0.07)]
+        for z0,h,w in sky:c.poly(F([(z0,base-0.01),(z0,base+h),(z0-w,base+h),(z0-w,base-0.01)]),C_NAVY)
+        q=-1.89-0.0275;c.poly(F([(q+0.008,0.98),(q,1.08),(q-0.008,0.98)]),C_NAVY)   # Q1 spire
     # --- stickers ---
     c.put('bull',f(0.60),0.525,1.02,flip=flip)
     c.put('word_k',f(-0.56),0.465,0.86)
     c.put('holden_k',f(-0.80),0.815,1.08,rot=3*sgn)   # a slight rake with the shards under it
     c.put(mtaa1,f(0.02),0.225,0.36)
-    c.put('iveco_n',f(-1.93),0.585,0.30)
+    c.put('iveco_w' if GC else 'iveco_n',f(-1.93),0.585,0.30)   # white on the Gold Coast skyline
     c.put('havoline',f(-1.95),0.36,0.34)
     c.put('hp',f(-1.64),1.02,0.14)
     c.im.save('side%d.png'%sgn)
@@ -293,5 +315,5 @@ for it in range(24):
         acc+=sh*sf[...,None];cnt+=sf
     new=(~filled)&(cnt>0);o8[new]=acc[new]/cnt[new][:,None];filled|=new
 o8[~filled]=NAVY
-Image.fromarray(np.clip(o8+0.5,0,255).astype(np.uint8)).save('new_tex.png')
+Image.fromarray(np.clip(o8+0.5,0,255).astype(np.uint8)).save(os.environ.get('RB_OUT','new_tex.png'))
 print('ok')

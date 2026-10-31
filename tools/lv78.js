@@ -1,11 +1,13 @@
 /* lv78 livery switcher. Car Management gets a "Liveries" card where any livery with alternatives can be
-   switched. Triple Eight (#88/#888, key 'redbull'): Default = 2020 Red Bull Holden, Bathurst = the same design in pink.
+   switched. Triple Eight (#88/#888, key 'redbull'): Default = 2020 Red Bull Holden, Bathurst = the same design in pink,
+   Gold Coast = ocean blue/turquoise/sand with a sunset roof, surf and the Surfers Paradise skyline.
    The choice is saved in the career (D.settings.lv78) and in localStorage, so Instant Race uses it too.
    The profile key stays 'redbull', so gb75's grille bars and script keep working; only the texture and skirt change. */
 const LV78_SETS={
  redbull:{team:0,label:'Triple Eight Race Engineering',cars:'#88 / #888',options:[
   {id:'default',name:'Default',desc:'2020 Red Bull Holden',art:{'88':'assets/img/3e2908e5ce.webp','888':'assets/img/d4e3cdf7b7.webp'}},
-  {id:'bathurst',name:'Bathurst',desc:'Pink and white Red Bull Holden',tex:'redbullpink',skirt:'#ff3d9e',art:{'88':'assets/img/50ac8d3fdc.webp','888':'assets/img/16ba412ee1.webp'}}]}
+  {id:'bathurst',name:'Bathurst',desc:'Pink and white Red Bull Holden',tex:'redbullpink',skirt:'#ff3d9e',art:{'88':'assets/img/50ac8d3fdc.webp','888':'assets/img/16ba412ee1.webp'}},
+  {id:'goldcoast',name:'Gold Coast',desc:'Surf, sand and sunset Red Bull Holden',tex:'redbullgc',skirt:'#0f9fb4',art:{'88':'assets/img/68d73a4a4e.webp','888':'assets/img/466aa2ef26.webp'}}]}
 };
 // Menu tile pictures of the Triple Eight cars (old 2018 art), swapped for the chosen livery's render of that car.
 const LV78_TILE_ART={redbull:{'assets/img/8766614c66.webp':'88','assets/img/8ae6eb1ce3.webp':'888'}};
