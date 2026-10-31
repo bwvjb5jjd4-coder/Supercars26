@@ -91,33 +91,42 @@ function pedals(x,vt){const v=x.v||0,e=vt-v;return e>=-.2?{throttle:clamp(.12+e*
 function pitPilot(L,x,st,dt){
  const W=sc25Engine;if(!W?.pit?.dc32||!W.pit.samples)return null;const pit=W.pit,len=L.e.lengthKm*1000,v=x.v||0,look=clamp(4+v*.55,5,14);
  if(!x.pitStage){
-  if(!x.pitNow)return null;
-  const frac=((x.progress%1)+1)%1,toEntry=((pit.start-frac)%1+1)%1*len;if(toEntry>look+30||toEntry<-1)return null;
-  st.box=true;const q=dc32PitAt(W,clamp((look-toEntry)/pit.length,0,1));
-  return{steer:steerTo(x,q.p.x,q.p.z),...pedals(x,Math.min(Math.max(16,Math.sqrt(16.4**2+2*7*Math.max(0,toEntry-15))),x.ai62Target??99))};}
+  if(!x.pitNow){st.appr=false;return null;}
+  // The lane starts a little past the pit entry marker: drive the track on the pit side, slowing
+  // to the limit, until the start of the lane is close, then follow the lane itself.
+  const frac=((x.progress%1)+1)%1,toEntry=((pit.start-frac)%1+1)%1*len,q=dc32PitNear(W,x.pos);
+  if(!st.appr){if(toEntry<260)st.appr=true;else return null;}
+  if(q.distance>420){st.appr=false;return null;}
+  if(q.f<.002&&q.distance>look+10)return{track:true,lane:pit.side*3,vcap:Math.sqrt(16.2**2+2*6.5*Math.max(0,q.distance-14))};
+  st.box=true;const a=dc32PitAt(W,clamp(q.f+look/pit.length,0,1));
+  return{steer:steerTo(x,a.p.x,a.p.z),...pedals(x,16.2)};}
  // In the lane: limiter on, box (or drive through), then out.
- if(L.pt61)L.pt61.lim=true;
- const q=dc32PitNear(W,x.pos),box=pit.bays[x.team.id],half=box?.halfLength||6,dt74=x.pl74Pen?.[0]?.kind==='DT';
+ const q=dc32PitNear(W,x.pos);if(L.pt61)L.pt61.lim=q.f<.86;
+ const box=pit.bays[x.team.id],half=box?.halfLength||6,dt74=x.pl74Pen?.[0]?.kind==='DT';
  if(x.dc32Serviced||dt74)st.box=false;
  const stop=st.box&&box&&!x.dc32Serviced,d=box?(box.f-q.f)*pit.length:-99;
  const latAt=dist=>stop&&dist<=half+2&&dist>-half?8.1:0;
  const fa=clamp(q.f+look/pit.length,0,1),aim=dc32PitAt(W,fa),lat=latAt(d-look)*pit.side;
  let vt=16.2;if(stop){vt=d>0?Math.min(16.2,Math.sqrt(2*2.4*Math.max(0,d-.4))+.3):0;}
  // Cars ahead in the lane.
- for(const y of L.entrants){if(y===x||!y.pitStage||!y.pos)continue;const g=((y.pitDistance||0)-(x.pitDistance||0));if(g>0&&g<16&&Math.abs((y.pitLane||0)-(x.pitLane||0))<3)vt=Math.min(vt,Math.max(0,(g-8)*.8));}
+ for(const y of L.entrants){if(y===x||!y.pitStage||!y.pos)continue;const g=((y.pitDistance||0)-(x.pitDistance||0));if(g>0&&g<16&&Math.abs(y.pitLane||0)<4.5&&!y.dc32Servicing&&Math.abs((y.pitLane||0)-(x.pitLane||0))<3)vt=Math.min(vt,Math.max(0,(g-8)*.8));}
  if(x.dc32Servicing||stop&&d<.6)return{steer:0,throttle:0,brake:1};
  return{steer:steerTo(x,aim.p.x+aim.n.x*lat,aim.p.z+aim.n.z*lat),...pedals(x,vt)};}
 
 const baseManual=dcManualStep;
 dcManualStep=function(x,dt,input){const L=live;
+ // The pit entry and exit roads read as off track until the lane proper starts, so driving the
+ // pit road gave a track limits penalty. Keep the player clear of it there.
+ try{if(L?.dc&&x===L.player&&(x.pitStage||Math.abs(x.lane||0)>6.5)&&typeof dc32Mouth==='function'&&sc25Engine?.pit?.dc32&&dc32Mouth(sc25Engine,x.pos))x.cutAt=L.elapsed;}catch(_){}
  if(!input||!drives(L,x)){if(x&&x.ap73&&!L?.ap73)x.ap73=null;return baseManual(x,dt,input);}
  if(!x.ap73)x.ap73={assist:AI62.assist,rear:1,target:x.v,lastT:x.v,lane:clamp(x.lane,-7.2,7.2)};
  const st=x.ap73;
  if(x.pitNow&&!x.pitStage)st.box=true;
- const pp=pitPilot(L,x,st,dt);if(pp){st.lastT=x.v;st.lane=clamp(x.lane,-7.2,7.2);return baseManual(x,dt,{...input,...pp,reverse:false});}
+ const pp=pitPilot(L,x,st,dt);if(pp&&!pp.track){st.lastT=x.v;st.lane=clamp(x.lane,-7.2,7.2);return baseManual(x,dt,{...input,...pp,reverse:false});}
  if(x.pitStage){return baseManual(x,dt,input);}
  const p0=plan(L,x,dt);if(!p0)return baseManual(x,dt,input);
  st.lane=p0.lane;const p=shape(L,x,{...p0},st);
+ if(pp?.track){p.lane=ai68Clamp(sc25Engine,x.progress,pp.lane);p.target=Math.min(p.target??p.v,pp.vcap);p.v=Math.min(p.v,pp.vcap);}
  // The AI driver reads its own state from x.ai62 and the planner's target from x.ai62Target;
  // both are only lent to the car for this step, along with the style's grip use.
  const had=x.ai62,tgt=x.ai62Target,sty=racing(L)||L.stage!=='race'?STY[UI.style]:STY.neutral,keep={use:AI62.use,pace:AI62.pace,tgain:AI62.tgain};
