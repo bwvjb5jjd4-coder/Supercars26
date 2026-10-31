@@ -10,6 +10,9 @@ x,y,z=p.T;ax=np.abs(x);nothood=~HOOD[ys,xs]
 def hexc(h):return np.array([int(h[i:i+2],16) for i in (1,3,5)],float)
 NAVY=hexc('#1b1a55');ROYAL=hexc('#2b3ea6');MID=hexc('#4166cc');LIGHT=hexc('#86a8e8');PALE=hexc('#c9d8f4')
 WHITE=hexc('#f3f4f6');RED=hexc('#d6203a');YEL=hexc('#fcc800');INK=hexc('#121316');WINGB=hexc('#111216')
+# RB_SCHEME=pink paints the same design as the "Bathurst" pink livery (lv78): every blue becomes a pink, navy stickers go deep pink
+import os;PINK=os.environ.get('RB_SCHEME')=='pink'
+if PINK:NAVY=hexc('#e0187d');ROYAL=hexc('#ff4fa6');MID=hexc('#ff7dbd');LIGHT=hexc('#ffaed5');PALE=hexc('#ffdced');DEEP=(150,10,82)
 def c4(v):return tuple(int(t) for t in v)+(255,)
 C_NAVY,C_ROYAL,C_MID,C_LIGHT,C_PALE,C_WHITE,C_YEL=map(c4,(NAVY,ROYAL,MID,LIGHT,PALE,WHITE,YEL))
 def ss(e0,e1,v):t=np.clip((v-e0)/(e1-e0),0,1);return t*t*(3-2*t)
@@ -33,6 +36,8 @@ class Cv:
     def px(s,a,b):return ((a-s.a0)*S,(s.b1-b)*S)
     def put(s,logo,a,b,w,h=None,flip=False,rot=0):
         lg=Image.open(LG+logo+'.png').convert('RGBA') if isinstance(logo,str) else logo
+        if PINK and isinstance(logo,str) and logo.endswith('_n'):lg=recol(lg,DEEP)
+        if PINK and isinstance(logo,str) and logo in TONAL:lg=tone(lg)
         if flip:lg=lg.transpose(Image.FLIP_LEFT_RIGHT)
         W=int(w*S);H=int(W*lg.height/lg.width) if h is None else int(h*S)
         lg=lg.resize((W,H),Image.LANCZOS)
@@ -78,7 +83,15 @@ class Cv:
         rgb=np.where(smp[:,3:4]>0,smp[:,:3]/np.maximum(smp[:,3:4],1e-6)*255,0)
         global col
         col[k]=col[k]*(1-al[:,None])+rgb*al[:,None]
-def logo(f):return Image.open(LG+f+'.png').convert('RGBA')
+def logo(f):
+    im=Image.open(LG+f+'.png').convert('RGBA')
+    return tone(im) if PINK and f in TONAL else im
+# pink scheme: Red Bull marks go tonal, red -> deep berry and yellow/white -> white (the green channel tells them apart)
+TONAL=('bull','sun','twin','word','word_k')
+def tone(im):
+    a=np.asarray(im).astype(np.float32);t=np.clip((a[...,1]-40)/150,0,1)[...,None]
+    rgb=np.array(DEEP,np.float32)*(1-t)+WHITE.astype(np.float32)*t
+    return Image.fromarray(np.dstack([rgb,a[...,3:]]).clip(0,255).astype(np.uint8),'RGBA')
 def crop(im):return im.crop(im.getbbox())
 def recol(im,c):o=Image.new('RGBA',im.size,tuple(c)+(255,));o.putalpha(im.split()[3]);return o
 def row(parts,gap):
@@ -127,7 +140,7 @@ for sgn in (-1,1):
     # a deep-blue facet between navy and royal so the door steps into the guard band instead of a hard cut
     c.poly(F([(1.47,0.80),(1.40,0.80),(1.02,0.16),(1.07,0.16)]),c4((NAVY+ROYAL)/2))
     c.poly(F([(1.60,0.80),(1.47,0.80),(1.07,0.16),(1.16,0.16)]),C_ROYAL)
-    c.circle(f(0.80),0.605,0.31,C_YEL)
+    c.circle(f(0.80),0.605,0.31,C_WHITE if PINK else C_YEL)
     # lighter facets on the doors (the 2020 'fragment' pattern)
     c.poly(F([(0.95,0.95),(0.62,0.95),(0.80,0.86)]),C_ROYAL)
     c.poly(F([(0.40,0.95),(0.05,0.95),(0.18,0.84)]),C_ROYAL)
