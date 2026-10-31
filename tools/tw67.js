@@ -5,7 +5,7 @@
    run. The rubber level carries through the weekend (D.weekend.tw67) and the asphalt shows it.
    Tyres: each corner has its own temperature and wear. Temperature rises with load, sliding and
    speed and falls with airflow, so tyres are cold out of the garage, after a stop and behind the
-   safety car. Grip is lower out of the working window (cold or overheated) and falls as a tyre
+   safety car. Grip climbs with temperature up to the tyre's peak, drops well past the window and falls as a tyre
    wears, gently and then over a cliff. Softs warm faster and grip more but wear quicker; hards
    wear slowly and need more heat. Player and AI cars share the model (ai62 cars per wheel, the
    path-model cars through dcTyreGrip). x.rdWear and x.tyreTemp stay the averages, so strategy,
@@ -13,9 +13,9 @@
 (function(){
 const B=30,BW=.5,HALF=B*BW/2,P0=70,MK=260,CAP=160,KH=3.9,BASE=.00065;
 const COMP={
- Soft:{lo:82,hi:104,heat:1.08,wear:1,deg:.045,cliff:70,cliffK:.15,cold:.13},
- Hard:{lo:87,hi:113,heat:.92,wear:.57,deg:.025,cliff:80,cliffK:.12,cold:.15},
- Wet:{lo:45,hi:78,heat:1,wear:.5,deg:.03,cliff:76,cliffK:.12,cold:.09}};
+ Soft:{lo:82,hi:104,heat:1.08,wear:1,deg:.045,cliff:70,cliffK:.15,cold:.19},
+ Hard:{lo:87,hi:113,heat:.92,wear:.57,deg:.025,cliff:80,cliffK:.12,cold:.21},
+ Wet:{lo:45,hi:78,heat:1,wear:.5,deg:.03,cliff:76,cliffK:.12,cold:.13}};
 const TW={on:()=>!D?.settings?.tw67Off};
 const clampN=(v,a,b)=>v<a?a:v>b?b:v;
 const comp=x=>COMP[x.tyre]||COMP.Soft;
@@ -60,14 +60,17 @@ function twTyres(x,L){
  if(x.tw67&&x.tw67.L===L)return x.tw67;const t0=(L.tw67?.amb??30)+3,w=x.rdWear||0;
  return x.tw67={L,t:[t0,t0,t0,t0],w:[w,w,w,w],g:[1,1,1,1],rel:[1,1,1,1],mean:1,pick:0,pickF:1,mz:[0,0,0,0],vPrev:Math.abs(x.v||0),idx:x.idx|0,tyre:x.tyre,hot:0};
 }
-function twTempGrip(c,t){if(t<c.lo)return 1-c.cold*Math.pow(clampN((c.lo-t)/(c.lo-25),0,1),1.15);if(t>c.hi)return 1-.10*clampN((t-c.hi)/25,0,1.6);return 1;}
+// Warmer is faster all the way up to the tyre's peak (three quarters of the way through its
+// window); only well past the top of the window does heat start to cost grip.
+function twPeak(c){return c.hi-(c.hi-c.lo)*.25;}
+function twTempGrip(c,t){const pk=twPeak(c);if(t<pk)return 1-c.cold*Math.pow(clampN((pk-t)/(pk-25),0,1),1.25);if(t>c.hi+5)return 1-.10*clampN((t-c.hi-5)/25,0,1.6);return 1;}
 function twWearGrip(c,w){return 1-c.deg*w/100-c.cliffK*Math.pow(Math.max(0,(w-c.cliff)/(100-c.cliff)),2);}
 function twFresh(Ty,L){const t0=(L.tw67?.amb??30)+3;Ty.t=[t0,t0,t0,t0];Ty.w=[0,0,0,0];Ty.hot=0;}
 function twStepTyres(W,L,x,dt,metres){
  const Ty=twTyres(x,L),c=comp(x),v=Math.abs(x.v||0),T=L.tw67,amb=T?.amb??30,wetCool=L.weather==='Extremely Wet'?2.4:L.weather!=='Dry'?1.8:1;
  let ay=0,ax=0,sF=0,sR=0,lF=0,lR=0,sp=0,sided=false;
  if(x.ph47On&&x.ph47){const s=x.ph47;ay=s.ay||0;ax=s.ax||0;sF=s.slideF||0;sR=s.slideR||0;lF=s.lockF||0;lR=s.lockR||0;sp=s.spin||0;sided=true;}
- else{ay=x.pitStage||!T?0:v*v*T.k[((x.idx|0)%T.N+T.N)%T.N];ax=dt>0?clampN((v-Ty.vPrev)/dt,-30,15):0;}
+ else{ay=x.pitStage||!T?0:v*v*T.k[((x.idx|0)%T.N+T.N)%T.N]+Math.abs(x.ai76Ay||0);ax=dt>0?clampN((v-Ty.vPrev)/dt,-30,15):0;}
  Ty.vPrev=v;const g=9.81,gl=Math.min(3,Math.abs(ay)/g),gb=Math.max(0,-ax/g),ga=Math.max(0,ax/g),cool=(1+v/25)*wetCool,a=Math.exp(-cool/CAP*dt);
  let sum=0;
  for(let i=0;i<4;i++){
@@ -184,7 +187,7 @@ function twInstall(){
  if(typeof dcPaintHUD==='function'){const ph=dcPaintHUD;dcPaintHUD=function(){const r=ph.apply(this,arguments);try{twMfd();}catch(e){console.warn('tw67 mfd',e);}return r;};}
  if(typeof dc36DrawDash==='function'){const dd=dc36DrawDash;dc36DrawDash=function(W,L){const at=W?.dc36DashAt;const r=dd.apply(this,arguments);try{if(W&&W.dc36DashAt!==at&&L?.player?.tw67&&TW.on())twDash(W,L);}catch(e){console.warn('tw67 dash',e);}return r;};}
  // Settings switch (on by default).
- if(typeof dcSettingsFields==='function'){const sf=dcSettingsFields;dcSettingsFields=function(...args){return sf.apply(this,args)+`<div class="dc-card" style="margin-top:18px"><h3>Tyres and track</h3><label class="dc-checkbox"><input type="checkbox" ${TW.on()?'checked':''} onchange="D.settings.tw67Off=!this.checked;dcSave()">Tyre temperature, tyre wear and track evolution</label><p class="dc-muted">Cold tyres grip less until they warm up and overheated tyres slide. Tyres lose grip as they wear, softs faster than hards. The racing line rubbers in over the weekend, marbles build up off line and a damp track dries on the line first.</p></div>`;};}
+ if(typeof dcSettingsFields==='function'){const sf=dcSettingsFields;dcSettingsFields=function(...args){return sf.apply(this,args)+`<div class="dc-card" style="margin-top:18px"><h3>Tyres and track</h3><label class="dc-checkbox"><input type="checkbox" ${TW.on()?'checked':''} onchange="D.settings.tw67Off=!this.checked;dcSave()">Tyre temperature, tyre wear and track evolution</label><p class="dc-muted">Warmer tyres grip more, right up to their peak temperature, so weave on the formation lap and behind the safety car to build heat. Only badly overheated tyres slide. Tyres lose grip as they wear, softs faster than hards. The racing line rubbers in over the weekend, marbles build up off line and a damp track dries on the line first.</p></div>`;};}
 }
 
 // --- Displays -------------------------------------------------------------------------------
