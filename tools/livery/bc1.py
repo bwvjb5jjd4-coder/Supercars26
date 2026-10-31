@@ -50,7 +50,7 @@ def enc(img):
     return out.tobytes()
 def build(png,dst,webp):
     im=Image.open(png).convert('RGB');a=np.asarray(im,np.float64)
-    hdr=gzip.open('/home/claude/supercars26/assets/liveries/Holden_redbull.dds.gz.bin').read(128)
+    hdr=gzip.open('/home/claude/supercars26/assets/liveries/Holden_boost.dds.gz.bin').read(128)  # any 4096 DXT1 livery has the same header
     data=[hdr];lv=a
     for i in range(13):
         data.append(enc(lv));print(i,lv.shape,flush=True)

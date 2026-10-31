@@ -30,7 +30,7 @@ const shots=await p.evaluate(async([only,view])=>{
   o.traverse(c=>{if(c.isMesh){c.castShadow=true;c.frustumCulled=false;} if(c.isLOD){c.autoUpdate=true;}});
   // ground the car
   const bb=new T.Box3().setFromObject(o);ground.position.y=bb.min.y;
-  const cx=0,cz=0,cy=bb.min.y;
+  const cx=view.tx??0,cz=view.tz??0,cy=bb.min.y;   // tx/tz aim the camera at a point on the car
   const yaw=view.yaw??0.85,pitch=view.pitch??0.2,dist=view.dist??10.5;
   cam.position.set(cx+Math.sin(yaw)*Math.cos(pitch)*dist,cy+Math.sin(pitch)*dist+0.55,cz+Math.cos(yaw)*Math.cos(pitch)*dist);cam.lookAt(cx,cy+(view.ly??0.55),cz);
   R.render(sc,cam);R.render(sc,cam);
