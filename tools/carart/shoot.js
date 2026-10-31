@@ -2,6 +2,7 @@ const {chromium}=require('playwright');const fs=require('fs');
 const only=process.argv[2]?process.argv[2].split(','):null, view=JSON.parse(process.argv[3]||'{}');
 (async()=>{const b=await chromium.launch({args:['--use-gl=swiftshader','--enable-unsafe-swiftshader','--ignore-gpu-blocklist']});
 const p=await b.newPage({viewport:{width:1400,height:850}});
+if(view.livery)await p.addInitScript(l=>localStorage.setItem('lv78Liveries',l),JSON.stringify(view.livery));   // lv78 livery choice, e.g. {"redbull":"bathurst"}
 p.on('pageerror',e=>console.log('ERR',e.message));
 await p.goto('http://localhost:8765/index.html');
 await p.waitForFunction(()=>{const e=document.getElementById('ui26-enter');return e&&!e.disabled},null,{timeout:120000});
