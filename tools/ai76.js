@@ -28,6 +28,29 @@ dcPerformance=function(x,stage){
  const m=live?.ai76Mean;if(!m)return r;const dc=ai76DriverCar(x);return r/dc*(m+(dc-m)*AI76.spread);
 };
 
+// --- Racing line clean-up -----------------------------------------------------------------------
+// On some straights the line solver has nothing to anchor it and settles into a slalom (Symmons
+// Plains before the hairpin swung from -5.7 m to +5.7 m every few metres): cars there threw
+// themselves side to side and laid berserk skid marks. Wherever the line wiggles (goes back and
+// forth across a short window instead of sweeping one way), smooth it until it does not.
+function ai76Wiggle(o,i,N,h){let path=0;for(let j=-h;j<h;j++)path+=Math.abs(o[(i+j+1+N)%N]-o[(i+j+N)%N]);return path-Math.abs(o[(i+h)%N]-o[(i-h+N)%N]);}
+function ai76Dewiggle(W){
+ const R=W?.ai68;if(!R||R.ai76)return;const N=W.N,o=R.line,step=W.e.lengthKm*1000/N,h=Math.max(3,Math.round(12/step));let changed=false;
+ for(let pass=0;pass<200;pass++){const mark=new Uint8Array(N);let bad=0;
+  for(let i=0;i<N;i++)if(ai76Wiggle(o,i,N,h)>.6){bad++;for(let j=-h;j<=h;j++)mark[(i+j+N)%N]=1;}
+  if(!bad)break;changed=true;const q=Float32Array.from(o);
+  for(let i=0;i<N;i++)if(mark[i]){let s=0;for(let j=-h;j<=h;j++)s+=o[(i+j+N)%N];q[i]=clamp(s/(2*h+1),R.lo[i],R.hi[i]);}
+  o.set(q);}
+ R.ai76=true;if(!changed)return;
+ const {k,raw,ds}=ai68Shape(W,o);Object.assign(R,{k,raw,ds,len:ds.reduce((a,b)=>a+b,0)});
+ const near=new Uint8Array(N),tight=new Uint8Array(N);for(let i=0;i<N;i++){const gap=o[i]<0?R.wl[i]+o[i]:R.wh[i]-o[i];if(gap<AI68.tightGap)near[i]=1;}
+ for(let i=0;i<N;i++)if(near[i])for(let j=-12;j<=4;j++)tight[(i+j+N)%N]=1;R.tight=tight;
+ let centre=0;for(let i=0;i<N;i++)centre+=W.samples[i].p.distanceTo(W.samples[(i+1)%N].p);R.ratio=R.len/Math.max(1,centre);
+ W.racingLine=Array.from(o);W.ai62Lap=null;W.hd64Lap=null;W.ai76C=null;
+}
+const ai76Build=ai68Build;
+ai68Build=function(W){const r=ai76Build.apply(this,arguments);try{ai76Dewiggle(W);}catch(e){console.warn('ai76 line',e);}return r;};
+
 // --- Corners of the racing line -----------------------------------------------------------------
 // Apexes along the line (lap phase, curvature, which side the line runs at the apex), for passing
 // to the inside and for picking where a mistake happens.
