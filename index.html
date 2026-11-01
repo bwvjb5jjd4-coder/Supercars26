@@ -5636,7 +5636,7 @@ function ct48GcWalls(W){
  if(W.pit?.samples){const pit=W.pit,gs=pit.bays?.[0]?.side||pit.side;
   for(const s of [-1,1]){let run=[];const flush=()=>{if(run.length>1)out.pitLines.push(run);run=[];};
    for(let k=0;k<=480;k++){const f=k/480;if(s===gs&&f>.18&&f<.82){flush();continue;}const q=dc32PitAt(W,f),x=q.p.x+q.n.x*s*4.6,z=q.p.z+q.n.z*s*4.6;
-    if(W.nearest({x,z}).distance<8.2){flush();continue;}run.push({x,z,ox:q.n.x*s,oz:q.n.z*s});}
+    if(W.nearest({x,z}).distance<8.2||W.pitDistance(x,z)<4.2){flush();continue;}run.push({x,z,ox:q.n.x*s,oz:q.n.z*s});}
    flush();}}
  // Lane of the wall straight out from every sample (for run-off checks and scenery).
  const segs=ct48GcSegments(W,out);
