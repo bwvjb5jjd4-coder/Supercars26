@@ -9603,7 +9603,7 @@ window.IC59={reportIncident,openMfd,closeMfd,choose,move,adjust,state:M,opts:OPT
 })();
 </script><script id="pt61-pitstops">
 /* pt61 · Realistic pit stops and Bathurst co-drivers.
-   - Pit limiter: Xbox RB / L key. It is no longer automatic. Cross the 60 km/h line above 61 km/h in a race
+   - Pit limiter: Xbox RB / K key. It is no longer automatic. Cross the 60 km/h line above 61 km/h in a race
      and race control hands out a time penalty. It switches itself off once you rejoin the circuit.
    - Solid white pit entry and exit lines: cutting into the lane late or leaving it early is a penalty.
    - Hit your marks: a lollipop man waves you in, the HUD shows the distance to your box, and stopping off
@@ -9719,9 +9719,9 @@ function playerRules(L,dt){
  if(stage&&!S.wasStage&&!auto){const tele=moved>15||L.ic59Repair;S.visit={t0:L.elapsed,f0:q.f,tele,speeding:0,penalised:false,warned:false,serviced:false};
   if(!tele&&q.f>.22&&q.f<.5&&penalise(x,5,'Crossed the solid pit entry line.'))S.visit.penalised=true;}
  if(stage&&S.visit){const v=S.visit;v.lastF=q.f;if(x.dc32Serviced)v.serviced=true;
-  if(!auto&&!S.lim&&!v.warned&&x.dc33PitCommitted&&q.f<.12&&kmh>72){v.warned=true;say('Race engineer','Limiter! Limiter! Speed line coming up.',{cls:'warn',tag:'PIT LIMITER',text:'Press RB / L now',ms:2600});}
+  if(!auto&&!S.lim&&!v.warned&&x.dc33PitCommitted&&q.f<.12&&kmh>72){v.warned=true;say('Race engineer','Limiter! Limiter! Speed line coming up.',{cls:'warn',tag:'PIT LIMITER',text:'Press RB / K now',ms:2600});}
   if(!auto&&x.dc33PitCommitted&&q.f>=.12&&q.f<=.86&&kmh>TOL){v.speeding+=dt;v.top=Math.max(v.top||0,kmh);}else v.speeding=0;
-  if(v.speeding>.25&&!v.speedPen){v.speedPen=true;const over=v.top-LIMIT;if(!penalise(x,over>10?10:5,`Pit lane speeding, ${Math.round(v.top)} km/h.`)&&!racing(L))say('Race control',`Pit lane speeding, ${Math.round(v.top)} km/h. Use the limiter (RB / L).`);}
+  if(v.speeding>.25&&!v.speedPen){v.speedPen=true;const over=v.top-LIMIT;if(!penalise(x,over>10?10:5,`Pit lane speeding, ${Math.round(v.top)} km/h.`)&&!racing(L))say('Race control',`Pit lane speeding, ${Math.round(v.top)} km/h. Use the limiter (RB / K).`);}
  }
  if(!stage&&S.wasStage){const v=S.visit;S.visit=null;
   if(v&&!auto&&!v.tele&&v.lastF>.6&&v.lastF<.86&&moved<15)penalise(x,5,'Crossed the solid pit exit line.');
@@ -9976,7 +9976,7 @@ function paintHud(force){
  if(!L?.dc||L.paused||!L.player||!sc25Engine?.pit){if(!hud.hidden)hud.hidden=true;return;}
  const x=L.player,S=L.pt61||{},parts=[],W=sc25Engine,auto=L.dc33Auto;
  if(S.lim&&!auto)parts.push(`<div class="lim">Pit limiter <b>${Math.min(LIMIT,Math.round((x.v||0)*3.6))}</b></div>`);
- else if(x.pitStage&&x.dc33PitCommitted&&!auto&&!x.dc32Servicing)parts.push(`<div class="off">Limiter off · RB / L</div>`);
+ else if(x.pitStage&&x.dc33PitCommitted&&!auto&&!x.dc32Servicing)parts.push(`<div class="off">Limiter off · RB / K</div>`);
  if(x.pitStage&&!auto){const box=W.pit.bays[x.team.id],q=dc32PitNear(W,x.pos),long=(box.f-q.f)*W.pit.length,lat=q.lane*W.pit.side-8.1;
   if(x.dc32Servicing&&x.pt61Svc){const s=x.pt61Svc,t=L.elapsed-s.t0,ph=t<s.extra?'Back on marks':t<s.extra+s.tFuel?'Fuel '+Math.round(s.litres)+' L':t<s.extra+s.tFuel+s.tTyre?'Tyres':s.tSwap&&t<s.tSwap?'Driver change':s.tRep?'Repairs':'Checks';parts.push(`<div><span class="lp"></span>${ph} <b>${Math.max(0,x.pitClock||0).toFixed(1)}</b></div>`);}
   else if(S.board==='hold'||S.board==='go'||S.board==='crew')parts.push(`<div class="${S.board==='go'?'ok':''}"><span class="lp ${S.board==='go'?'go':''}"></span>${S.board==='go'?'Lollipop up · go':S.board==='crew'?'Crew clearing · hold':'Hold · car coming'}</div>`);
@@ -9989,9 +9989,9 @@ setInterval(paintHud,100);
 
 const baseHud=dcPaintHUD;
 dcPaintHUD=function(...a){const r=baseHud.apply(this,a);try{const L=live,x=L?.player,el=document.getElementById('dc-status');if(L?.dc&&x?.pitStage&&el&&!L.dc33Auto){const S=L.pt61||{},s=x.pt61Svc;
- el.textContent=x.dc32Servicing?'PIT STOP · '+Math.ceil(x.pitClock||0)+'s · HOLD BRAKE':x.dc32Serviced&&!x.pt61Released?(S.board==='crew'?'CREW CLEARING · WAIT FOR THE LOLLIPOP':S.board==='hold'?'LOLLIPOP DOWN · CAR COMING · HOLD':'LOLLIPOP UP · GO · FOLLOW PIT EXIT'):(S.lim?'PIT LIMITER ON':'PIT LIMITER OFF · RB / L')+' · '+(x.dc32Serviced?'FOLLOW PIT EXIT':'STOP ON YOUR MARKS');}}catch(_){}return r;};
+ el.textContent=x.dc32Servicing?'PIT STOP · '+Math.ceil(x.pitClock||0)+'s · HOLD BRAKE':x.dc32Serviced&&!x.pt61Released?(S.board==='crew'?'CREW CLEARING · WAIT FOR THE LOLLIPOP':S.board==='hold'?'LOLLIPOP DOWN · CAR COMING · HOLD':'LOLLIPOP UP · GO · FOLLOW PIT EXIT'):(S.lim?'PIT LIMITER ON':'PIT LIMITER OFF · RB / K')+' · '+(x.dc32Serviced?'FOLLOW PIT EXIT':'STOP ON YOUR MARKS');}}catch(_){}return r;};
 
-/* ---------- Input: RB / L toggles the limiter ---------- */
+/* ---------- Input: RB / K toggles the limiter ---------- */
 let prevRB=false;
 setInterval(()=>{let pad=null;try{pad=Array.from(navigator.getGamepads?.()||[]).find(p=>p?.connected)||null;}catch(_){}
  const down=!!pad?.buttons[5]?.pressed;if(down&&!prevRB&&live?.dc&&!live.paused)toggleLimiter();prevRB=down;},32);
@@ -12950,7 +12950,7 @@ document.addEventListener('keydown',e=>{if(L()&&!L().paused)return;if(!document.
 })();
 </script><script id="ap73-autopilot">
 /* ap73: Simulate (autopilot) for the whole session, with driving styles.
-   Press S (tap) or click the left stick (LS) to open the Simulate panel, then O (or A on the pad
+   Press L or click the left stick (LS) to open the Simulate panel, then O (or A on the pad
    while the panel is open) to hand your car to the race AI. It drives your car on screen, on the
    same tyre physics as the AI cars, until you press O again. It is your car: your damage, tyres,
    fuel and position.
@@ -13136,8 +13136,8 @@ function panelHtml(L){const on=!!L.ap73,x=L.player,n=neighbours(L,x);
  <button type="button" class="go${on?' stop':''}" onclick="AP73.toggle()"><span>${on?'Take the car back':'Start simulating'}</span><span><i class="k">O</i> <i class="k">A</i></span></button>
  <div class="sty">${st}</div>
  <div class="gaps">${gap('Ahead',n.f,n.sf,trend.f,true)}${gap('Behind',n.b,n.sb,trend.b,false)}</div>
- <div class="ft">Pit stops are yours: call them on the MFD (B / P) and the car boxes itself. Style: 1 2 3 or D-pad. Close: S or LS.</div></div>`;}
-function pillHtml(L){const on=!!L.ap73;return `<button type="button" class="pill${on?' on':''}" onclick="AP73.panel(true)">${on?'<i class="dot"></i>':''}<span>${on?'Simulating':'Simulate'}<small>${on?status(L):'Let the AI drive behind the safety car'}</small></span><i class="k">S</i><i class="k">LS</i></button>`;}
+ <div class="ft">Pit stops are yours: call them on the MFD (B / P) and the car boxes itself. Style: 1 2 3 or D-pad. Close: L or LS.</div></div>`;}
+function pillHtml(L){const on=!!L.ap73;return `<button type="button" class="pill${on?' on':''}" onclick="AP73.panel(true)">${on?'<i class="dot"></i>':''}<span>${on?'Simulating':'Simulate'}<small>${on?status(L):'Let the AI drive behind the safety car'}</small></span><i class="k">L</i><i class="k">LS</i></button>`;}
 function paint(){const L=live,host=document.querySelector('.dc-driving');
  if(!host||!offered(L)){$('ap73')?.remove();if(!L?.dc)UI.open=false;return;}
  sampleGaps(L);
@@ -13148,14 +13148,13 @@ function paint(){const L=live,host=document.querySelector('.dc-driving');
 AP.paint=paint;
 
 /* ---------- Keys and pad ---------- */
-// S is also the brake on WASD, so a quick tap opens the panel and holding it just brakes.
+// L opens the panel (Riley moved it off S, which is the brake on WASD). The keyboard limiter is on K (sc83).
 let sDown=0;
 const typing=e=>/INPUT|SELECT|TEXTAREA/.test(e.target?.tagName||'');
 document.addEventListener('keydown',e=>{const L=live;if(!L?.dc||L.paused||typing(e)||!offered(L))return;
- if(e.code==='KeyS'&&!e.repeat){sDown=performance.now();return;}
+ if(e.code==='KeyL'&&!e.repeat){e.preventDefault();AP.panel();return;}
  if(e.code==='KeyO'&&!e.repeat){e.preventDefault();AP.toggle();return;}
  if(UI.open&&!window.IC59?.state?.open){const k={Digit1:'aggressive',Digit2:'neutral',Digit3:'defensive',Numpad1:'aggressive',Numpad2:'neutral',Numpad3:'defensive'}[e.code];if(k){e.preventDefault();AP.style(k);}}});
-document.addEventListener('keyup',e=>{if(e.code!=='KeyS'||!sDown)return;const held=performance.now()-sDown;sDown=0;const L=live;if(!L?.dc||L.paused||typing(e)||!offered(L))return;if(held<280)AP.panel();});
 
 // While the panel is open (and the MFD is not), A and D-pad left/right belong to the panel.
 const prevGet=navigator.getGamepads?.bind(navigator);const masked=new Set();
@@ -13171,5 +13170,99 @@ setInterval(()=>{const L=live,pad=getPad();
   for(const i of [0,10,14,15])prev[i]=b(i);}
  else{if(pad)for(const i of [...masked])if(!pad.buttons[i]?.pressed)masked.delete(i);prev={};}
  try{paint();}catch(_){}},60);
+})();
+</script><script id="sc83-safety-car">
+/* sc83 · Rolling safety car + Simulate on L.
+   - The safety car no longer parks on the start line waiting for the field. The moment it is called
+     it pulls out at the line (just ahead of the leader if the leader is right there) and rolls off
+     at a slow pace. Every car catches up at a brisk caution pace, slots in single file behind the
+     car ahead (no overtaking) and the queue forms on the move. Once the leader is on its bumper the
+     safety car speeds up to its normal pace; when the whole field is formed (lapped cars shuffled
+     into race order) race control says so and the minimum lap starts. ic59 still runs the rest:
+     pace, the pit-in lap, green flag at the line.
+   - Simulate panel key: S -> L (S is the brake again, nothing else). The keyboard pit limiter moves
+     from L to K; the pad keeps RB for the limiter and LS for Simulate. */
+(()=>{
+'use strict';
+const ROLL_V=12,CATCH_V=60,SC_GAP=14,GAP=12,ACC=7,FORMED_GAP=40,FORMED_GAP_PLAYER=90;
+const S={log:[]};window.SC83=S;
+const lenM=L=>L.e.lengthKm*1000,frac=p=>((p%1)+1)%1;
+const behindSC=(L,x)=>((frac(L.ic59Sc.prog)-frac(x.progress)+1)%1)*lenM(L);
+const onTrack=L=>L.entrants.filter(x=>!x.retired&&!x.finished&&!x.garage&&!x.pitStage&&x.pos&&!(x===L.player&&L.ic59Repair));
+const manual=(L,x)=>x===L.player&&!L.dc33Auto&&!L.ap73;
+function place(x){const W=sc25Engine,q=W.at(x.progress);x.pos={x:q.p.x+q.n.x*x.lane,y:q.p.y,z:q.p.z+q.n.z*x.lane};x.yaw=Math.atan2(q.v.x,q.v.z);x.idx=Math.round(q.t*W.N)%W.N;}
+const radio=(m)=>{try{dcRadio('Race control',m);}catch(_){}};
+const ROLL_MSG='Safety car rolling from the line. Catch up and form a single queue behind it in race order. No overtaking.';
+const baseRadio=dcRadio;dcRadio=function(f,m){if(typeof m==='string')m=m.replace('Safety car waiting on the start line. Form up behind it in order, no overtaking.',ROLL_MSG);return baseRadio.call(this,f,m,...[].slice.call(arguments,2));};
+
+// Queue in track order behind the safety car: who is directly ahead of whom.
+// A car is queued when it is within FORMED_GAP of a queued car (or the safety car); the rest catch up.
+function queue(L){const cars=onTrack(L).map(x=>({x,b:behindSC(L,x)})).sort((a,b)=>a.b-b.b);const ahead=new Map(),queued=new Set();let chain=true;
+ cars.forEach((c,i)=>{ahead.set(c.x,i?cars[i-1].x:null);const g=i?c.b-cars[i-1].b:c.b;chain=chain&&g<FORMED_GAP+(i?0:20);if(chain)queued.add(c.x);});return {cars,ahead,queued};}
+function gapTo(L,x,a){return a?((frac(a.progress)-frac(x.progress)+1)%1)*lenM(L):behindSC(L,x);}
+
+function start(L){const sc=L.ic59Sc,lead=onTrack(L).sort((a,b)=>b.progress-a.progress)[0];
+ sc.phase='lead';sc.sc83={forming:true,t0:L.elapsed};sc.v=ROLL_V;
+ for(const x of L.entrants)x.ic59Through=false;
+ if(lead){const need=((lead.v||0)**2/(2*ACC)+40)/lenM(L);if(sc.prog-lead.progress<need)sc.prog=lead.progress+need;}
+ sc.start=sc.prog;if(L.scTrain){L.scTrain.progress=sc.prog;L.scTrain.phase='train';}
+ S.log.push(['deploy',+L.elapsed.toFixed(1),+(sc.prog-(lead?.progress||0)).toFixed(3)]);
+}
+function formed(L,q){if(!q.cars.length)return true;
+ return q.cars.every((c,i)=>{const g=i?c.b-q.cars[i-1].b:c.b;return g<(manual(L,c.x)?FORMED_GAP_PLAYER:FORMED_GAP);});}
+// Lapped cars that sit in the queue ahead of cars on a later lap swap slots into race order.
+function raceOrder(L,q){const ai=q.cars.filter(c=>!manual(L,c.x));const want=[...ai].sort((a,b)=>b.x.progress-a.x.progress);let moved=0;
+ const slots=ai.map(c=>c.b);want.forEach((c,i)=>{if(c===ai[i])return;const f=frac(L.ic59Sc.prog)-slots[i]/lenM(L);let p=Math.floor(c.x.progress)+frac(f);if(p-c.x.progress>.5)p-=1;if(c.x.progress-p>.5)p+=1;c.x.progress=p;c.x.lane=0;c.x.dc33Previous=null;place(c.x);moved++;});
+ for(const c of ai)c.x.v=c.x.speed=Math.min(c.x.v||0,L.ic59Sc.v+2),c.x.speed=c.x.v*3.6;return moved;}
+
+function tick(L){const sc=L.ic59Sc;if(!sc?.sc83?.forming)return;
+ const q=queue(L),first=q.cars[0];
+ // Slow roll until the leader is on the safety car's bumper, then ic59 brings it up to pace.
+ if(!first||first.b>120)sc.v=Math.min(sc.v,ROLL_V);
+ sc.start=sc.prog;L.safetyLeft=1;
+ const tooLong=L.elapsed-sc.sc83.t0>lenM(L)/(CATCH_V-ROLL_V)+60;
+ if(formed(L,q)||tooLong){const moved=raceOrder(L,q);sc.sc83.forming=false;sc.sc83.formedAt=sc.prog;
+  radio('Field formed behind the safety car. Minimum one lap.');S.log.push(['formed',+L.elapsed.toFixed(1),+(L.elapsed-sc.sc83.t0).toFixed(1),moved,tooLong]);}
+}
+
+/* ---------- Hooks ---------- */
+const basePhysics=dcPhysics;
+dcPhysics=function(dt,input,auto=false){const L=live;if(!L?.dc)return basePhysics(dt,input,auto);
+ if(L.ic59Sc?.phase==='lineup')start(L);
+ const sc=L.ic59Sc;S.q=sc?queue(L):null;
+ // Keep ic59 from taking the safety car in while the field is still forming, or less than half a lap after.
+ const hold=sc&&sc.phase==='lead'&&(sc.sc83?.forming||sc.prog-(sc.sc83?.formedAt??-9)<.5);
+ const rad=dcRadio;if(hold)dcRadio=function(f,m){if(/Safety car in this lap|stays out another lap/.test(m||''))return;return rad.apply(this,arguments);};
+ try{basePhysics(dt,input,auto);}finally{dcRadio=rad;S.q=null;}
+ if(live!==L)return;const s2=L.ic59Sc;
+ if(hold&&s2===sc&&sc.phase==='in'){sc.phase='lead';sc.pitU=0;}
+ if(s2?.phase==='lineup')start(L);
+ if(L.ic59Sc)tick(L);
+};
+const baseAI=dcAIStep;
+dcAIStep=function(x,dt){const L=live,sc=L?.ic59Sc;
+ if(!L?.dc||!sc?.sc83||sc.phase!=='lead'||x.pitStage||x.retired||x.finished||x.garage){return baseAI(x,dt);}
+ const q=S.q||queue(L);if(!q.ahead.has(x))return baseAI(x,dt);
+ const a=q.ahead.get(x),g0=gapTo(L,x,a);
+ if(!q.queued.has(x)&&g0>GAP+4){// not yet in the queue: catch up at a brisk caution pace (the game caps AI to 26 m/s under the safety car)
+  const tr=L.scTrain;L.scTrain=null;try{baseAI(x,dt);}finally{L.scTrain=tr;}x.v=Math.min(x.v,CATCH_V);}
+ else baseAI(x,dt);
+ // Never closer than the queue gap to the car (or safety car) ahead: brake on a smooth curve, no passing.
+ const g=gapTo(L,x,a),want=a?GAP:SC_GAP,va=a?(a.v||0):sc.v;
+ if(g<want*.6&&g<lenM(L)*.5){x.progress-=(want*.6-g)/lenM(L);place(x);}
+ const cap=Math.sqrt(Math.max(0,va*va+2*ACC*Math.max(0,g-want)));
+ // Catching up: other layers still slow cars under the safety car, so hold a floor at a caution pace
+ // (88% of the racing speed for this part of the track, never above CATCH_V).
+ if(!q.queued.has(x)&&!manual(L,x)){const s=sc25Engine.at(x.progress);x.v=Math.max(x.v,Math.min(CATCH_V,(s.speed||30)*.88,cap,(x.v||0)+6*dt));}
+ x.v=Math.min(x.v,cap);
+ if(g<120)x.lane+=Math.max(-1*dt,Math.min(1*dt,-x.lane));
+ x.speed=x.v*3.6;
+};
+
+/* ---------- Simulate on L, limiter on K ---------- */
+// ap73 listens on document; the limiter listens on window. Stop L reaching window, re-send K as L there.
+const typing=e=>/INPUT|SELECT|TEXTAREA/.test(e.target?.tagName||'');
+document.addEventListener('keydown',e=>{if(e.code==='KeyL'&&!e.sc83)e.stopPropagation();});
+document.addEventListener('keydown',e=>{if(e.code!=='KeyK'||e.repeat||typing(e))return;try{window.dispatchEvent(Object.assign(new KeyboardEvent('keydown',{code:'KeyL',key:'l'}),{sc83:true}));}catch(_){}});
 })();
 </script></body></html>

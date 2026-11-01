@@ -1,5 +1,5 @@
 /* ap73: Simulate (autopilot) for the whole session, with driving styles.
-   Press S (tap) or click the left stick (LS) to open the Simulate panel, then O (or A on the pad
+   Press L or click the left stick (LS) to open the Simulate panel, then O (or A on the pad
    while the panel is open) to hand your car to the race AI. It drives your car on screen, on the
    same tyre physics as the AI cars, until you press O again. It is your car: your damage, tyres,
    fuel and position.
@@ -185,8 +185,8 @@ function panelHtml(L){const on=!!L.ap73,x=L.player,n=neighbours(L,x);
  <button type="button" class="go${on?' stop':''}" onclick="AP73.toggle()"><span>${on?'Take the car back':'Start simulating'}</span><span><i class="k">O</i> <i class="k">A</i></span></button>
  <div class="sty">${st}</div>
  <div class="gaps">${gap('Ahead',n.f,n.sf,trend.f,true)}${gap('Behind',n.b,n.sb,trend.b,false)}</div>
- <div class="ft">Pit stops are yours: call them on the MFD (B / P) and the car boxes itself. Style: 1 2 3 or D-pad. Close: S or LS.</div></div>`;}
-function pillHtml(L){const on=!!L.ap73;return `<button type="button" class="pill${on?' on':''}" onclick="AP73.panel(true)">${on?'<i class="dot"></i>':''}<span>${on?'Simulating':'Simulate'}<small>${on?status(L):'Let the AI drive behind the safety car'}</small></span><i class="k">S</i><i class="k">LS</i></button>`;}
+ <div class="ft">Pit stops are yours: call them on the MFD (B / P) and the car boxes itself. Style: 1 2 3 or D-pad. Close: L or LS.</div></div>`;}
+function pillHtml(L){const on=!!L.ap73;return `<button type="button" class="pill${on?' on':''}" onclick="AP73.panel(true)">${on?'<i class="dot"></i>':''}<span>${on?'Simulating':'Simulate'}<small>${on?status(L):'Let the AI drive behind the safety car'}</small></span><i class="k">L</i><i class="k">LS</i></button>`;}
 function paint(){const L=live,host=document.querySelector('.dc-driving');
  if(!host||!offered(L)){$('ap73')?.remove();if(!L?.dc)UI.open=false;return;}
  sampleGaps(L);
@@ -197,14 +197,13 @@ function paint(){const L=live,host=document.querySelector('.dc-driving');
 AP.paint=paint;
 
 /* ---------- Keys and pad ---------- */
-// S is also the brake on WASD, so a quick tap opens the panel and holding it just brakes.
+// L opens the panel (Riley moved it off S, which is the brake on WASD). The keyboard limiter is on K (sc83).
 let sDown=0;
 const typing=e=>/INPUT|SELECT|TEXTAREA/.test(e.target?.tagName||'');
 document.addEventListener('keydown',e=>{const L=live;if(!L?.dc||L.paused||typing(e)||!offered(L))return;
- if(e.code==='KeyS'&&!e.repeat){sDown=performance.now();return;}
+ if(e.code==='KeyL'&&!e.repeat){e.preventDefault();AP.panel();return;}
  if(e.code==='KeyO'&&!e.repeat){e.preventDefault();AP.toggle();return;}
  if(UI.open&&!window.IC59?.state?.open){const k={Digit1:'aggressive',Digit2:'neutral',Digit3:'defensive',Numpad1:'aggressive',Numpad2:'neutral',Numpad3:'defensive'}[e.code];if(k){e.preventDefault();AP.style(k);}}});
-document.addEventListener('keyup',e=>{if(e.code!=='KeyS'||!sDown)return;const held=performance.now()-sDown;sDown=0;const L=live;if(!L?.dc||L.paused||typing(e)||!offered(L))return;if(held<280)AP.panel();});
 
 // While the panel is open (and the MFD is not), A and D-pad left/right belong to the panel.
 const prevGet=navigator.getGamepads?.bind(navigator);const masked=new Set();
