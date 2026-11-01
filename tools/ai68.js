@@ -42,6 +42,15 @@ function ai68Solve(W,lo,hi){
   const c0=K(a,i,b),keep=o[i];o[i]=keep+.05;const c1=K(a,i,b);o[i]=keep;const slope=(c1-c0)/.05;
   if(Math.abs(slope)>1e-9)o[i]=clamp(keep+(target-c0)/slope*.9,lo[i],hi[i]);
  }
+ // The stride-3 pass runs as three interleaved chains; on long straights with no curvature to
+ // anchor them they can settle at different offsets and leave a zig-zag (seen on Newcastle's
+ // 1.9 m samples). Wherever the line jumps between neighbouring samples, smooth it locally,
+ // within the same road bounds, until it is continuous again.
+ for(let pass=0;pass<60;pass++){const mark=new Uint8Array(N);let bad=0;
+  for(let i=0;i<N;i++)if(Math.abs(o[i]-o[(i+N-1)%N])>.45){bad++;for(let j=-14;j<=14;j++)mark[(i+j+N)%N]=1;}
+  if(!bad)break;const q=Float32Array.from(o);
+  for(let i=0;i<N;i++)if(mark[i]){let s=0;for(let j=-3;j<=3;j++)s+=o[(i+j+N)%N];q[i]=clamp(s/7,lo[i],hi[i]);}
+  o.set(q);}
  return o;
 }
 // Signed curvature and segment length of the racing line itself.
