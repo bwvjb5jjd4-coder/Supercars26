@@ -13512,6 +13512,13 @@ function label(n){try{const ev=(typeof EVENTS!=='undefined'&&EVENTS[n.round])||n
 let lastOldRaw=null,banner=null;
 proto.setItem=function(k,v){
  if(this!==LS||(k!==KEY&&k!==KEY+'_backup'))return rawSet.apply(this,arguments);
+ const prog=n=>(n.year||0)*1000+(n.day||0);
+ if(k===KEY||k===KEY+'_backup'){const cur=parse(get(KEY));const nw=parse(v);
+  // Stale tab guard: an older copy of the SAME career (another tab, or a tab closing) never
+  // overwrites a newer save. Restore/import/new career set SV85.allowOlder.
+  if(cur&&nw&&cur.pid===nw.pid&&prog(nw)<prog(cur)&&!SV85.allowOlder){
+   console.warn('sv85: blocked an older copy of this career (day '+nw.day+') from overwriting the newer save (day '+cur.day+')');
+   if(k===KEY)staleTab(cur);return;}}
  if(k===KEY){const oldRaw=get(KEY);
   if(oldRaw&&oldRaw!==lastOldRaw&&oldRaw!==v){const old=parse(oldRaw),nw=parse(v);
    if(old&&nw&&(stamp(old)!==stamp(nw)||old.pid!==nw.pid))keepCopy(old,oldRaw);}
@@ -13519,6 +13526,7 @@ proto.setItem=function(k,v){
  try{const r=rawSet.apply(this,arguments);if(banner){banner.remove();banner=null;}return r;}
  catch(e){showBanner(e);throw e;}
 };
+function staleTab(cur){try{if(typeof live!=='undefined'&&live)return;if(typeof D!=='undefined'&&D&&D.pid===cur.pid){D=cur;try{dcBindWorld();}catch(_){}try{dcRender();}catch(_){}try{dcToast('This tab was out of date. Your latest career has been loaded.');}catch(_){}}}catch(_){}}
 function showBanner(e){try{if(banner)return;banner=document.createElement('div');banner.id='sv85-banner';
  banner.style.cssText='position:fixed;left:50%;top:14px;transform:translateX(-50%);z-index:100000;background:#b3261e;color:#fff;font:600 15px system-ui;padding:12px 18px;border-radius:10px;box-shadow:0 6px 24px #0008;display:flex;gap:14px;align-items:center;max-width:92vw';
  banner.innerHTML='<span>Your career is NOT being saved: the browser refused ('+String(e&&e.name||'storage error')+'). Export it now so you don\'t lose progress.</span>';
@@ -13528,12 +13536,13 @@ function showBanner(e){try{if(banner)return;banner=document.createElement('div')
  document.body.appendChild(banner);}catch(_){}}
 // --- 2: Settings list -------------------------------------------------------------------
 function list(){return histKeys().reverse().map(k=>{const s=get(k)||'';const i=s.indexOf('\n');let m={};try{m=JSON.parse(s.slice(0,i));}catch(_){}return {key:k,...m};});}
+function older(fn){SV85.allowOlder=true;try{return fn();}finally{SV85.allowOlder=false;}}
 function restore(k){const s=get(k);if(!s)return false;const n=parse(s.slice(s.indexOf('\n')+1));if(!n)return false;
  if(typeof live!=='undefined'&&live)return false;
  try{const cur=get(KEY);if(cur)rawSet.call(LS,UNDO,cur);}catch(_){}
- D=n;try{dcBindWorld();}catch(_){}dcSave();try{dcTab='Home';}catch(_){}dcRender();try{dcToast('Restored: '+label(n));}catch(_){}return true;}
-function undo(){const s=get(UNDO);const n=parse(s);if(!n)return false;D=n;try{dcBindWorld();}catch(_){}dcSave();dcRender();return true;}
-window.SV85={list,restore,undo,keepNow(){const s=get(KEY),n=parse(s);return n?keepCopy(n,s):false;}};
+ D=n;try{dcBindWorld();}catch(_){}older(()=>{dcSave();try{rf41WriteSave();}catch(_){}});try{dcTab='Home';}catch(_){}dcRender();try{dcToast('Restored: '+label(n));}catch(_){}return true;}
+function undo(){const s=get(UNDO);const n=parse(s);if(!n)return false;D=n;try{dcBindWorld();}catch(_){}older(()=>{dcSave();try{rf41WriteSave();}catch(_){}});dcRender();return true;}
+window.SV85={allowOlder:false,list,restore,undo,keepNow(){const s=get(KEY),n=parse(s);return n?keepCopy(n,s):false;}};
 const esc=t=>String(t??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function card(){const L=list(),u=parse(get(UNDO));
  const when=t=>{try{return new Date(t).toLocaleString([], {day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});}catch(_){return '';}};
@@ -13548,6 +13557,10 @@ if(typeof dcRender==='function'){const base=dcRender;dcRender=function(){const o
    if(sec&&sec.parentElement)sec.parentElement.insertBefore(w.firstElementChild,sec.nextSibling);else host.appendChild(w.firstElementChild);}}}catch(e){console.warn('sv85 card',e);}
  return out;};
  try{if(typeof render!=='undefined'&&render===base)render=dcRender;}catch(_){}}
+// Import is an explicit choice: allow it to replace a newer save (the current one is kept as a round copy).
+if(typeof dcImport==='function'){const bi=dcImport;dcImport=async function(f){if(!f)return;let txt='';try{txt=await f.text();}catch(_){}
+ const n=parse(txt),cur=get(KEY);if(cur){try{rawSet.call(LS,UNDO,cur);}catch(_){}}
+ SV85.allowOlder=true;try{return await bi.call(this,{text:async()=>txt});}finally{try{rf41WriteSave();}catch(_){}SV85.allowOlder=false;}};}
 // Keep one copy of whatever career is loaded right now, so the first round change isn't the first backup.
 try{const s=get(KEY),n=parse(s);if(n&&!histKeys().some(k=>k.startsWith(HIST+stamp(n)+'_')))keepCopy(n,s);}catch(_){}
 })();
