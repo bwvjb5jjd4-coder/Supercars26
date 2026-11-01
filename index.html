@@ -13277,6 +13277,8 @@ document.addEventListener('keydown',e=>{if(e.code!=='KeyK'||e.repeat||typing(e))
      and its crew repairs it, so it loses a big chunk of time but rejoins.
    - Pit repairs (every car, the player too): a car that comes in with more than 50% damage can only
      be patched back to 25%. Damage of 50% or less is still fully repaired.
+   - The safety car queue being shuffled into race order no longer makes the stuck-car rescue fire on
+     the whole field.
    - Fewer accidents: an AI car closing fast on a slower car right in front (same lane) eases off
      instead of driving into the back of it. */
 (()=>{
@@ -13377,8 +13379,12 @@ dcPhysics=function(dt,input,auto=false){
  for(const x of L.entrants)if(x.cr84){x.ic59Ghost=Math.max(x.ic59Ghost||0,1);x.st69Trail=null;}
  const r=basePhysics(dt,input,auto);if(live!==L)return r;
  for(const x of L.entrants)if(x.cr84){if(L.stage!=='race'||L.finished){x.cr84=null;x.pitStage=null;continue;}recover(L,x,dt);}
- watch(L);repairs(L);return r;
+ watch(L);repairs(L);settle(L);return r;
 };
+// When sc83 shuffles the queue into race order it moves cars along the track in one go. st69 reads that
+// as cars that covered no ground and "rescues" the whole field; wipe its trail so it starts fresh.
+function settle(L){const log=window.SC83?.log;if(!log)return;const n=log.filter(e=>e[0]==='formed').length;
+ if(n!==(L.cr84Formed||0)){L.cr84Formed=n;L.st69Lineup=L.elapsed;for(const x of L.entrants){x.st69Trail=null;x.st69Still=0;}}}
 const baseLaunch=dcLaunch;
 dcLaunch=function(...args){const r=baseLaunch(...args),L=live;if(L?.dc)for(const x of L.entrants){x.cr84=null;x.cr84Hit=null;x.cr84Dmg=undefined;x.cr84Mem=null;x.cr84Pit=null;if(x.pitStage==='cr84')x.pitStage=null;}return r;};
 })();
