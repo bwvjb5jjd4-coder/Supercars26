@@ -31,10 +31,10 @@ MAT = {'black': 'trim', 'carpaint': 'paint', 'windowglass': 'glass', 'clearglass
        'brakedisk': 'rotor', 'tire': 'rubber', 'rim': 'rim', 'redglass': 'tail', 'red': 'red',
        'Material__1': 'plate', 'Material__2': 'plateink', 'Material__3': 'plateink', 'Material__4': 'plateink'}
 # Triangle budgets for the whole car (wheel parts share theirs across the four corners).
-BUDGET = {'paint': 60000, 'trim': 18000, 'chrome': 9000, 'glass': 2400, 'lens': 5200, 'reverse': 1400,
+BUDGET = {'seat': 5000, 'dash': 2600, 'door': 1800, 'headliner': 900, 'carpet': 1400, 'paint': 60000, 'trim': 18000, 'chrome': 9000, 'glass': 2400, 'lens': 5200, 'reverse': 1400,
           'amber': 400, 'mirror': 500, 'interior': 7000, 'metal': 2600, 'rotor': 1200, 'rubber': 5600,
           'rim': 9000, 'tail': 7000, 'red': 900, 'plate': 600, 'plateink': 2400, 'reflector': 2600}
-CREASE = {'rubber': 60, 'rim': 50, 'interior': 60, 'metal': 60, 'rotor': 60}
+CREASE = {'seat': 60, 'dash': 60, 'door': 60, 'headliner': 60, 'carpet': 60, 'rubber': 60, 'rim': 50, 'interior': 60, 'metal': 60, 'rotor': 60}
 WHEEL_PARTS = ('rubber', 'rim', 'rotor')
 ERROR = .0035  # relative to the part's size: about 1.5 cm on a body shell
 
@@ -123,17 +123,87 @@ def transfer_normals(v, n, src_v, src_n):
     return out
 
 
-def chunks(v, f, n, limit=65000):
+def chunks(v, f, n, ao, limit=65000):
     """Split a part into pieces under the uint16 index limit."""
     if len(v) <= limit:
-        yield v, f, n
+        yield v, f, n, ao
         return
     order = np.argsort(v[f].mean(1)[:, 2])
     step = max(1, len(f) * limit // (len(v) * 2))
     for s in range(0, len(f), step):
         ff = f[order[s:s + step]]
         used, inv = np.unique(ff.ravel(), return_inverse=True)
-        yield v[used], inv.reshape(-1, 3), n[used]
+        yield v[used], inv.reshape(-1, 3), n[used], ao[used]
+
+
+def cabin_groups(G, F, cabin):
+    """Split the pack's one-material cabin into dash, seats, door trims, headlining and carpet by connected
+    piece, and drop its left-hand-drive steering wheel and column (the game builds a right-hand-drive VE
+    wheel and dash detail). Records the dash and seat bounds so the cabin detail can be placed per body."""
+    m = trimesh.Trimesh(G, F, process=False)
+    m.merge_vertices()
+    labels = trimesh.graph.connected_component_labels(m.face_adjacency, node_count=len(F))
+    out = {}
+    for lab in np.unique(labels):
+        ff = F[labels == lab]
+        q = G[np.unique(ff)]
+        lo, hi = q.min(0), q.max(0)
+        ctr = (lo + hi) / 2
+        if lo[0] > .15 and hi[0] < .75 and lo[2] > .38 and hi[2] < .9 and lo[1] > .5 and hi[1] < 1.05 and len(ff) > 1000:
+            cabin['dropped_wheel'] = [lo.tolist(), hi.tolist()]
+            continue
+        if lo[1] > 1.28:
+            g = 'headliner'
+        elif min(abs(lo[0]), abs(hi[0])) > .7 and np.sign(lo[0]) == np.sign(hi[0]):
+            g = 'door'
+        elif lo[2] > .45 and hi[0] - lo[0] > 1.2:
+            g = 'dash'
+            cabin['dash'] = [lo.tolist(), hi.tolist()]
+        elif lo[2] > .45:
+            g = 'dash'
+        elif hi[2] - lo[2] > 2.0:
+            g = 'carpet'
+        elif lo[1] > 1.18 and abs(ctr[0]) < .2 and lo[2] > 0:
+            g = 'trim'
+        else:
+            g = 'seat'
+            if hi[2] > -.5 and ctr[0] < -.1 and hi[1] - lo[1] > .3:
+                cabin.setdefault('seats', []).append([lo.tolist(), hi.tolist()])
+        out.setdefault(g, []).append(ff)
+    return [(g, np.concatenate(v)) for g, v in out.items()]
+
+
+def bake_ao(parts, rays=24, reach=.55):
+    """Ambient occlusion per vertex (embree ray casts against the whole car), so panel gaps, arches,
+    grille, footwells and seat creases darken the way real light does."""
+    solid = [p for p in parts if p['mat'] not in ('glass', 'lens', 'reverse', 'tail', 'amber', 'shadow')]
+    V = np.concatenate([p['v'] for p in solid]); offs = np.cumsum([0] + [len(p['v']) for p in solid])
+    Fa = np.concatenate([p['f'] + o for p, o in zip(solid, offs[:-1])])
+    scene = trimesh.Trimesh(V, Fa, process=False)
+    ray = trimesh.ray.ray_pyembree.RayMeshIntersector(scene) if trimesh.ray.has_embree else scene.ray
+    rng = np.random.default_rng(7)
+    u1, u2 = rng.random(rays), rng.random(rays)
+    # cosine-weighted hemisphere directions around +Z
+    local = np.stack([np.sqrt(u1) * np.cos(2 * np.pi * u2), np.sqrt(u1) * np.sin(2 * np.pi * u2), np.sqrt(1 - u1)], 1)
+    for p in parts:
+        v, n = p['v'].astype(np.float64), p['n'].astype(np.float64)
+        n = n / (np.linalg.norm(n, axis=1, keepdims=True) + 1e-9)
+        if p['mat'] in ('glass', 'lens', 'reverse', 'tail', 'amber', 'shadow') or not len(v):
+            p['ao'] = np.full(len(v), 255, np.uint8)
+            continue
+        a = np.where(np.abs(n[:, 0:1]) < .9, np.array([[1., 0, 0]]), np.array([[0, 1., 0]]))
+        t = np.cross(n, a); t /= np.linalg.norm(t, axis=1, keepdims=True); b = np.cross(n, t)
+        dirs = (local[None, :, 0:1] * t[:, None] + local[None, :, 1:2] * b[:, None] + local[None, :, 2:3] * n[:, None]).reshape(-1, 3)
+        orig = np.repeat(v + n * .004, rays, 0)
+        hit = np.zeros(len(dirs), bool)
+        for s0 in range(0, len(dirs), 400000):
+            sl = slice(s0, s0 + 400000)
+            loc, idx_ray, _ = ray.intersects_location(orig[sl], dirs[sl], multiple_hits=False)
+            if len(idx_ray):
+                d = np.linalg.norm(loc - orig[sl][idx_ray], axis=1)
+                hit[s0 + idx_ray[d < reach]] = True
+        occ = hit.reshape(len(v), rays).mean(1)
+        p['ao'] = np.clip(255 * (1 - .82 * occ), 0, 255).astype(np.uint8)
 
 
 def build(car):
@@ -157,6 +227,7 @@ def build(car):
 
     buckets, tot = {}, {}
     body_shadow, plate_pts, lamp_pts = [], [], {}
+    cabin = {}
     for c, P, N, F in prims:
         G = tf(P)
         cen = G[F].mean(1)
@@ -169,12 +240,14 @@ def build(car):
             lamp = ((cen[:, 2] > 1.95) & (cen[:, 1] > .58) & (cen[:, 1] < 1.02) & (np.abs(cen[:, 0]) > .38)) | \
                    ((cen[:, 2] < -1.95) & (cen[:, 1] > .5) & (np.abs(cen[:, 0]) > .3))
             groups += [('reflector', F[lamp]), ('chrome', F[~lamp])]
+        elif c == 'interior':
+            groups += cabin_groups(G, F, cabin)
         else:
             groups.append((c, F))
         for g, ff in groups:
             if not len(ff):
                 continue
-            if g in ('paint', 'glass'):
+            if g in ('paint', 'glass', 'trim'):
                 body_shadow.append((G, N, ff))
             if g in ('plate', 'plateink'):
                 # Number plates are redrawn at runtime (the pack's say HUMSTER3D); keep only their outline.
@@ -215,6 +288,8 @@ def build(car):
             centres[w] = [float((a[0] + b[0]) / 2), float((a[1] + b[1]) / 2), float((a[2] + b[2]) / 2), float((b[1] - a[1]) / 2)]
         print(f'  {key:6s} {c:10s} wheel {w:2d}: {n:7d} -> {len(f2):6d} tris, {len(v2)} verts')
         parts.append({'mat': c, 'wheel': w, 'v': v2, 'f': f2, 'n': n2})
+    print(f'  {key:6s} baking ambient occlusion...')
+    bake_ao(parts)
     for p in parts:
         if p['wheel'] >= 0:
             p['v'] = p['v'] - np.array(centres[p['wheel']][:3], np.float32)
@@ -223,9 +298,9 @@ def build(car):
     for G, N, ff in body_shadow:
         used, inv = np.unique(ff.ravel(), return_inverse=True)
         vs.append(G[used]); fs.append(inv.reshape(-1, 3) + off); off += len(used)
-    sv, sf = decimate(np.concatenate(vs), np.concatenate(fs), 3000, error=.012)
+    sv, sf = decimate(np.concatenate(vs), np.concatenate(fs), 4000, error=.01)
     sv, sf, sn = crease_mesh(sv, sf, 80)
-    parts.append({'mat': 'shadow', 'wheel': -1, 'v': sv, 'f': sf, 'n': sn})
+    parts.append({'mat': 'shadow', 'wheel': -1, 'v': sv, 'f': sf, 'n': sn, 'ao': np.full(len(sv), 255, np.uint8)})
     print(f'  {key:6s} shadow: {len(sf)} tris')
 
     # Plate rectangles (centre, outward normal, right, up, width, height) and lamp centres for the bulbs.
@@ -261,7 +336,7 @@ def build(car):
     allv = np.concatenate([p['v'] for p in parts if p['wheel'] < 0 and p['mat'] == 'paint'])
     blo, bhi = allv.min(0), allv.max(0)
     header = {'version': 1, 'key': key, 'wheels': [centres[i] for i in range(4)], 'roof': float(bhi[1]),
-              'bounds': [blo.tolist(), bhi.tolist()], 'plates': plates, 'lamps': lamps, 'parts': []}
+              'bounds': [blo.tolist(), bhi.tolist()], 'plates': plates, 'lamps': lamps, 'cabin': cabin, 'parts': []}
     blobs, off = [], 0
 
     def push(arr):
@@ -270,12 +345,13 @@ def build(car):
         blobs.append(b + b'\0' * pad); s = off; off += len(b) + pad
         return s
     for p in parts:
-        for v, f, nn in chunks(p['v'], p['f'], p['n']):
+        for v, f, nn, ao in chunks(p['v'], p['f'], p['n'], p['ao']):
             nn = nn / (np.linalg.norm(nn, axis=1, keepdims=True) + 1e-9)
             e = {'mat': p['mat'], 'wheel': p['wheel'], 'vcount': len(v), 'icount': int(f.size)}
             e['pos'] = push(np.asarray(v, np.float32))
             e['nor'] = push(np.round(nn * 127).astype(np.int8))
             e['idx'] = push(np.asarray(f, np.uint16).ravel())
+            e['ao'] = push(np.asarray(ao, np.uint8))
             header['parts'].append(e)
     hj = json.dumps(header, separators=(',', ':')).encode()
     hj += b' ' * ((-len(hj)) % 4)

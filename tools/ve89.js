@@ -36,7 +36,8 @@ function load(key){
   const res=await fetch(CARS[key].file);if(!res.ok)throw Error('VE model failed to load ('+res.status+')');
   const buf=await new Response(new Blob([await res.arrayBuffer()]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();
   const hlen=new DataView(buf).getUint32(0,true),head=JSON.parse(new TextDecoder().decode(new Uint8Array(buf,4,hlen))),base=4+hlen;
-  for(const p of head.parts){p.position=new Float32Array(buf,base+p.pos,p.vcount*3);p.normal=new Int8Array(buf,base+p.nor,p.vcount*3);p.index=new Uint16Array(buf,base+p.idx,p.icount);}
+  for(const p of head.parts){p.position=new Float32Array(buf,base+p.pos,p.vcount*3);p.normal=new Int8Array(buf,base+p.nor,p.vcount*3);p.index=new Uint16Array(buf,base+p.idx,p.icount);
+   if(p.ao!==undefined){const a=new Uint8Array(buf,base+p.ao,p.vcount),c=new Uint8Array(p.vcount*3);for(let i=0;i<p.vcount;i++)c[i*3]=c[i*3+1]=c[i*3+2]=a[i];p.color=c;}}
   VE89.data[key]=head;return head;
  })();
 }
@@ -122,12 +123,27 @@ function plateTexture(text){
  const t=new T.CanvasTexture(c);t.colorSpace=T.SRGBColorSpace;t.anisotropy=8;return t;
 }
 const PLATES={sedan:'VE·SSV',ute:'SS·UTE',wagon:'SV·WGN'};
+// Black leather: fine grain plus the pleated inserts and stitch lines of the SS-V seats.
+function leatherMaterial(color){
+ const m=new T.MeshStandardMaterial({color,roughness:.55,metalness:0,envMapIntensity:.7});
+ m.onBeforeCompile=sh=>{objPos(sh);
+  sh.fragmentShader=sh.fragmentShader.replace('#include <roughnessmap_fragment>',`#include <roughnessmap_fragment>
+  float gr=ve89N(vVeP*1800.);float ins=step(abs(fract(abs(vVeP.x)*16.+.5)-.5),.035);
+  roughnessFactor=clamp(roughnessFactor+(gr-.5)*.25+ins*.2,0.,1.);diffuseColor.rgb*=(.9+.2*gr)*(1.-ins*.45);`);};
+ m.customProgramCacheKey=()=>'ve89leather';
+ return m;
+}
 function materials(key,paintKey){
  const P=PAINTS[paintKey]||PAINTS[CARS[key].paint],std=o=>new T.MeshStandardMaterial(o);
  const M={
   paint:paintMaterial(P),
   trim:grainMaterial('#0d0e10',.62,900,.22),
   interior:grainMaterial('#1c1d20',.78,600,.18),
+  dash:grainMaterial('#16171a',.72,1100,.22),
+  door:grainMaterial('#151619',.66,900,.2),
+  seat:leatherMaterial('#121214'),
+  headliner:grainMaterial('#1b1b1d',.95,1600,.1),
+  carpet:grainMaterial('#0f1011',.98,2400,.1),
   glass:new T.MeshStandardMaterial({color:'#0b1214',metalness:.15,roughness:.08,transparent:true,opacity:.58,depthWrite:false,envMapIntensity:1.3}),
   chrome:std({color:'#e6e9ec',metalness:1,roughness:.08,envMapIntensity:1.3}),
   reflector:reflectorMaterial(),
@@ -143,6 +159,7 @@ function materials(key,paintKey){
   plateink:std({color:'#14161c',roughness:.5}),
   shadow:new T.MeshBasicMaterial({colorWrite:false,depthWrite:false})
  };
+ for(const k in M)if(k!=='shadow')M[k].vertexColors=true;
  return M;
 }
 VE89.materials=materials;
@@ -158,6 +175,8 @@ function fill(g,data,key,paintKey,E){
  for(const p of data.parts){
   const geo=new T.BufferGeometry();geo.setAttribute('position',new T.BufferAttribute(p.position,3));geo.setAttribute('normal',new T.BufferAttribute(p.normal,3,true));
   geo.setIndex(new T.BufferAttribute(p.index,1));geo.computeBoundingSphere();
+  // Baked ambient occlusion rides in the vertex colour (it multiplies the diffuse colour).
+  if(p.color)geo.setAttribute('color',new T.BufferAttribute(p.color,3,true));
   const m=new T.Mesh(geo,M[p.mat]||M.trim);m.userData.ve89Part=p.mat;m.name='VE '+p.mat;
   if(p.mat==='shadow'){m.castShadow=true;m.receiveShadow=false;m.renderOrder=-1;}
   else{m.castShadow=false;m.receiveShadow=p.mat==='paint'||p.mat==='trim';m.onBeforeRender=envOn;m.onAfterRender=envOff;}
@@ -180,7 +199,8 @@ function fill(g,data,key,paintKey,E){
    const pool=new T.Mesh(new T.PlaneGeometry(2.2,8),new T.MeshBasicMaterial({map:sc28LightTexture(E,true),color:'#fff1df',transparent:true,depthWrite:false,blending:T.AdditiveBlending,opacity:.45,polygonOffset:true,polygonOffsetFactor:-2}));pool.rotation.x=-Math.PI/2;pool.position.set(side*.66,.035,front+3.6);lights.add(pool);
   }
  }
- g.userData.ve89={M,wheels,lights,body,brake:0,reverse:0,head:0};
+ const cabin=buildCabin(g,data,key,body);
+ g.userData.ve89={M,wheels,lights,body,cabin,brake:0,reverse:0,head:0};
  g.userData.ve89Built=true;
 }
 function makeCar(key,paintKey,E){
@@ -205,6 +225,101 @@ function roll(g,x,dt){
  for(const w of V.wheels){w.spin.rotation.x=(w.spin.rotation.x+v/w.spin.userData.radius)%(Math.PI*2);if(w.front)w.steer.rotation.y+=(steer-w.steer.rotation.y)*Math.min(1,(dt||1/60)*14);}
 }
 
+/* ---------- cabin: a right-hand-drive VE Series 2 SS-V interior ----------
+   The pack's cabin is a left-hand-drive placeholder, so its wheel is dropped at build time and the driver's
+   side is rebuilt from Riley's photos: twin red-lit dials under a hood, the black centre stack with the red
+   display pod, vents, hazard switch, Blaupunkt head unit and climate knobs, a three-spoke leather wheel with
+   the lion badge, column stalks, the auto shifter, handbrake, alloy pedals and the rear-view mirror.
+   Positions are measured on the sedan and shifted by each body's dash position. */
+const CABIN={dials:'assets/roadcars/cabin/dials.webp',stack:'assets/roadcars/cabin/stack.webp',pod:'assets/roadcars/cabin/pod.webp',badge:'assets/roadcars/cabin/badge.webp'};
+const TEX={};
+function tex(k){if(TEX[k])return TEX[k];const t=new T.TextureLoader().load(CABIN[k]);t.colorSpace=T.SRGBColorSpace;t.anisotropy=8;t.userData.ve89Keep=true;return TEX[k]=t;}
+const STACK_Z=[[.40,.582],[.5,.59],[.55,.6],[.6,.611],[.65,.623],[.7,.635],[.75,.651],[.8,.673],[.84,.73],[.88,.79]];
+function stackZ(y){for(let i=1;i<STACK_Z.length;i++)if(y<=STACK_Z[i][0]){const[a,p]=STACK_Z[i-1],[b,q]=STACK_Z[i];return p+(q-p)*(y-a)/(b-a);}return STACK_Z[STACK_Z.length-1][1];}
+function cabinMats(){
+ const std=o=>new T.MeshStandardMaterial(o);
+ return{
+  black:std({color:'#121315',roughness:.6}),
+  gloss:std({color:'#0c0c0d',roughness:.12,metalness:.1,envMapIntensity:.9}),
+  silver:std({color:'#a9adb3',roughness:.3,metalness:.9,envMapIntensity:1}),
+  chrome:std({color:'#dfe3e8',roughness:.08,metalness:1,envMapIntensity:1.3}),
+  leather:leatherMaterial('#151517'),
+  alloy:std({color:'#b9bcc0',roughness:.35,metalness:.95}),
+  rubber:std({color:'#0d0d0e',roughness:.9}),
+  needle:new T.MeshBasicMaterial({color:'#ff3a1c'}),
+  stack:std({map:tex('stack'),emissiveMap:tex('stack'),emissive:'#ff3426',emissiveIntensity:.32,roughness:.42,metalness:.05}),
+  pod:std({map:tex('pod'),emissiveMap:tex('pod'),emissive:'#ff3020',emissiveIntensity:.9,roughness:.25}),
+  dials:std({map:tex('dials'),emissiveMap:tex('dials'),emissive:'#ffffff',emissiveIntensity:.55,roughness:.35}),
+  badge:std({map:tex('badge'),transparent:true,roughness:.2,metalness:.6,envMapIntensity:1.2}),
+  glass:new T.MeshPhysicalMaterial({color:'#0a0a0b',roughness:.05,transparent:true,opacity:.35,depthWrite:false,clearcoat:1}),
+  mirror:std({color:'#5d6166',roughness:.06,metalness:1,envMapIntensity:.8})
+ };
+}
+function buildCabin(g,data,key,body){
+ if(key==='v8'||!data.cabin?.dash)return null;
+ const C=cabinMats(),dz=data.cabin.dash[0][2]-.579,dy=data.cabin.dash[0][1]-.46,cab=new T.Group();cab.name='VE cabin';cab.position.set(0,dy,dz);body.add(cab);
+ const add=(geo,mat,x,y,z,parent=cab)=>{const m=new T.Mesh(geo,mat);m.position.set(x,y,z);parent.add(m);return m;};
+ // Centre stack: a face that follows the dash's own curve, then the display pod on top.
+ {const W=.235,y0=.40,y1=.88,rows=24,geo=new T.PlaneGeometry(W,y1-y0,1,rows);geo.rotateY(Math.PI);const p=geo.attributes.position;
+  for(let i=0;i<p.count;i++){const y=y0+(p.getY(i)+(y1-y0)/2);p.setY(i,y);p.setZ(i,stackZ(y)-.007);}
+  geo.computeVertexNormals();add(geo,C.stack,0,0,0);
+  const pod=new T.Group();pod.position.set(0,.905,.80);cab.add(pod);
+  // A low rounded binnacle that grows out of the dash top, its screen tipped back towards the driver.
+  pod.position.y-=.02;pod.rotation.x=-.18;
+  add(new T.BoxGeometry(.22,.06,.09),C.black,0,.0,.035,pod);
+  const hood=add(new T.CylinderGeometry(.055,.055,.225,20,1,false,0,Math.PI),C.black,0,.012,.035,pod);hood.rotation.z=Math.PI/2;hood.scale.set(1,1,.9);
+  const face=add(new T.PlaneGeometry(.19,.045),C.pod,0,.004,-.0165,pod);face.rotation.y=Math.PI;}
+ // Instrument cluster: backing, dial face, hood, needles.
+ const cl=new T.Group();cl.position.set(-.40,.875,.745);cab.add(cl);cl.rotation.x=-.12;
+ const CW=.33,CH=CW/2;
+ add(new T.BoxGeometry(CW+.03,CH+.02,.06),C.black,0,0,.032,cl);
+ {const f=add(new T.PlaneGeometry(CW,CH),C.dials,0,0,0,cl);f.rotation.y=Math.PI;}
+ {const s=new T.Shape();s.absarc(0,0,.215,0,Math.PI,false);s.lineTo(-.19,0);s.absarc(0,0,.19,Math.PI,0,true);s.lineTo(.215,0);
+  const hood=new T.Mesh(new T.ExtrudeGeometry(s,{depth:.15,bevelEnabled:false,curveSegments:28}),C.black);hood.scale.set(1,.5,1);hood.position.set(0,.035,-.07);cl.add(hood);
+  const lens=add(new T.PlaneGeometry(CW+.01,CH+.01),C.glass,0,0,-.012,cl);lens.rotation.y=Math.PI;}
+ const needles=[];
+ for(const [u,maxv] of [[.2246,7],[.7754,260]]){const piv=new T.Group();piv.position.set(-(u-.5)*CW,0,-.004);piv.rotation.y=Math.PI;cl.add(piv);
+  const nd=new T.Mesh(new T.PlaneGeometry(.0035,CW*.2),C.needle);nd.position.y=CW*.075;const arm=new T.Group();arm.add(nd);piv.add(arm);
+  add(new T.CircleGeometry(.007,16),C.gloss,0,0,-.001,piv).rotation.y=Math.PI;
+  needles.push({arm,maxv});}
+ // Steering wheel: column, three spokes (silver lower V), leather rim, airbag pad with the lion badge.
+ const wh=new T.Group();wh.position.set(-.40,.75,.49);wh.rotation.x=.36;cab.add(wh);
+ const col=add(new T.CylinderGeometry(.04,.05,.26,20),C.black,0,0,.15,wh);col.rotation.x=Math.PI/2;
+ add(new T.BoxGeometry(.13,.09,.16),C.black,0,-.01,.21,wh);
+ for(const sx of [-1,1]){const st=add(new T.CylinderGeometry(.007,.006,.16,8),C.black,sx*.1,.0,.14,wh);st.rotation.z=Math.PI/2;st.rotation.y=sx*.25;}
+ const spin=new T.Group();wh.add(spin);
+ add(new T.TorusGeometry(.183,.0175,14,80),C.leather,0,0,0,spin);
+ {const hub=add(new T.CylinderGeometry(.07,.078,.05,32),C.black,0,-.008,-.018,spin);hub.rotation.x=Math.PI/2;hub.scale.set(1.25,1,1);
+  const b=add(new T.CircleGeometry(.024,32),C.badge,0,.0,-.0445,spin);b.rotation.y=Math.PI;}
+ for(const sx of [-1,1]){const sp=add(new T.BoxGeometry(.1,.04,.022),C.black,sx*.125,-.012,-.006,spin);sp.rotation.z=sx*-.08;
+  const btn=add(new T.BoxGeometry(.03,.022,.006),C.gloss,sx*.115,-.004,-.02,spin);
+  const ins=add(new T.BoxGeometry(.07,.006,.012),C.silver,sx*.13,-.034,-.012,spin);ins.rotation.z=sx*-.08;}
+ for(const sx of [-1,1]){const lv=add(new T.BoxGeometry(.026,.13,.018),C.silver,sx*.04,-.115,-.004,spin);lv.rotation.z=sx*.32;}
+ // Auto shifter on a silver surround, handbrake on the driver's side, console box.
+ add(new T.BoxGeometry(.2,.2,.9),C.black,0,.43,.12);
+ add(new T.BoxGeometry(.16,.008,.26),C.silver,0,.535,.2);
+ {const boot=add(new T.CylinderGeometry(.02,.035,.05,16),C.leather,0,.56,.22);
+  const lever=add(new T.CylinderGeometry(.011,.011,.1,10),C.alloy,0,.6,.22);
+  const knob=add(new T.SphereGeometry(.03,20,14),C.gloss,0,.655,.22);knob.scale.set(.8,1.25,1.1);}
+ {const hb=new T.Group();hb.position.set(-.075,.54,-.02);hb.rotation.x=.25;cab.add(hb);
+  add(new T.BoxGeometry(.03,.03,.24),C.black,0,.015,.1,hb);add(new T.BoxGeometry(.034,.034,.07),C.silver,0,.02,.22,hb);}
+ // Alloy pedals and the dead pedal.
+ for(const [x,w,h,y] of [[-.47,.085,.06,.33],[-.36,.05,.11,.34],[-.6,.05,.12,.28]]){const pd=add(new T.BoxGeometry(w,h,.01),C.alloy,x,y,.82);pd.rotation.x=-.5;}
+ // Rear-view mirror glass under the pack's housing.
+ {const mg=add(new T.PlaneGeometry(.24,.06),C.mirror,0,1.287-dy,.238);mg.rotation.y=Math.PI;mg.rotation.x=-.12;}
+ return {cab,spin,needles,mats:C};
+}
+VE89.buildCabin=buildCabin;
+function cabinUpdate(V,x,dt){
+ const K=V?.cabin;if(!K)return;
+ K.spin.rotation.z=-(x?.steer||0)*6;
+ const kmh=Math.abs(x?.speed??(x?.v||0)*3.6),g=kmh<65?1:kmh<108?2:kmh<151?3:kmh<196?4:kmh<246?5:6,TOP=[0,65,108,151,196,246,300];
+ const rpm=kmh<2?850:Math.min(7350,Math.max(1500,kmh/TOP[g]*6200));
+ const vals=[rpm/1000,kmh];
+ K.needles.forEach((n,i)=>{const v=Math.min(n.maxv,vals[i]),a=(225-270*v/n.maxv)*Math.PI/180-Math.PI/2;n.arm.rotation.z+=(a-n.arm.rotation.z)*Math.min(1,(dt||1/60)*10);});
+}
+VE89.cabinUpdate=cabinUpdate;
+
 /* ---------- the player's body swap (mirrors sc54PlayerBody) ---------- */
 const HIDDEN_LAYER=31,HIDDEN_MASK=(1<<31)>>>0;
 function want(){return typeof IR!=='undefined'&&IR.active&&IR.config&&CARS[IR.config.ve89]?IR.config.ve89:null;}
@@ -220,7 +335,7 @@ function playerBody(W,L,dt){
  if(!ve)return;
  const own=ve.userData.own;own.length=0;const walk=o=>{if(o===ve||o===car.userData.sc54Body)return;if(o.isMesh||o.isSprite||o.isPoints||o.isLine)own.push(o);for(const c of o.children)walk(c);};walk(car);
  if(W.sc30HiddenCar!==car)for(const o of own)if(o.layers.mask!==HIDDEN_MASK)o.layers.set(HIDDEN_LAYER);
- const st=car.userData.rf39LightState||{};lamps(ve,{braking:st.braking,headlights:st.headlights,reverse:(x.v||0)<-.4},dt);roll(ve,x,dt);
+ const st=car.userData.rf39LightState||{};lamps(ve,{braking:st.braking,headlights:st.headlights,reverse:(x.v||0)<-.4},dt);roll(ve,x,dt);cabinUpdate(ve.userData.ve89,x,dt);
 }
 function drop(W,car){
  const ve=car.userData.ve89Body;if(!ve)return;
@@ -228,6 +343,30 @@ function drop(W,car){
  ve.userData.ve89Dead=true;ve.parent?.remove(ve);W.disposeTree?.(ve);delete car.userData.ve89Body;
 }
 if(typeof dcRenderWorld==='function'){const prev=dcRenderWorld;dcRenderWorld=function(W,L,dt){try{if(L?.player)playerBody(W,L,dt);}catch(e){console.warn(e);}return prev.apply(this,arguments);};}
+// Driver's seat: in the VE road cars the onboard camera sits in the right-hand seat of the VE cabin and the
+// game's Supercar cockpit is hidden. The V8 keeps the race cockpit.
+const EYE=[-.40,1.115,-.13];
+function cabinActive(W,L){const key=want();if(!key||key==='v8'||typeof sc25Camera==='undefined'||sc25Camera!=='onboard')return null;const car=W.carNodes?.get(L?.player?.d?.id),ve=car?.userData.ve89Body;return ve?.userData.ve89?.cabin?{car,ve}:null;}
+if(typeof SC25World==='function'&&SC25World.prototype.onboardPose){const prev=SC25World.prototype.onboardPose;SC25World.prototype.onboardPose=function(x){
+ const o=this.carNodes?.get(x?.d?.id),ve=o?.userData.ve89Body,key=want();
+ if(ve&&key&&key!=='v8'&&x===globalThis.live?.player&&ve.userData.ve89?.cabin){const c=ve.userData.ve89.cabin.cab,host=ve.parent||o;host.updateWorldMatrix(true,true);
+  const e=new THREE.Vector3(EYE[0],EYE[1]+c.position.y,EYE[2]+c.position.z),l=new THREE.Vector3(EYE[0],EYE[1]+c.position.y-.03,80);
+  return{position:ve.localToWorld(e),look:ve.localToWorld(l)};}
+ return prev.apply(this,arguments);};}
+// The game's onboard camera (gr27Camera) puts the eye in the Supercar's left-hand seat. In a VE it moves
+// across to the right-hand driver's seat, keeping the look direction, head shake and mouse/stick look.
+if(typeof gr27Camera==='function'){const prev=gr27Camera;gr27Camera=function(W,L,dt){const r=prev.apply(this,arguments);try{
+ const A=cabinActive(W,L);if(!A)return r;const p=L.player,spec=DC35_ASSETS?.cars[p.team.manufacturer]?.spec,T=THREE;
+ const body=D.settings.cameraMotion!==false?A.car.userData.dc35Chassis[0]:A.car;body.updateWorldMatrix(true,false);A.ve.updateWorldMatrix(true,false);
+ const base=body.localToWorld(new T.Vector3(.37,DC37_EYE_HEIGHT?.[p.team.manufacturer]??(spec?spec.H-.17:1.15),.045));
+ const c=A.ve.userData.ve89.cabin.cab,eye=A.ve.localToWorld(new T.Vector3(EYE[0],EYE[1]+c.position.y,EYE[2]+c.position.z));
+ const cp=CP65_EYE?.[A.car.userData?.make];if(cp){base.copy(body.localToWorld(new T.Vector3(cp[0],cp[1],cp[2])));}
+ W.camera.position.add(eye.sub(base));W.camera.updateMatrixWorld();
+ }catch(e){console.warn(e);}return r;};}
+if(typeof dcCockpit==='function'){const prev=dcCockpit;dcCockpit=function(W,L,dt){const r=prev.apply(this,arguments);try{
+ const A=cabinActive(W,L);if(A){if(W.sc30Cockpit)W.sc30Cockpit.visible=false;A.car.visible=!L.player.garage;A.ve.traverse(o=>{if(o.layers.mask!==1)o.layers.set(0);});
+  W.ve89CabinOn=true;}else if(W.ve89CabinOn){W.ve89CabinOn=false;}
+ }catch(e){console.warn(e);}return r;};}
 if(typeof rf41CarBatches==='function'){const prev=rf41CarBatches;rf41CarBatches=function(W,L){const held=[];for(const car of W.carNodes?.values()||[]){const own=car.userData.ve89Body?.userData.own;if(own)for(const o of own)if(o.visible&&o.layers.mask===HIDDEN_MASK){o.visible=false;held.push(o);}}try{return prev.apply(this,arguments);}finally{for(const o of held)o.visible=true;}};}
 
 /* ---------- road car handling ---------- */

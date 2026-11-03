@@ -31,7 +31,7 @@ for(const key of keys){
    sc.add(car);car.updateMatrixWorld(true);
    const cam=new T.PerspectiveCamera(view.fov||24,w/h,.05,200);
    const yaw=view.yaw??.85,pitch=view.pitch??.2,dist=view.dist??10.5,lx=view.lx||0,lz=view.lz||0,ly=view.ly??.55;
-   cam.position.set(lx+Math.sin(yaw)*Math.cos(pitch)*dist,ly+Math.sin(pitch)*dist,lz+Math.cos(yaw)*Math.cos(pitch)*dist);cam.lookAt(lx,ly,lz);
+   if(view.cam){cam.position.set(...view.cam);cam.lookAt(...view.look);}else{cam.position.set(lx+Math.sin(yaw)*Math.cos(pitch)*dist,ly+Math.sin(pitch)*dist,lz+Math.cos(yaw)*Math.cos(pitch)*dist);cam.lookAt(lx,ly,lz);}
    R.render(sc,cam);R.render(sc,cam);const u=R.domElement.toDataURL('image/png');sc.remove(car);return u;
   },[key,view]);
   const f=path.join(out,`${key}_${view.name||vi}.png`);fs.writeFileSync(f,Buffer.from(url.split(',')[1],'base64'));console.log('wrote',f);
