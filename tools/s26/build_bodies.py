@@ -355,6 +355,34 @@ def rows_for(role, v, n, uv, f, source):
     return out
 
 
+def clip_row(row, hm, lo, cell, fm=None, flo=None, sm=None, slo=None):
+    """Drop stock-interior triangles that poke through this body's lower roof (the stock ZB/Mustang liner and
+    cage top sit higher than the Supra and Camaro roofs)."""
+    if not row.get('q'):
+        return row
+    p = unb64(row['p'], np.int16).reshape(-1, 3).astype(np.float32) / 10000
+    it = np.uint16 if row.get('i16') else np.uint32
+    f = unb64(row['i'], it).reshape(-1, 3)
+    ia = np.clip(((p[:, 0] - lo[0]) / cell).astype(int), 0, hm.shape[0] - 1)
+    ib = np.clip(((p[:, 2] - lo[1]) / cell).astype(int), 0, hm.shape[1] - 1)
+    over = p[:, 1] > hm[ia, ib] - .03
+    if fm is not None:     # ...and anything in front of the (more raked) windscreen
+        ja = np.clip(((p[:, 0] - flo[0]) / cell).astype(int), 0, fm.shape[0] - 1)
+        jb = np.clip(((p[:, 1] - flo[1]) / cell).astype(int), 0, fm.shape[1] - 1)
+        over |= (p[:, 1] > .85) & (fm[ja, jb] > -9) & (p[:, 2] > fm[ja, jb] + .02)
+    if sm is not None:     # ...and anything outside the body's sides (narrower glasshouse than the stock car)
+        ka = np.clip(((p[:, 1] - slo[0]) / cell).astype(int), 0, sm.shape[0] - 1)
+        kb = np.clip(((p[:, 2] - slo[1]) / cell).astype(int), 0, sm.shape[1] - 1)
+        over |= (p[:, 1] > .6) & (sm[ka, kb] > 0) & (np.abs(p[:, 0]) > sm[ka, kb] - .03)
+    bad = over[f].any(1)
+    if not bad.any():
+        return row
+    r = dict(row)
+    r['i'] = b64(f[~bad].astype(it))
+    r['triangles'] = int((~bad).sum())
+    return r
+
+
 def mirror_row(row):
     """Copy a stock interior row to the right-hand side: negate X and reverse the winding."""
     r = dict(row)
@@ -403,6 +431,8 @@ def gather(path, kind):
     else:
         is_wheel = lambda p: ('Wheel' in p['node'] and 'Calliper' not in p['node']) or 'TireBlur' in p['mat']
         cls = classify_hennessey
+        if kind == 'supra' and os.environ.get('S26_NOSURR'):
+            cls = lambda p, _c=classify_hennessey: None if 'glass_surr' in p['mat'] else _c(p)
     parts = {}
     for p in prims:
         role = cls(p)
@@ -443,27 +473,74 @@ def build(path, kind, make, key, wing=True):
         fitted[r] = fit.apply(v, n) + (f,)
     # The road cars' door cards, pillar trims and roof liner carry the paint material on their inside faces.
     # From the right-hand seat they read as chrome shards: make anything facing into the cabin black trim.
+    # Decide by position, not winding (the source meshes mix wound-in and wound-out panels): a paint triangle in
+    # the cabin that has other paint or glass further out at the same spot is an inner skin -> black trim.
+    from scipy import ndimage as _nd
+    outer = [fitted[r][0] for r in ('wing', 'hood') if r in fitted]
+    pv = np.concatenate(outer)
+    CELL = .03
+    def grid_max(a, b, val, lo_a, lo_b, shape):
+        g = np.full(shape, -9.0)
+        ia = np.clip(((a - lo_a) / CELL).astype(int), 0, shape[0] - 1)
+        ib = np.clip(((b - lo_b) / CELL).astype(int), 0, shape[1] - 1)
+        np.maximum.at(g, (ia, ib), val)
+        return g
+    zlo, xlo, ylo = -3.0, -1.3, -.2
+    shp_top = (int(2.6 / CELL) + 1, int(6 / CELL) + 1)        # (x, z)
+    shp_side = (int(1.8 / CELL) + 1, int(6 / CELL) + 1)       # (y, z)
+    top = grid_max(pv[:, 0], pv[:, 2], pv[:, 1], xlo, zlo, shp_top)
+    sideL = grid_max(pv[pv[:, 0] > 0][:, 1], pv[pv[:, 0] > 0][:, 2], pv[pv[:, 0] > 0][:, 0], ylo, zlo, shp_side)
+    sideR = grid_max(pv[pv[:, 0] < 0][:, 1], pv[pv[:, 0] < 0][:, 2], -pv[pv[:, 0] < 0][:, 0], ylo, zlo, shp_side)
+    def look(g, a, b, lo_a, lo_b):
+        ia = np.clip(((a - lo_a) / CELL).astype(int), 0, g.shape[0] - 1)
+        ib = np.clip(((b - lo_b) / CELL).astype(int), 0, g.shape[1] - 1)
+        return g[ia, ib]
     for r in ('wing', 'hood'):
         if r not in fitted:
             continue
         v, n, f = fitted[r]
         c = v[f].mean(1)
-        fn = np.cross(v[f[:, 1]] - v[f[:, 0]], v[f[:, 2]] - v[f[:, 0]])
-        fn /= np.maximum(np.linalg.norm(fn, axis=1, keepdims=True), 1e-12)
         cab = (c[:, 2] > AXLE[make]['r'] + .1) & (c[:, 2] < AXLE[make]['f'] - .15) & (c[:, 1] > .3)
-        # (ahead of the dash the Mustang's outer fender skin is partly wound backwards: leave |x| > .9 there)
-        skin = (np.abs(c[:, 0]) > .9) & (c[:, 2] > AXLE[make]['f'] - .7)
-        inward = cab & (((np.abs(c[:, 0]) > .35) & ~skin & (fn[:, 0] * np.sign(c[:, 0]) < -.25)) | ((c[:, 1] > .95) & (fn[:, 1] < -.4)))
-        if os.environ.get('S26_DEBUG'):
-            m = inward & (c[:, 2] > AXLE[make]['f'] - .7)
-            print('   DBG', r, m.sum(), np.round(np.percentile(c[m], [5, 50, 95], axis=0), 2).tolist() if m.any() else '')
+        ax = np.abs(c[:, 0])
+        side_out = np.where(c[:, 0] > 0, look(sideL, c[:, 1], c[:, 2], ylo, zlo), look(sideR, c[:, 1], c[:, 2], ylo, zlo))
+        roof_out = look(top, c[:, 0], c[:, 2], xlo, zlo)
+        fw = np.cross(v[f[:, 1]] - v[f[:, 0]], v[f[:, 2]] - v[f[:, 0]])
+        fw /= np.maximum(np.linalg.norm(fw, axis=1, keepdims=True), 1e-12)
+        # inner = wound to face the cabin AND not the outermost skin at that spot
+        inward = cab & (((ax > .35) & (fw[:, 0] * np.sign(c[:, 0]) < -.25) & (ax < side_out - .02))
+                        | ((c[:, 1] > .9) & (fw[:, 1] < -.4) & (c[:, 1] < roof_out - .02)))
         if inward.any():
             moved = f[inward]
             fitted[r] = (v, n, f[~inward])
             vb, nb, fb = fitted.get('black', (np.zeros((0, 3)), np.zeros((0, 3)), np.zeros((0, 3), int)))
             used, inv = np.unique(moved.ravel(), return_inverse=True)
             fitted['black'] = (np.concatenate([vb, v[used]]), np.concatenate([nb, n[used]]), np.concatenate([fb, inv.reshape(-1, 3) + len(vb)]))
-            print(f'   {r}: {inward.sum()} cabin-facing triangles -> black trim')
+            print(f'   {r}: {inward.sum()} inner-skin triangles -> black trim (roof {(inward & (c[:, 1] > 1.1)).sum()})')
+    # The Camaro's carbon bonnet insert reads as a black hole in every livery: paint it like the rest of the bonnet.
+    if 'carbon' in fitted:
+        v, n, f = fitted['carbon']
+        c = v[f].mean(1)
+        top = (c[:, 2] > AXLE[make]['f'] - 1.5) & (c[:, 1] > .7) & (np.abs(c[:, 0]) < .7)
+        if top.any():
+            used, inv = np.unique(f[top].ravel(), return_inverse=True)
+            tgt = 'hood' if 'hood' in fitted else 'wing'
+            vh, nh, fh = fitted[tgt]
+            fitted[tgt] = (np.concatenate([vh, v[used]]), np.concatenate([nh, n[used]]), np.concatenate([fh, inv.reshape(-1, 3) + len(vh)]))
+            fitted['carbon'] = (v, n, f[~top])
+            print(f'   carbon bonnet insert: {top.sum()} triangles -> paint')
+    # The source models' roofs are black trim panels (sitting on or above the painted roof): a Supercar's roof
+    # carries the livery, so every upward-facing trim panel over the cabin becomes paint.
+    if 'black' in fitted:
+        v, n, f = fitted['black']
+        c = v[f].mean(1)
+        nu = n[f].mean(1)
+        roof = (np.abs(c[:, 0]) < .72) & (c[:, 1] > 1.0) & (c[:, 2] > AXLE[make]['r'] - .2) & (c[:, 2] < AXLE[make]['f'] - .5) & (nu[:, 1] > .5)
+        if roof.any():
+            used, inv = np.unique(f[roof].ravel(), return_inverse=True)
+            vw, nw, fw = fitted['wing']
+            fitted['wing'] = (np.concatenate([vw, v[used]]), np.concatenate([nw, n[used]]), np.concatenate([fw, inv.reshape(-1, 3) + len(vw)]))
+            fitted['black'] = (v, n, f[~roof])
+            print(f'   black roof panel: {roof.sum()} triangles -> paint')
     # Some bodies have no roof liner or pillar trims at all, and the paint is double sided, so from the seat
     # you look at the underside of the paint. Line the cabin with a dark skin 15 mm inside the roof and glasshouse.
     liner = []
@@ -472,20 +549,26 @@ def build(path, kind, make, key, wing=True):
             continue
         v, n, f = fitted[r]
         c = v[f].mean(1)
-        fn = np.cross(v[f[:, 1]] - v[f[:, 0]], v[f[:, 2]] - v[f[:, 0]])
-        fn /= np.maximum(np.linalg.norm(fn, axis=1, keepdims=True), 1e-12)
         cab = (c[:, 2] > AXLE[make]['r'] - .1) & (c[:, 2] < AXLE[make]['f'] - .3) & (c[:, 1] > .78)
-        m = cab & ((fn[:, 1] > .35) | ((np.abs(c[:, 0]) > .4) & (fn[:, 0] * np.sign(c[:, 0]) > .3)))
+        m = cab & ((c[:, 1] > .9) | (np.abs(c[:, 0]) > .4))
         if m.any():
             used, inv = np.unique(f[m].ravel(), return_inverse=True)
-            vn = n[used]
-            liner.append((v[used] - vn * .015, -vn, inv.reshape(-1, 3)[:, ::-1]))
-    if liner:
+            vu = v[used]
+            out = np.stack([vu[:, 0], (vu[:, 1] - .55) * 1.5, np.zeros(len(vu))], 1)     # away from the cabin centre
+            out /= np.maximum(np.linalg.norm(out, axis=1, keepdims=True), 1e-9)
+            liner.append((vu - out * .015, -out, inv.reshape(-1, 3)))
+    if liner and not os.environ.get('S26_NOLINER'):
         vb, nb, fb = fitted.get('black', (np.zeros((0, 3)), np.zeros((0, 3)), np.zeros((0, 3), int)))
         for lv, ln, lf in liner:
             fb = np.concatenate([fb, lf + len(vb)]); vb = np.concatenate([vb, lv]); nb = np.concatenate([nb, ln])
         fitted['black'] = (vb, nb, fb)
         print(f'   cabin liner: {sum(len(x[2]) for x in liner)} triangles')
+    if os.environ.get('S26_DEBUG'):
+        for r, (v, n, f) in fitted.items():
+            c = v[f].mean(1)
+            m = (np.abs(c[:, 0]) < .4) & (c[:, 1] > 1.05) & (c[:, 2] > AXLE[make]['r']) & (c[:, 2] < AXLE[make]['f'] - .8)
+            if m.any():
+                print('   ROOF', r, m.sum(), np.round(np.percentile(c[m][:, 1], [5, 50, 95]), 3))
     allv = np.concatenate([x[0] for x in fitted.values()])
     lo, hi = allv.min(0), allv.max(0)
     print('   bounds', lo.round(3), hi.round(3))
@@ -509,6 +592,36 @@ def build(path, kind, make, key, wing=True):
             extras[r] = (V, N, F)
         fitted.setdefault(r, (np.zeros((0, 3)), np.zeros((0, 3)), np.zeros((0, 3), int)))
 
+    # the body's roof height over the cabin (paint), to keep the stock interior under it
+    vw, _, fw = fitted['wing']
+    cw = vw[fw].mean(1)
+    roof_lo = (-1.2, -3.2)
+    roof_hm = np.full((int(2.4 / .04) + 1, int(6.4 / .04) + 1), 9.0)
+    top = cw[:, 1] > .9
+    ia = np.clip(((cw[top, 0] - roof_lo[0]) / .04).astype(int), 0, roof_hm.shape[0] - 1)
+    ib = np.clip(((cw[top, 2] - roof_lo[1]) / .04).astype(int), 0, roof_hm.shape[1] - 1)
+    hmax = np.full(roof_hm.shape, -9.0)
+    np.maximum.at(hmax, (ia, ib), cw[top, 1])
+    from scipy import ndimage as _nd2
+    hmax = _nd2.maximum_filter(hmax, size=3)
+    roof_hm = np.where(hmax > 0, hmax, 9.0)
+    # the windscreen's front-most surface over (x, y), from the glass and the paint round it
+    gv = np.concatenate([fitted[r][0] for r in ('glass', 'wing', 'hood') if r in fitted])
+    gv = gv[(gv[:, 1] > .8) & (gv[:, 2] > AXLE[make]['r'] + .8) & (gv[:, 2] < AXLE[make]['f'] + .2)]
+    front_lo = (-1.2, 0.0)
+    front_m = np.full((int(2.4 / .04) + 1, int(1.6 / .04) + 1), -9.0)
+    ja = np.clip(((gv[:, 0] - front_lo[0]) / .04).astype(int), 0, front_m.shape[0] - 1)
+    jb = np.clip(((gv[:, 1] - front_lo[1]) / .04).astype(int), 0, front_m.shape[1] - 1)
+    np.maximum.at(front_m, (ja, jb), gv[:, 2])
+    front_m = _nd2.maximum_filter(front_m, size=3)
+    # the body's half width over (y, z), from paint and glass (minimum of the two sides)
+    sv = np.concatenate([fitted[r][0] for r in ('glass', 'wing', 'hood') if r in fitted])
+    side_lo = (0.0, -3.2)
+    side_m = np.zeros((int(1.6 / .04) + 1, int(6.4 / .04) + 1))
+    ka = np.clip(((sv[:, 1] - side_lo[0]) / .04).astype(int), 0, side_m.shape[0] - 1)
+    kb = np.clip(((sv[:, 2] - side_lo[1]) / .04).astype(int), 0, side_m.shape[1] - 1)
+    np.maximum.at(side_m, (ka, kb), np.abs(sv[:, 0]))
+    side_m = _nd2.maximum_filter(side_m, size=3)
     levels = []
     spots = None
     for L in range(3):
@@ -542,8 +655,8 @@ def build(path, kind, make, key, wing=True):
             role = row['role']
             if role.split('_')[0] in WHEEL or role in KEEP_AS_IS:
                 rows.append(row)
-            elif role in INTERIOR:
-                rows.append(mirror_row(row))
+            elif role in INTERIOR and not os.environ.get('S26_NOINT'):
+                rows.append(clip_row(mirror_row(row), roof_hm, roof_lo, .04, front_m, front_lo, side_m, side_lo))
         levels.append(rows)
         print(f'   LOD{L}: {sum(r["triangles"] for r in rows)} triangles ({sum(r["triangles"] for r in rows if r.get("s26"))} body)')
     spec = dict(STOCK['cars'][make]['spec'])

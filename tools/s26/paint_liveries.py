@@ -23,6 +23,7 @@ S, S2 = 345.0, 180.0
 ZF, ZB, YT, XL = 2.62, -2.62, 1.48, 1.06
 REGION = {'left': (110, 0), 'right': (110, 520), 'top': (110, 1040), 'front': (40, 1772), 'rear': (500, 1772)}
 SIZE = {'left': (1808, 511), 'right': (1808, 511), 'top': (1808, 732), 'front': (382, 267), 'rear': (382, 267)}
+FIT = not os.environ.get('S26_NOFIT')
 GRID = json.load(open(os.path.join(HERE, 'grid.json')))
 
 # wheel axles (z) of each chassis; liveries are drawn against them
@@ -81,10 +82,24 @@ def lighten(im, keep_hue=True):
     return Image.fromarray(a.astype(np.uint8))
 
 
-def crop(name, box, bg=None, tol=45, soft=25, keep=None):
+def crop(name, box, bg=None, tol=45, soft=25, keep=None, ink=None):
     """Cut a sponsor mark out of a reveal photo: box = (x0, y0, x1, y1) photo pixels; the backing colour
     (bg, or the median of the box border) is keyed out. keep = colours to keep (others keyed too)."""
     im = np.asarray(Image.open(os.path.join(REFS, name + '.jpg')).convert('RGB'), np.float32)[box[1]:box[3], box[0]:box[2]]
+    if ink is not None:      # dark lettering on a light panel: cut by brightness, filled solid in one colour
+        from scipy import ndimage
+        lum = im @ np.array([.3, .59, .11])
+        ref = np.percentile(lum, 90)
+        sat = im.max(-1) - im.min(-1)
+        a = np.clip((ref - lum - 40) / 50, 0, 1) * np.clip((70 - sat) / 30, 0, 1)
+        a = ndimage.binary_opening(a > .5, iterations=1).astype(np.float32) * a
+        h, w = a.shape
+        ab = np.asarray(Image.fromarray((ndimage.gaussian_filter(a, .7) * 255).astype(np.uint8)).resize((w * 4, h * 4), Image.BICUBIC)) > 110
+        out = np.zeros(ab.shape + (4,), np.uint8)
+        out[..., :3] = hexc(ink).astype(np.uint8)
+        out[..., 3] = ab * 255
+        img = Image.fromarray(out, 'RGBA')
+        return img.crop(img.getbbox() or (0, 0, 1, 1))
     if bg is None:
         border = np.concatenate([im[0], im[-1], im[:, 0], im[:, -1]])
         bgc = np.median(border, 0)
@@ -97,12 +112,109 @@ def crop(name, box, bg=None, tol=45, soft=25, keep=None):
         dk = np.sqrt(((im[..., None, :] - kc) ** 2).sum(-1)).min(-1)
         a = np.minimum(a, np.clip((tol * 2 - dk) / soft, 0, 1))
         im = kc[np.sqrt(((im[..., None, :] - kc) ** 2).sum(-1)).argmin(-1)]
-    out = np.dstack([im, a * 255]).astype(np.uint8)
+    # photo cut-outs are soft and noisy: blow them up, then cut hard edges and flat colours like a decal
+    h, w = a.shape
+    big = Image.fromarray(np.clip(im, 0, 255).astype(np.uint8)).resize((w * 4, h * 4), Image.LANCZOS)
+    ab = np.asarray(Image.fromarray((a * 255).astype(np.uint8)).resize((w * 4, h * 4), Image.LANCZOS)) > 127
+    q = np.asarray(big.quantize(colors=4 if keep is None else max(2, len(keep)), method=Image.Quantize.MEDIANCUT).convert('RGB'))
+    out = np.dstack([q, ab * 255]).astype(np.uint8)
     img = Image.fromarray(out, 'RGBA')
     return img.crop(img.getbbox() or (0, 0, 1, 1))
 
 
+def vectorise(lab, n, eps):
+    """Redraw every colour field as straight-edged polygons (like a vinyl wrap cut from a design file)."""
+    import cv2
+    out = np.zeros_like(lab)
+    order = sorted(range(1, n), key=lambda k: -(lab == k).sum())
+    for k in order:
+        m = (lab == k).astype(np.uint8)
+        if not m.any():
+            continue
+        cs, hi = cv2.findContours(m, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_NONE)
+        fill = np.zeros_like(m)
+        for i, c in enumerate(cs):
+            a = cv2.approxPolyDP(c, eps, True)
+            cv2.fillPoly(fill, [a], 0 if hi[0][i][3] >= 0 else 1)
+        out[fill > 0] = k
+    return out
+
+
+
 # ---------------------------------------------------------------- the atlas
+_SAFE = {}
+
+
+def safe_mask(kind_key, margin=.018):
+    """Atlas pixels (K-supersampled) where a logo can sit whole: covered by a painted body panel that faces
+    straight out of its projection (the flat of the doors, bonnet, roof), never a window, vent, arch lip or
+    crease. Built from the body's own mesh, so it matches what the game draws."""
+    if kind_key in _SAFE:
+        return _SAFE[kind_key]
+    import base64, gzip, cv2
+    d = json.loads(gzip.decompress(open(os.path.join(ROOT, 'assets/s26', kind_key.lower() + '.json.gz.bin'), 'rb').read()))
+    W = ATLAS * K
+    lab = np.zeros((W, W), np.uint8)          # 0 none, 1 flat panel, 2 curved/crease
+    tris = []
+    for r in d['levels'][0]:
+        if r['role'] not in ('wing', 'hood') or not r.get('q'):
+            continue
+        p = np.frombuffer(base64.b64decode(r['p']), np.int16).reshape(-1, 3).astype(np.float64) / 10000
+        f = np.frombuffer(base64.b64decode(r['i']), np.uint16 if r.get('i16') else np.uint32).reshape(-1, 3)
+        tris.append(p[f])
+    t = np.concatenate(tris)
+    fn = np.cross(t[:, 1] - t[:, 0], t[:, 2] - t[:, 0])
+    fn /= np.maximum(np.linalg.norm(fn, axis=1, keepdims=True), 1e-12)
+    nx, ny, nz = fn[:, 0], fn[:, 1], fn[:, 2]
+    view = np.where(nx < 0, 'right', 'left').astype(object)
+    view[ny > .62] = 'top'
+    view[(nz > .78) & (ny <= .62)] = 'front'
+    view[(nz < -.78) & (ny <= .62)] = 'rear'
+    for name in REGION:
+        sel = np.nonzero(view == name)[0]
+        if not len(sel):
+            continue
+        v = t[sel]
+        u0, v0 = REGION[name]
+        if name in ('left', 'right'):
+            u = u0 + ((ZF - v[..., 2]) if name == 'left' else (v[..., 2] - ZB)) * S
+            w = v0 + (YT - v[..., 1]) * S
+            ok = np.abs(nx[sel]) > .6
+            depth = np.abs(v[..., 0]).mean(1)
+        elif name == 'top':
+            u, w = u0 + (v[..., 2] - ZB) * S, v0 + (XL - v[..., 0]) * S
+            ok = ny[sel] > .85
+            depth = v[..., 1].mean(1)
+        else:
+            u = u0 + ((v[..., 0] + XL) if name == 'front' else (XL - v[..., 0])) * S2
+            w = v0 + (YT - v[..., 1]) * S2
+            ok = np.abs(nz[sel]) > .85
+            depth = np.abs(v[..., 2]).mean(1)
+        q = np.round(np.stack([u, w], -1) * K * 16).astype(np.int32)
+        for i in np.argsort(depth):            # painter's order: the outermost skin wins
+            cv2.fillPoly(lab, [q[i]], 1 if ok[i] else 2, cv2.LINE_8, 4)
+    safe = lab == 1
+    if kind_key.startswith('mustang'):     # the GT bonnet vent (black trim, not paint) sits at z 1.45..2.12
+        u0, v0 = REGION['top']
+        safe[int((v0 + (XL - .5) * S) * K):int((v0 + (XL + .5) * S) * K), int((u0 + (1.45 - ZB) * S) * K):int((u0 + (2.12 - ZB) * S) * K)] = False
+    # specks (door handles, fuel caps, a stray curved triangle) don't cut a logo: fill unsafe blobs under 5 cm
+    nlab, cc, stats, _ = cv2.connectedComponentsWithStats((~safe).astype(np.uint8), connectivity=4)
+    small = np.zeros(nlab, bool)
+    small[1:] = stats[1:, cv2.CC_STAT_AREA] < (.05 * S * K) ** 2
+    safe |= small[cc]
+    # a hairline crease (the Supra's dashed side swage) bends a logo but doesn't cut it: open thin lines away
+    o = int(.03 * S * K) | 1
+    unsafe = cv2.morphologyEx((~safe).astype(np.uint8), cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (o, o)))
+    safe = unsafe == 0
+    # close hairline gaps between triangles, then keep a margin off every edge
+    k = np.ones((3, 3), np.uint8)
+    safe = cv2.morphologyEx(safe.astype(np.uint8), cv2.MORPH_CLOSE, k)
+    m = max(1, int(margin * S * K))
+    safe = cv2.erode(safe, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * m + 1, 2 * m + 1)))
+    _SAFE[kind_key] = safe > 0
+    return _SAFE[kind_key]
+
+
 class Atlas:
     def __init__(self, make):
         self.make = make
@@ -168,7 +280,49 @@ class Atlas:
         if rot:
             im = im.rotate(rot, expand=True, resample=Image.BICUBIC)
         cx, cy = (u0 + u) * K, (v0 + v) * K
-        self.logos.append((im, int(round(cx - im.width / 2)), int(round(cy - im.height / 2))))
+        self.logos.append((im, int(round(cx - im.width / 2)), int(round(cy - im.height / 2)), view))
+
+    def fit(self, im, x, y, view):
+        """Shrink, and nudge if needed, a logo until all of it sits on one flat painted panel (see safe_mask), so
+        no logo is cut by a window, vent, arch or crease. Returns the (possibly resized) image and position."""
+        safe = safe_mask(self.kind_key)
+        import cv2
+        a = (np.asarray(im)[:, :, 3] > 60).astype(np.uint8)
+        n0 = a.sum()
+        if n0 == 0:
+            return im, x, y
+        cx, cy = x + im.width / 2, y + im.height / 2
+        st = .05 * (S2 if view in ('front', 'rear') else S) * K
+        if view == 'top':
+            shifts = [(i * st, 0) for i in range(0, 15)] + [(-i * st, 0) for i in range(1, 15)]
+        elif view in ('left', 'right'):
+            shifts = [(i * st, j * st * .6) for i in range(-4, 5) for j in (0, -1, 1, -2)]
+        else:
+            shifts = [(0, j * st * .6) for j in (0, -1, 1)]
+        shifts.sort(key=lambda d: abs(d[0]) + 1.5 * abs(d[1]))
+        best = None
+        for sc in (1, .94, .88, .82, .76, .7, .64, .58, .52, .46, .4):
+            w, h = max(1, int(im.width * sc)), max(1, int(im.height * sc))
+            aa = cv2.resize(a, (w, h), interpolation=cv2.INTER_NEAREST)
+            n = aa.sum()
+            for dx, dy in shifts:
+                x0, y0 = int(round(cx + dx - w / 2)), int(round(cy + dy - h / 2))
+                if x0 < 0 or y0 < 0 or x0 + w > safe.shape[1] or y0 + h > safe.shape[0]:
+                    continue
+                bad = (aa > 0) & ~safe[y0:y0 + h, x0:x0 + w]
+                fr = bad.sum() / n
+                if sc >= .6 and (best is None or fr < best[3] - 1e-9):
+                    best = (sc, x0, y0, fr)
+                if fr <= .002:
+                    if sc < 1 or dx or dy:
+                        self.moved.append((view, round(sc, 2), round(dx / S / K, 2), round(dy / S / K, 2), im.width, im.height))
+                    return (im if sc == 1 else im.resize((w, h), Image.LANCZOS)), x0, y0
+        if best is not None and best[3] < .4:
+            sc, x0, y0, fr = best
+            self.moved.append((view, 'BEST', round(sc, 2), round(fr, 3), im.width, im.height))
+            return (im if sc == 1 else im.resize((max(1, int(im.width * sc)), max(1, int(im.height * sc))), Image.LANCZOS)), x0, y0
+        self.moved.append((view, 'NO FIT', im.width, im.height))
+        return im, x, y
 
     def bonnet(self, im, z, h, x=0.0, maxw=1.2):
         """Reads from in front of the car."""
@@ -224,7 +378,7 @@ class Atlas:
         (u0, v0), (u1, v1) = self.to_photo(np.array([self.f]), np.array([.34])), self.to_photo(np.array([self.r]), np.array([.34]))
         return float(np.hypot(u1 - u0, v1 - v0)[0]) / (self.f - self.r)
 
-    def trace(self, palette, belt=.93, zmin=-9, zmax=9, min_area=.03, min_len=.45, weights=None, erase=(), arch=.5, view='sides', zone=None, void=(), outline=None, allow=None):
+    def trace(self, palette, belt=.93, zmin=-9, zmax=9, min_area=.06, min_len=.6, weights=None, erase=(), arch=.5, view='sides', zone=None, void=(), outline=None, allow=None):
         """Colour the sides below the belt line from the registered photo: every pixel takes the nearest
         palette colour, then lettering and small marks are dissolved into the paint around them, so only
         the big colour fields of the real livery stay (logos are laid on afterwards as real files)."""
@@ -283,7 +437,12 @@ class Atlas:
                 lab[inb] = li
             if outline is not None:          # beyond the real car's silhouette our body takes the base colour
                 lab[~inside] = 0
-            lab = ndimage.median_filter(lab, size=5)
+            # clean vector-like shapes: each colour field is blurred (about 3 cm) and the strongest wins, so
+            # edges come out as smooth curves instead of the photo's ragged pixel steps
+            sig = .03 * S * K
+            score = np.stack([ndimage.gaussian_filter((lab == k).astype(np.float32), sig) for k in range(len(pal))], -1)
+            lab = score.argmax(-1)
+            lab = vectorise(lab, len(pal), .012 * S * K)
             out = pal[lab]
             m = ((y < belt) & (z > zmin) & (z < zmax)) if view != 'top' else ((z > zmin) & (z < zmax))
             if zone is not None:
@@ -341,7 +500,10 @@ class Atlas:
         self.img = self.img[idx[0], idx[1]]
 
         out = Image.fromarray(np.clip(self.img, 0, 255).astype(np.uint8)).convert('RGBA')
-        for im, x, y in self.logos:
+        self.moved = []
+        for im, x, y, view in self.logos:
+            if FIT:
+                im, x, y = self.fit(im, x, y, view)
             out.alpha_composite(im, (max(0, x), max(0, y)), (max(0, -x), max(0, -y)))
         return out.convert('RGB').resize((ATLAS, ATLAS), Image.LANCZOS)
 
@@ -625,7 +787,7 @@ def L_shell(A, kind):
         return c
     A.paint(base)
     A.photo('djr/18', [(315, 668), (1157, 668), (315, 572), (1157, 572)], tyre=.33)
-    A.trace([wht, red, yel, blk], belt=.88, erase=[(890, 500, 1030, 600), (480, 560, 660, 650)])
+    A.trace([wht, red, yel, blk], belt=.88, erase=[(890, 500, 1030, 600), (480, 560, 660, 650)], allow={3: (-9, -9)})
     k = A.px_per_m()
     pect = logo('755f654419').crop((0, 0, 324, 302))
     vpow = logo('755f654419').crop((456, 0, 1302, 302))
@@ -816,7 +978,12 @@ def L_alphatheta(A, kind):
         return c
     A.paint(base)
     A.photo('alphatheta/01', [(373, 805), (1173, 811), (373, 725), (1173, 731)], tyre=.33)
-    word = crop('alphatheta/01', (635, 690, 955, 779), bg='#f2f3f6', tol=30, keep=['#151515'])
+    word = crop('alphatheta/01', (632, 682, 952, 752), ink='#141414')
+    wa = np.asarray(word).copy()
+    wa[int(wa.shape[0] * .83):] = 0                                       # tagline scraps under the wordmark
+    wa[int(wa.shape[0] * .55):, int(wa.shape[1] * .9):] = 0                # a corner of the stripe
+    word = Image.fromarray(wa)
+    word = word.crop(word.getbbox())
     A.trace([wht, pur, teal, blk], belt=.92, erase=[(629, 683, 960, 779), (496, 712, 608, 821), (288, 657, 440, 687)], allow={3: (-9, -1.0), 1: (-9, 1.2), 2: (-9, .2)},
             outline=[(180, 800), (185, 650), (230, 620), (400, 560), (540, 540), (650, 480), (800, 465), (1000, 480), (1200, 520), (1270, 560), (1300, 640), (1300, 780), (1200, 800), (1000, 820), (450, 820), (250, 830)])
     A.poly('sides', [(.6, .4), (-.25, .4), (-.25, .1), (.75, .1)], wht)       # the dark sill in the photo is shadow
@@ -936,7 +1103,7 @@ def L_total(A, kind):
         return c
     A.paint(base)
     A.photo('total/01', [(955, 736), (512, 693), (955, 672), (512, 635)], tyre=.33)
-    A.trace([wht, blk, red, yel, blue, pur], belt=.92, erase=[(651, 624, 795, 736)], min_area=.015,
+    A.trace([wht, blk, red, yel, blue, pur], belt=.92, erase=[(651, 624, 795, 736)], min_area=.04,
             outline=[(400, 640), (405, 560), (440, 520), (560, 505), (700, 495), (800, 520), (950, 560), (1080, 600), (1120, 700), (1080, 740), (900, 745), (500, 700)])
     te = logo('2dd6e13bf9')
     A.plogo(te, 722, 677, 112)
@@ -1121,7 +1288,7 @@ def build(key):
     struct.pack_into('<I', raw, 28, 12)
     open(fn, 'wb').write(gzip.compress(bytes(raw), 9))
     os.replace(png, os.path.join(os.environ.get('S26_PREVIEW', OUT + '/../'), key + '.png')) if os.environ.get('S26_PREVIEW') else os.remove(png)
-    print(key, kind, make)
+    print(key, kind, make, *A.moved, sep='\n  ')
 
 
 if __name__ == '__main__':
