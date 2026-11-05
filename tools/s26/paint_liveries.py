@@ -895,40 +895,140 @@ def L_redbull(A, kind):
     A.wingtop(recol(logo('5a20684e34'), '#ffffff'), -2.2, .1, maxw=1.0)
 
 
+def grove_word(c='#ffffff'):
+    """GROVE as on the team's wall: a bold serif with a red O."""
+    p = lambda t, col: text(t, 'LibreBaskerville', 200, col, weight=700)
+    return row(p('GR', c), p('O', '#d71e28'), p('VE', c), gap=.02)
+
+
+def hundred(c, px=300, w=500):
+    return text('100', 'Montserrat', px, c, weight=w, track=-.06)
+
+
+def celebrating(gold, ink):
+    """100 | Celebrating / YEARS block from the rear quarters."""
+    h = hundred(gold)
+    cel = text('Celebrating', 'KaushanScript-Regular', 120, gold)
+    yrs = plate(text('YEARS', 'ArchivoBlack-Regular', 110, ink, track=.08), gold, pad=.16, radius=.05)
+    right = stack(cel, yrs, gap=.1)
+    right = right.resize((int(right.width * h.height * .95 / right.height), int(h.height * .95)), Image.LANCZOS)
+    return row(h, right, gap=.05)
+
+
+def wreath(gold, n=10, px=600):
+    """Gold laurel branches round the door disc (two arcs of leaves, open at the top)."""
+    from PIL import ImageDraw
+    import math
+    im = Image.new('RGBA', (px, px), (0, 0, 0, 0))
+    cx = cy = px / 2
+    R = px * .44
+    for s in (-1, 1):
+        for k in range(n):
+            a = math.radians(-105 + k * 19)                    # from the bottom up the side
+            x, y = cx + s * R * math.cos(a), cy - R * math.sin(a)
+            leaf = Image.new('RGBA', (int(px * .055), int(px * .15)), (0, 0, 0, 0))
+            ImageDraw.Draw(leaf).ellipse((0, 0, leaf.width - 1, leaf.height - 1), fill=gold)
+            ang = s * (math.degrees(a) - 90 + 35)
+            leaf = leaf.rotate(-ang if s > 0 else -ang, expand=True, resample=Image.BICUBIC)
+            im.alpha_composite(leaf, (int(x - leaf.width / 2), int(y - leaf.height / 2)))
+    return im
+
+
+def apex_steel(c='#ffffff'):
+    a = text('APE', 'ArchivoBlack-Regular', 200, c)
+    x = text('X', 'ArchivoBlack-Regular', 200, '#f26b21', slant=.15)
+    st = text('STEEL', 'Montserrat', 130, c, weight=600, track=.35)
+    return row(row(a, x, gap=.0), st, gap=.25)
+
+
+def airtouch(c='#ffffff'):
+    from PIL import ImageDraw
+    ring = Image.new('RGBA', (220, 220), (0, 0, 0, 0))
+    ImageDraw.Draw(ring).ellipse((6, 6, 213, 213), outline='#f26b21', width=18)
+    t = text('airtouch', 'Montserrat', 200, c, weight=500)
+    out = Image.new('RGBA', (int(t.width + 140), max(t.height, 260)), (0, 0, 0, 0))
+    out.alpha_composite(ring.resize((260, 260)), (0, (out.height - 260) // 2))
+    out.alpha_composite(t, (110, (out.height - t.height) // 2))
+    return out
+
+
+def groblox(c='#ffffff'):
+    from PIL import ImageDraw
+    g = text('GROBL', 'Montserrat', 200, c, weight=900)
+    cube = Image.new('RGBA', (150, 150), (0, 0, 0, 0))
+    ImageDraw.Draw(cube).polygon([(75, 0), (150, 75), (75, 150), (0, 75)], fill='#e3262a')
+    x = text('X', 'Montserrat', 200, c, weight=900)
+    top = row(g, cube.resize((g.height, g.height)), x, gap=.02)
+    sub = text('POWERED BY GROVE', 'Montserrat', 60, c, weight=700)
+    return stack(top, sub, gap=.05, align='c')
+
+
 def L_penrite(A, kind):
-    """Grove #19/#26 Penrite Mustangs, 100 years (refs penrite/01-06): satin black, a huge gold PENRITE over a
-    gold 100 roundel on the doors, gold beltline and sill pinstripes, Celebrating 100 Years on the quarters,
-    PENRITE 100 on the bonnet, gold splitter."""
-    blk, gold, dgold = '#0d0d0f', '#c9a24b', '#8a6f35'
-    zc, yc = .15, .5
+    """Grove #19/#26 Penrite Mustangs, 100 years, from Riley's launch photo (grove/both) and the reveal set
+    (penrite/01-07): satin black; a huge gold PENRITE across a gold disc (split by a black band behind the
+    letters) inside a laurel wreath on the doors; 100 Celebrating YEARS on the rear quarters; gold beltline
+    and sill pinstripes; PENRITE over a gold 100 on the bonnet; GROVE on the wing. Side placements converted
+    from the photo with the wheel centres (z = 1.565 - (u - 277.5) / 181, y = .34 + (817 - v) / 181)."""
+    blk, gold = '#121214', '#c49a52'
+    zc, yc, rd = -.08, .515, .355             # door disc
+    A.soft = None
+
+    def belt(z):
+        return np.interp(z, [-2.5, -1.85, -.6, .58, 2.08, 2.6], [1.0, .97, .9, .865, .69, .6])
 
     def base(x, y, z, view):
         c = fill(x.shape, blk)
         if view in ('left', 'right'):
-            c = lay(c, band(y, .84, .855) * band(z, A.r - .45, A.f + .55), gold)
-            c = lay(c, band(y, .2, .215) * band(z, A.r + .38, A.f - .38), gold)
-            r = np.sqrt((z - zc) ** 2 + ((y - yc) * 1.0) ** 2)
-            c = lay(c, band(r, .27, .34), dgold)
+            r = np.hypot(z - zc, y - yc)
+            disc = (r < rd) & ~((y > .425) & (y < .755))
+            c = lay(c, disc.astype(np.float32), gold)
+            c = lay(c, (np.abs(y - belt(z)) < .007).astype(np.float32), gold)
+            c = lay(c, band(y, .19, .205) * band(z, -.88, 1.2), gold)
         if view == 'top':
-            c = lay(c, band(np.abs(x), .52, .535) * band(z, A.f - .25, 9), gold)
-            rr = np.sqrt((z - (A.f - .55)) ** 2 + x ** 2)
-            c = lay(c, band(rr, .26, .33), dgold)
+            c = lay(c, (np.abs(np.abs(x) - .62) < .007) * band(z, .75, 2.2), gold)     # shoulder lines on to the bonnet
         if view == 'front':
-            c = lay(c, band(y, -1, .08), gold)
+            c = lay(c, band(y, .15, .2), gold)                                         # lip bar and corner edges
         return c
     A.paint(base)
     pen = logo('ef64ee4a7a')
     word = pen.crop((int(pen.width * .25), 0, pen.width, pen.height))
-    word = word.crop(word.getbbox())
-    A.put('sides', word, zc, yc, .3, maxw=1.95)
-    A.put('sides', crop('penrite/06', (219, 336, 421, 459), bg='#0d0d0f', tol=50), A.r - .35, .66, .2, maxw=.7)
-    A.put('sides', recol(logo('bd1a1c5c47'), '#ffffff'), A.f + .45, .55, .08, maxw=.5)
-    A.bonnet(word, A.f - .2, .16, maxw=.8)
-    A.roof(recol(logo('bd1a1c5c47'), '#ffffff'), .2, .16, maxw=.8)
-    A.wingtop(recol(logo('bd1a1c5c47'), '#ffffff'), -2.2, .1)
-    A.put('front', pen, 0, .36, .06, maxw=.8)
-    A.put('front', logo('3952a5b529'), 0, .6, .05)
-    A.put('rear', pen, 0, .80, .07, maxw=.9)
+    word = recol(word.crop(word.getbbox()), gold)
+    A.put('sides', wreath(gold), zc, yc, .98, maxw=.98)
+    A.put('sides', word, -.075, .59, .30, maxw=1.57)
+    A.put('sides', celebrating(gold, blk), -1.33, .80, .2, maxw=.86)
+    A.put('sides', groblox(), 1.45, .715, .08, maxw=.55)
+    A.put('sides', recol(logo('gates'), '#ffffff'), .95, .62, .2, maxw=.38)
+    from PIL import ImageDraw
+    acl = Image.new('RGBA', (300, 300), (0, 0, 0, 0))
+    ImageDraw.Draw(acl).ellipse((8, 8, 291, 291), outline='#ffffff', width=16)
+    t = text('ACL', 'ArchivoBlack-Regular', 110, '#ffffff')
+    acl.alpha_composite(t, ((300 - t.width) // 2, (300 - t.height) // 2))
+    A.put('sides', acl, .88, .44, .13)
+    A.put('sides', text('DUNLOP', 'ArchivoBlack-Regular', 120, '#ffffff', slant=.2), .87, .335, .035, maxw=.28)
+    A.put('sides', recol(logo('repco'), '#ffffff'), .85, .265, .035, maxw=.22)
+    A.put('sides', grove_word(), 2.06, .56, .06, maxw=.22)
+    A.put('sides', text('Haymes', 'KaushanScript-Regular', 120, '#ffffff'), 2.04, .44, .045, maxw=.15)
+    A.put('sides', airtouch(), 2.1, .3, .05, maxw=.18)
+    A.put('sides', stack(text('O', 'Montserrat', 160, '#ffffff', weight=500), text('Midea', 'Montserrat', 130, '#ffffff', weight=600)) if False else row(text('O', 'Montserrat', 160, '#ffffff', weight=400), text('Midea', 'Montserrat', 160, '#ffffff', weight=600), gap=.1), -1.83, .63, .06, maxw=.28)
+    A.put('sides', apex_steel(), -1.76, .48, .045, maxw=.3)
+    A.put('sides', logo('fordracing'), -1.71, .37, .08, maxw=.2)
+    # bonnet: PENRITE over a gold 100 with YEARS in the last zero
+    h = hundred(gold, 400, 600)
+    yrs = plate(text('YEARS', 'ArchivoBlack-Regular', 110, blk, track=.08), gold, pad=.16, radius=.05)
+    yrs = yrs.resize((int(h.height * .32 * yrs.width / yrs.height), int(h.height * .32)), Image.LANCZOS)
+    h.alpha_composite(yrs, (int(h.width * .83 - yrs.width / 2), int(h.height / 2 - yrs.height / 2)))
+    A.bonnet(h, 1.92, .55, maxw=1.45)
+    A.bonnet(word, 1.38, .13, maxw=.85)
+    A.roof(celebrating(gold, blk), .3, .12, maxw=.55)
+    # nose
+    for s in (-1, 1):       # the bright strip beside the grille (only the frame, this strip and the lip bar are paintable)
+        A.put('front', grove_word(), s * .62, .5, .04, maxw=.15)
+    # tail (no photo of the rear: PENRITE and 100 years across it)
+    A.put('rear', word, 0, .62, .07, maxw=.8)
+    A.put('rear', celebrating(gold, blk), 0, .45, .07, maxw=.5)
+    A.wingcol = blk
+    A.wing(grove_word(), .14, maxw=1.0)
+    A.exact = True
 
 
 def L_monster(A, kind):
