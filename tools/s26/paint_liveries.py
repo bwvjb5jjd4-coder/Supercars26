@@ -1867,6 +1867,274 @@ def L_bendix(A, kind):
     L_msr(A, kind, 10)
 
 
+def view_px(vw, a, b):
+    """Metres -> atlas pixels (x K) inside a view's region: sides (z, y), top (z, x), front/rear (x, y)."""
+    if vw == 'left':
+        u, v = (ZF - a) * S, (YT - b) * S
+    elif vw == 'right':
+        u, v = (a - ZB) * S, (YT - b) * S
+    elif vw == 'top':
+        u, v = (a - ZB) * S, (XL - b) * S
+    elif vw == 'front':
+        u, v = (a + XL) * S2, (YT - b) * S2
+    else:
+        u, v = (XL - a) * S2, (YT - b) * S2
+    return u * K, v * K
+
+
+def bolt_paths(seed, starts, length=1.2, step=.07, jag=.6, branch=.35):
+    """Branching lightning: from each (a, b, angle) a jagged random walk with forks (metres, view plane)."""
+    import math
+    rng = np.random.default_rng(seed)
+    out = []
+
+    def walk(a, b, ang, n, w):
+        pts = [(a, b)]
+        for i in range(n):
+            ang += rng.normal(0, jag)
+            a += math.cos(ang) * step * rng.uniform(.5, 1.3)
+            b += math.sin(ang) * step * rng.uniform(.5, 1.3)
+            pts.append((a, b))
+            if w > .35 and rng.random() < branch:
+                walk(a, b, ang + rng.choice([-1, 1]) * rng.uniform(.5, 1.0), max(2, n // 3), w * .55)
+        out.append((pts, w))
+    for a, b, ang in starts:
+        walk(a, b, ang, int(length / step), 1.0)
+    return out
+
+
+def lightning(A, views, paths, core='#ffffff', glow='#ffc4f0', width=.008, glow_w=.05, strength=.85):
+    """Paint glowing lightning bolts (bolt_paths) on to the base paint of the given views."""
+    from PIL import ImageDraw
+    from scipy import ndimage
+    for vw in views:
+        u0, v0 = REGION[vw]
+        w, h = SIZE[vw]
+        s = S2 if vw in ('front', 'rear') else S
+        mc = Image.new('L', (w * K, h * K), 0)
+        mg = Image.new('L', (w * K, h * K), 0)
+        dc, dg = ImageDraw.Draw(mc), ImageDraw.Draw(mg)
+        for pts, wt in paths:
+            q = [view_px(vw, a, b) for a, b in pts]
+            dc.line(q, fill=255, width=max(1, int(width * wt * s * K)), joint='curve')
+            dg.line(q, fill=255, width=max(2, int(width * 3 * wt * s * K)), joint='curve')
+        g = ndimage.gaussian_filter(np.asarray(mg, np.float32) / 255, glow_w * s * K / 3)
+        g = np.clip(g * 2.2, 0, 1)[..., None] * strength
+        c = np.clip(ndimage.gaussian_filter(np.asarray(mc, np.float32) / 255, .7), 0, 1)[..., None]
+        reg = self_reg = A.img[v0 * K:v0 * K + h * K, u0 * K:u0 * K + w * K]
+        reg[:] = reg * (1 - g) + hexc(glow) * g
+        reg[:] = reg * (1 - c) + hexc(core) * c
+
+
+def middys_badge(blue='#2b3aa0', edge='#ffffff'):
+    """Middy's omega-M mark as on the car: a blue ring round a blue omega with an M in it, edged in white."""
+    from PIL import ImageDraw
+    n = 400
+    im = Image.new('RGBA', (n, n), (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
+    d.ellipse((10, 10, n - 11, n - 11), outline=blue, width=34)
+    om = text('\u03a9', 'Montserrat', 300, blue, weight=800)
+    om = om.resize((int(n * .6), int(n * .6 * om.height / om.width)), Image.LANCZOS)
+    im.alpha_composite(om, ((n - om.width) // 2, (n - om.height) // 2 + 8))
+    m = text('M', 'ArchivoBlack-Regular', 150, blue, slant=.12)
+    m = m.resize((int(n * .26 * m.width / m.height), int(n * .26)), Image.LANCZOS)
+    hole = Image.new('RGBA', (m.width + 24, m.height + 16), (0, 0, 0, 0))
+    im.alpha_composite(m, ((n - m.width) // 2, (n - m.height) // 2 + 2))
+    return outline(im, edge, .02) if edge else im
+
+
+def middys_word(blue='#2b3aa0'):
+    return outline(text("MIDDY'S", 'ArchivoBlack-Regular', 260, blue, slant=.18, track=.02), '#ffffff', .06)
+
+
+def scg_logo():
+    """Southern Contracting Group's SCG mark: heavy letters in orange, white and green, overlapping."""
+    s_ = text('S', 'ArchivoBlack-Regular', 300, '#f39c1f')
+    c_ = text('C', 'ArchivoBlack-Regular', 300, '#ffffff')
+    g_ = text('G', 'ArchivoBlack-Regular', 300, '#59b947')
+    W = int(s_.width * .8 + c_.width * .8 + g_.width)
+    im = Image.new('RGBA', (W, s_.height + 60), (0, 0, 0, 0))
+    im.alpha_composite(s_, (0, 0))
+    im.alpha_composite(outline(c_, '#141416', .05), (int(s_.width * .72), 20))
+    im.alpha_composite(outline(g_, '#141416', .05), (int(s_.width * .72 + c_.width * .78), 50))
+    return im.crop(im.getbbox())
+
+
+def hut_icon(c='#ffffff', px=400):
+    """The Pizza Hut roof: a wide low roof with a raised ridge."""
+    from PIL import ImageDraw
+    im = Image.new('RGBA', (px, int(px * .45)), (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
+    w, h = px, im.height
+    d.polygon([(0, h * .97), (w * .2, h * .38), (w * .33, h * .38), (w * .4, h * .03), (w * .6, h * .03),
+               (w * .67, h * .38), (w * .8, h * .38), (w, h * .97)], fill=c)
+    return im
+
+
+def pizza_word(c='#141414'):
+    """Pizza Hut's heavy brush script: Kaushan Script thickened with a same-colour stroke."""
+    return outline(text('Pizza Hut', 'KaushanScript-Regular', 300, c), c, .045)
+
+
+def pizza_disc(red='#e3171e', px=600):
+    """Red Pizza Hut roundel with a thin white inner ring and the white roof."""
+    from PIL import ImageDraw
+    im = Image.new('RGBA', (px, px), (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
+    d.ellipse((0, 0, px - 1, px - 1), fill=red)
+    d.ellipse((px * .07, px * .07, px * .93, px * .93), outline='#ffffff', width=int(px * .025))
+    hut = hut_icon('#ffffff', int(px * .52))
+    im.alpha_composite(hut, ((px - hut.width) // 2, int(px * .52 - hut.height / 2)))
+    return im
+
+
+def L_middys(A, kind):
+    """BJR #14 Middy's Electrical Camaro from Riley's photos (bjr/14_side, 14_rear, 14_diecast): hot pink
+    under white lightning, a black nose split from the pink by a lightning edge, blue sills with pink swooshes,
+    the Middy's roundel and sloping MIDDY'S / ELECTRICAL on the doors, Southern Contracting Group bonnet, big
+    Middy's roundel on the roof, MACK on a black wing. Side positions from the photo homography (A.photo)."""
+    pink, blk, blue, wht = '#e8389f', '#141416', '#2b3aa0', '#f4f4f4'
+
+    def edge(y):
+        e = np.interp(y, [.6, .65, .84, .97, 2], [1.24, 1.2, 1.05, .86, .8])
+        return e + .05 * np.abs(((y * 9) % 1) - .5)            # jagged lightning edge
+
+    def yb(z):
+        return np.interp(z, [-2.6, -1.9, -.91, .79, 1.3, 2.6], [.55, .5, .38, .31, .28, .28])
+
+    def base(x, y, z, view):
+        c = fill(x.shape, pink)
+        if view in ('left', 'right'):
+            b = yb(z)
+            c = lay(c, (y < b).astype(np.float32), blue)
+            for k, off in enumerate((.035, .075)):                    # pink swooshes through the blue
+                c = lay(c, (np.abs(y - (b - off - .02 * (z + .9))) < .007).astype(np.float32) * (z < .6), pink)
+            for k, off in enumerate((.04, .09)):                      # blue streaks rising into the pink
+                yy = b + off + .045 * (-.3 - z)
+                c = lay(c, ((np.abs(y - yy) < .012 * np.clip((z + 1.6) / 1.2, 0, 1)) & (z > -1.6) & (z < .2)).astype(np.float32), blue)
+            black = ((y > .6) & (z > edge(y))) | (z > 1.9)
+            c = lay(c, black.astype(np.float32), blk)
+            c = lay(c, (band(z, 2.0, 9) * band(y, -1, .13)), pink)    # pink splitter ends
+        if view == 'top':
+            c = lay(c, band(z, .8, 9), blk)
+            c = lay(c, band(z, 2.45, 9), blk)
+        if view == 'front':
+            c = fill(x.shape, blk)
+            c = lay(c, band(y, .2, .245), pink)
+        if view == 'rear':
+            c = lay(c, band(y, -1, .45), blue)
+        return c
+    A.paint(base)
+    starts = [(-2.2, .8, .3), (-1.6, .95, -.4), (-.9, .5, .1), (.1, .9, -.2), (.6, .4, .5), (-2.3, .55, 0), (.85, .97, -1.2), (1.1, .7, -1.4)]
+    lightning(A, ('left', 'right'), bolt_paths(14, starts, 1.1))
+    lightning(A, ('top',), bolt_paths(15, [(-1.9, .5, .6), (-1.2, -.6, 2.4), (-.6, .3, -1.2), (.2, -.4, 2.0), (-2.0, -.3, 1.2)], 1.0))
+    lightning(A, ('rear',), bolt_paths(16, [(-.7, .9, -.3), (.7, .85, 3.4), (.2, .7, -1.0)], .6), glow_w=.03)
+    A.soft = None
+    rot = {'left': 8, 'right': -8}
+    for vw in ('left', 'right'):
+        A.put(vw, middys_badge(), -.79, .78, .27)
+        A.put(vw, middys_word(), .06, .65, .22, maxw=1.36, rot=rot[vw])
+        A.put(vw, text('ELECTRICAL', 'Montserrat', 160, wht, weight=700, track=.55), -.19, .44, .07, maxw=1.3, rot=rot[vw] * 1.35)
+    mont = lambda t, px=160, c=wht, w=800, **k: text(t, 'Montserrat', px, c, weight=w, **k)
+    A.put('sides', mont('TOPPS', 160, wht, 900), .92, .57, .05, maxw=.2)
+    A.put('sides', stack(mont('SUMMIT', 140, wht, 800), mont('Fleet Leasing and Management', 50, wht, 600)), .93, .47, .06, maxw=.24)
+    A.put('sides', stack(text('Lansvale', 'ArchivoBlack-Regular', 140, wht), text('Smash Repairs', 'KaushanScript-Regular', 110, '#f6c800')), .94, .37, .08, maxw=.24)
+    A.put('sides', text('DUNLOP', 'ArchivoBlack-Regular', 120, wht, slant=.2), .95, .28, .033, maxw=.22)
+    A.put('sides', recol(logo('repco'), wht), .95, .21, .032, maxw=.2)
+    from PIL import ImageDraw
+    ring = Image.new('RGBA', (200, 200), (0, 0, 0, 0))
+    ImageDraw.Draw(ring).ellipse((8, 8, 191, 191), outline='#e3262a', width=22)
+    A.put('sides', row(ring, stack(mont('TRG', 180, wht, 700), mont('transport', 80, wht, 600)), gap=.1), 2.18, .5, .09, maxw=.3)
+    A.put('sides', stack(mont('GLIDEROL', 160, wht, 800), mont('garage doors', 130, wht, 500)), 2.18, .35, .1, maxw=.3)
+    A.put('sides', plate(mont('UNIT', 140, wht, 900, track=.1), blue, pad=.15, radius=.08), -1.9, .48, .045, maxw=.14)
+    A.put('sides', mont('SPEEDFLOW', 120, wht, 900, slant=.15), -1.9, .4, .03, maxw=.2)
+    # bonnet / roof / nose
+    A.bonnet(scg_logo(), 1.62, .3, maxw=.6)
+    A.bonnet(stack(mont('SOUTHERN', 160, '#f39c1f', 900), mont('CONTRACTING', 160, '#59b947', 900), mont('GROUP PTY LTD', 130, wht, 800), gap=.08), 2.02, .2, maxw=.7)
+    A.bonnet(mont('coregas', 160, wht, 500), 2.26, .055, maxw=.4)
+    A.bonnet(mont('HARE & FORBES', 160, wht, 900), 2.512, .022, maxw=.55)
+    A.roof(middys_badge(edge='#ffffff'), -.35, .62, maxw=.62)
+    A.roof(middys_word(), .33, .1, maxw=.7)
+    # tail
+    A.put('rear', outline(text('SUMMIT', 'ArchivoBlack-Regular', 200, '#8fd3f4'), '#1b2a6b', .05), 0, .9, .055, maxw=.5)
+    A.put('rear', plate(row(middys_badge(), text("MIDDY'S", 'ArchivoBlack-Regular', 200, '#e8389f', slant=.18), gap=.12) if False else row(middys_badge('#e8389f', None), text("MIDDY'S", 'ArchivoBlack-Regular', 200, '#e8389f', slant=.18), gap=.12), blue, pad=.15, radius=.15, outline=wht, ow=.04), 0, .56, .1, maxw=.55)
+    A.put('rear', recol(logo('cocacola'), wht), -.48, .62, .05, maxw=.25)
+    A.put('rear', logo('ppg'), .48, .62, .06, maxw=.15)
+    A.put('rear', plate(mont('UNIT', 140, '#141414', 900, track=.1), wht, pad=.15, radius=.08), -.48, .7, .035, maxw=.13)
+    A.endplate = pink
+    A.wingcol = blk
+    A.wing(recol(logo('mack'), wht), .12, maxw=1.0)
+    A.exact = True
+
+
+def L_pizzahut(A, kind):
+    """BJR #96 Pizza Hut Camaro from Riley's photos (bjr/96_fq, 96_diecast, 96_top): white; red roof with a
+    white-ringed 96 roundel; a big red Pizza Hut roundel across the bonnet; the red Pizza Hut disc on the door
+    and black Pizza Hut script on the rear door and quarter; a red swoosh with white pinstripes rising along
+    the lower body; Fastron on the front guard; DRILLPRO on a black wing with red endplates."""
+    wht, red, blk = '#f4f4f4', '#cc0f17', '#141414'
+
+    def yr(z):                     # top edge of the lower red swoosh
+        return np.interp(z, [-2.6, -1.7, -.6, .5, .95, 1.0], [.52, .5, .4, .3, .24, .0])
+
+    def base(x, y, z, view):
+        c = fill(x.shape, wht)
+        if view in ('left', 'right'):
+            t = yr(z)
+            c = lay(c, ((y < t) & (y > t - .12)).astype(np.float32), red)
+            for off in (.045, .08):
+                c = lay(c, ((np.abs(y - (t - off)) < .006) & (z < .8)).astype(np.float32), wht)
+            c = lay(c, ((y < .22) & (z > -1.1) & (z < 1.0)).astype(np.float32), red)
+            c = lay(c, ((z < -1.85) & (y < .5)).astype(np.float32), red)
+            c = lay(c, band(z, 2.0, 9) * band(y, -1, .13), red)
+        if view == 'top':
+            c = lay(c, band(z, -1.0, .55) * (np.abs(x) < .8), red)                   # red roof
+            r = np.hypot(z - 1.55, x)
+            c = lay(c, (r < .56).astype(np.float32), red)                             # bonnet roundel
+            c = lay(c, (np.abs(r - .5) < .012).astype(np.float32), wht)
+            rr = np.hypot(z + .25, x)
+            c = lay(c, (np.abs(rr - .42) < .03).astype(np.float32), wht)              # roof roundel ring
+        if view == 'front':
+            c = lay(c, band(y, .2, .245), red)
+        if view == 'rear':
+            c = lay(c, band(y, -1, .45), red)
+        return c
+    A.paint(base)
+    A.soft = None
+    mont = lambda t, px=160, c=blk, w=800, **k: text(t, 'Montserrat', px, c, weight=w, **k)
+    A.put('sides', pizza_disc(red), .22, .56, .6)
+    for vw, r in (('left', 6), ('right', -6)):
+        A.put(vw, pizza_word(), -1.12, .73, .32, maxw=1.45, rot=r)
+    A.put('sides', stack(mont('PERTAMINA', 70, blk, 800), mont('Fastron', 200, blk, 700), mont('Synthetic Oil', 70, '#1b3a8c', 600), gap=.05), 1.4, .78, .17, maxw=.6)
+    A.put('sides', mont('DesignEars', 110, blk, 700), .97, .44, .035, maxw=.2)
+    A.put('sides', text('DUNLOP', 'ArchivoBlack-Regular', 120, blk, slant=.2), .97, .37, .033, maxw=.22)
+    A.put('sides', logo('repco'), .97, .3, .03, maxw=.2)
+    from PIL import ImageDraw
+    ring = Image.new('RGBA', (200, 200), (0, 0, 0, 0))
+    ImageDraw.Draw(ring).ellipse((8, 8, 191, 191), outline=red, width=22)
+    A.put('sides', row(ring, stack(mont('TRG', 180, blk, 700), mont('transport', 80, '#1b3a8c', 600)), gap=.1), 2.15, .52, .09, maxw=.3)
+    A.put('sides', mont('Kubota', 200, blk, 700), 2.15, .38, .07, maxw=.3)
+    A.put('sides', plate(mont('UNIT', 140, blk, 900, track=.1), wht, pad=.15, radius=.08, outline=red, ow=.08), 2.15, .1, .045, maxw=.14)
+    A.put('sides', recol(logo('cocacola'), red), -2.05, .72, .07, maxw=.3)
+    # bonnet roundel, roof 96
+    pw = pizza_word(wht)
+    A.bonnet(hut_icon(wht, 400), 1.33, .14, maxw=.45)
+    A.bonnet(pw, 1.62, .26, maxw=.8)
+    A.bonnet(mont('coregas', 160, blk, 500), 2.22, .06, maxw=.42)
+    A.bonnet(mont('DRILLPRO', 160, blk, 900), 2.512, .022, maxw=.5)
+    A.roof(text('96', 'ArchivoBlack-Regular', 300, wht), -.25, .4, maxw=.6)
+    A.roof(hut_icon(wht, 400), .32, .1, maxw=.35)
+    # tail
+    A.put('rear', pizza_word(blk), 0, .9, .05, maxw=.45)
+    A.put('rear', recol(logo('cocacola'), wht), 0, .56, .07, maxw=.4)
+    A.put('rear', mont('Kubota', 200, wht, 700), -.5, .6, .05, maxw=.25)
+    A.put('rear', mont('DRILLPRO', 160, wht, 900), .5, .6, .04, maxw=.25)
+    A.endplate = red
+    A.wingcol = blk
+    A.wing(stack(mont('DRILLPRO', 200, wht, 900, track=.06), mont('S E R V I C E S', 80, '#5bc0eb', 700)), .14, maxw=1.1)
+    A.exact = True
+
+
 def L_chiko(A, kind):
     """Erebus #9 CHIKO Camaro (refs chiko/01-02): red and orange flames over a black tail."""
     red, org, blk, wht = '#e5352a', '#f39a1e', '#1a1a1a', '#f0f0f0'
@@ -2154,7 +2422,7 @@ def chassis_of(key):
     for t, seats in GRID['roster'].items():
         for e in seats:
             if e['livery'] == key:
-                return e['body'], MAKE[int(t)]
+                return e['body'], e.get('make', MAKE[int(t)])
     return GRID['liveries'][key]['body'], 'Ford'
 
 

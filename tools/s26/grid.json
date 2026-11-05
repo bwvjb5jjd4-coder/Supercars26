@@ -93,9 +93,10 @@
     "name": "Andre Heimgartner"
    },
    {
-    "body": "supra",
+    "body": "camaro",
+    "make": "Holden",
     "number": 14,
-    "livery": "dare",
+    "livery": "middys",
     "name": "Cameron Hill"
    }
   ],
@@ -163,9 +164,10 @@
     "name": "Jackson Walls"
    },
    {
-    "body": "supra",
+    "body": "camaro",
+    "make": "Holden",
     "number": 96,
-    "livery": "alphatheta",
+    "livery": "pizzahut",
     "name": "Macauley Jones"
    }
   ]
@@ -526,6 +528,37 @@
    "body": "mustang",
    "note": "Striking black, Ford Racing and Mustang design elements",
    "logo": "assets/img/779f4d33e6.png"
+  },
+  "middys": {
+   "brand": "Middy's Electrical",
+   "paint": [
+    "#e8389f",
+    "#141416",
+    "#2b3aa0"
+   ],
+   "partners": [
+    "Coca-Cola",
+    "Mack",
+    "PPG"
+   ],
+   "body": "camaro",
+   "note": "BJR #14: hot pink with lightning, black nose, blue sills",
+   "logo": "assets/img/s26_middys.webp"
+  },
+  "pizzahut": {
+   "brand": "Pizza Hut",
+   "paint": [
+    "#f4f4f4",
+    "#e3171e",
+    "#141414"
+   ],
+   "partners": [
+    "Kubota",
+    "Coca-Cola"
+   ],
+   "body": "camaro",
+   "note": "BJR #96: white with red roof, bonnet roundel and lower swoosh",
+   "logo": "assets/img/s26_pizzahut.webp"
   }
  }
 }

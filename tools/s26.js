@@ -25,7 +25,7 @@ S26.active=active;
 function seatOf(team,driver){const list=team?.drivers||[];const i=list.findIndex(d=>d.id===driver?.id);return i<0?-1:i;}
 function entry(team,driver){if(!active()||!team)return null;const s=seatOf(team,driver);return s<0?null:ROSTER[team.id]?.[s]||null;}
 S26.entry=entry;
-function bodyKey(e,make){return e.body+'_'+String(make).toLowerCase();}
+function bodyKey(e,make){return e.body+'_'+String(e.make||make).toLowerCase();}   // e.make: a seat on another maker's body (BJR Camaros)
 
 /* ---------- loading ---------- */
 async function gunzipJSON(url){const res=await fetch(url);if(!res.ok)throw Error(url+' failed to load ('+res.status+')');
