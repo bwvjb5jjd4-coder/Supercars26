@@ -915,33 +915,48 @@ def celebrating(gold, ink):
     return row(h, right, gap=.05)
 
 
-def wreath(gold, n=14, px=600, gap=(-.21, .56)):
-    """Gold laurel branches round the door disc: a thin stem with slender pointed leaves either side, only
-    above and below the black lettering band (gap = sin(angle) range left clear of the PENRITE letters)."""
+def wreath(gold, px=600, disc=.355 / .98):
+    """Penrite's laurel as raced (penrite/06, grove/both close-ups): on each side of the door disc, stacked
+    chevrons of two broad almond leaves hugging the rim. A branch grows up each side, so every chevron points up
+    the arc: two at the base below the lettering, two at the tips beside the top of the disc, none in the
+    black PENRITE band. Drawn 4x and scaled down so the edges are clean. disc = disc radius / image height."""
     from PIL import ImageDraw
     import math
-    im = Image.new('RGBA', (px, px), (0, 0, 0, 0))
+    k = 4
+    n = px * k
+    im = Image.new('RGBA', (n, n), (0, 0, 0, 0))
     d = ImageDraw.Draw(im)
-    cx = cy = px / 2
-    R = px * .41
-    L, W = px * .1, px * .032
-    leaf = Image.new('RGBA', (int(W) + 4, int(L) + 4), (0, 0, 0, 0))
-    side = lambda sg: [(W / 2 + 2 + sg * W / 2 * math.sin(math.pi * t / 24), 2 + L * t / 24) for t in range(25)]
-    ImageDraw.Draw(leaf).polygon(side(1) + side(-1)[::-1], fill=gold)
+    cx = cy = n / 2
+    r = disc * n
+    R, L, W = 1.2 * r, .42 * r, .2 * r
+
+    def leaf(x, y, ux, uy):
+        """Almond leaf from (x, y) along unit (ux, uy) in image coordinates."""
+        nx, ny = -uy, ux
+        pts = []
+        for t in range(0, 33):
+            f = t / 32
+            w = W / 2 * math.sin(math.pi * f) ** .8
+            pts.append((x + ux * L * f + nx * w, y + uy * L * f + ny * w))
+        for t in range(32, -1, -1):
+            f = t / 32
+            w = W / 2 * math.sin(math.pi * f) ** .8
+            pts.append((x + ux * L * f - nx * w, y + uy * L * f - ny * w))
+        d.polygon(pts, fill=gold)
+
     for sg in (-1, 1):
-        for k in range(n):
-            a = math.radians(-80 + k * 12)
-            if gap[0] < math.sin(a) < gap[1] or math.sin(a) > .93:
-                continue
+        for deg in (-58, -38, 38, 58):                      # two chevrons per corner, as raced
+            a = math.radians(deg)
             x, y = cx + sg * R * math.cos(a), cy - R * math.sin(a)
-            base = math.degrees(math.atan2(-(-math.cos(a)), sg * -math.sin(a) * -1))
-            for tilt, out in ((32, 1), (-32, -1)):
-                th = base + tilt * sg
-                lf = leaf.rotate(th - 90, expand=True, resample=Image.BICUBIC)
-                ox, oy = math.cos(math.radians(th)) * L * .45, -math.sin(math.radians(th)) * L * .45
-                im.alpha_composite(lf, (int(x + ox - lf.width / 2), int(y + oy - lf.height / 2)))
-            d.ellipse((x - 3, y - 3, x + 3, y + 3), fill=gold)
-    return im
+            tx, ty = -sg * math.sin(a), -math.cos(a)            # image-space tangent, going up the branch
+            for spread in (34, -34):
+                c, s_ = math.cos(math.radians(spread)), math.sin(math.radians(spread))
+                ux, uy = tx * c - ty * s_, tx * s_ + ty * c
+                leaf(x, y, ux, uy)
+    a = np.asarray(im).copy()                                  # a clean black gap round the disc, as raced
+    yy, xx = np.mgrid[:n, :n]
+    a[..., 3][np.hypot(xx - cx, yy - cy) < 1.07 * r] = 0
+    return Image.fromarray(a).resize((px, px), Image.LANCZOS)
 
 
 def apex_steel(c='#ffffff'):
@@ -980,7 +995,7 @@ def L_penrite(A, kind):
     and sill pinstripes; PENRITE over a gold 100 on the bonnet; GROVE on the wing. Side placements converted
     from the photo with the wheel centres (z = 1.565 - (u - 277.5) / 181, y = .34 + (817 - v) / 181)."""
     blk, gold = '#121214', '#c49a52'
-    zc, yc, rd = -.08, .515, .355             # door disc
+    zc, yc, rd = -.08, .59, .32               # door disc, centred on the lettering band (penrite/06 close-up)
     A.soft = None
 
     def belt(z):
@@ -990,7 +1005,7 @@ def L_penrite(A, kind):
         c = fill(x.shape, blk)
         if view in ('left', 'right'):
             r = np.hypot(z - zc, y - yc)
-            disc = (r < rd) & ~((y > .425) & (y < .755))
+            disc = (r < rd) & ~(np.abs(y - yc) < .17)
             c = lay(c, disc.astype(np.float32), gold)
             c = lay(c, (np.abs(y - belt(z)) < .007).astype(np.float32), gold)
             c = lay(c, band(y, .19, .205) * band(z, -.88, 1.2), gold)
@@ -1003,7 +1018,7 @@ def L_penrite(A, kind):
     pen = logo('ef64ee4a7a')
     word = pen.crop((int(pen.width * .25), 0, pen.width, pen.height))
     word = recol(word.crop(word.getbbox()), gold)
-    A.put('sides', wreath(gold), zc, yc, .98, maxw=.98)
+    A.put('sides', wreath(gold, disc=rd / .98), zc, yc, .98, maxw=.98)
     A.put('sides', word, -.075, .59, .30, maxw=1.57)
     A.put('sides', celebrating(gold, blk), -1.33, .80, .2, maxw=.86)
     A.put('sides', groblox(), 1.45, .715, .08, maxw=.55)
@@ -1026,7 +1041,7 @@ def L_penrite(A, kind):
     h = hundred(gold, 400, 600)
     yrs = plate(text('YEARS', 'ArchivoBlack-Regular', 110, blk, track=.08), gold, pad=.16, radius=.05)
     yrs = yrs.resize((int(h.height * .32 * yrs.width / yrs.height), int(h.height * .32)), Image.LANCZOS)
-    h.alpha_composite(yrs, (int(h.width * .83 - yrs.width / 2), int(h.height / 2 - yrs.height / 2)))
+    h.alpha_composite(yrs, (int(h.width / 2 - yrs.width / 2), int(h.height / 2 - yrs.height / 2)))   # centred on the 100
     A.bonnet(h, 1.92, .55, maxw=1.45)
     A.bonnet(word, 1.38, .13, maxw=.85)
     A.roof(celebrating(gold, blk), .32, .1, maxw=.5)
