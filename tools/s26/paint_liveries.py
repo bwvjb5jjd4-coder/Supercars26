@@ -670,6 +670,37 @@ def common(A, kind, dark):
     A.put('sides', dun, A.r + .05, .13, .07)
 
 
+def camaro_word(fill='#4a4a50'):
+    """The Camaro wordmark: wide, squared block letters (drawn, so both flanks read clean and straight)."""
+    from PIL import ImageDraw
+    Hh, Wl, t, g = 120, 250, 36, 46
+    out = Image.new('RGBA', (6 * Wl + 5 * g, Hh), (0, 0, 0, 0))
+    d = ImageDraw.Draw(out)
+    def r(x0, y0, x1, y1):
+        d.rectangle((x0, y0, x1 - 1, y1 - 1), fill=fill)
+    for i, ch in enumerate('CAMARO'):
+        x = i * (Wl + g)
+        r(x, 0, x + Wl, t)                                   # top bar on every letter
+        r(x, 0, x + t, Hh)                                   # left stem
+        if ch == 'C':
+            r(x, Hh - t, x + Wl, Hh)
+        elif ch == 'A':
+            r(x + Wl - t, 0, x + Wl, Hh); r(x, Hh // 2 - t // 2 + 6, x + Wl, Hh // 2 + t // 2 + 6)
+        elif ch == 'M':
+            r(x + Wl - t, 0, x + Wl, Hh); r(x + Wl // 2 - t // 2, 0, x + Wl // 2 + t // 2, Hh)
+        elif ch == 'R':
+            r(x + Wl - t, 0, x + Wl, Hh // 2 + 6); r(x, Hh // 2 - t // 2 + 6, x + Wl - t, Hh // 2 + t // 2 + 6)
+            d.polygon([(x + Wl - t - 30, Hh // 2 + t // 2 + 6), (x + Wl - 30 + 6, Hh // 2 + t // 2 + 6),
+                       (x + Wl, Hh), (x + Wl - t - 6, Hh)], fill=fill)
+        elif ch == 'O':
+            r(x + Wl - t, 0, x + Wl, Hh); r(x, Hh - t, x + Wl, Hh)
+    # notch the top-left corner of each letter like the badge
+    for i in range(6):
+        x = i * (Wl + g)
+        d.polygon([(x, 0), (x + 16, 0), (x, 16)], fill=(0, 0, 0, 0))
+    return out
+
+
 def L_redbull(A, kind):
     """Triple Eight #88/#888 Red Bull Ampol Camaros, from Riley's renders (riley/1_t8_side, 2_t8_front):
     white car, navy and blue mountain shards from the front wheel back to the rear door, the Red Bull sun and
@@ -684,8 +715,9 @@ def L_redbull(A, kind):
             c = lay(c, bon, navy)
             c = lay(c, band(z, A.f - .62, 9) * band(np.abs(x), .62, .8), blue)
         if view == 'front':
-            c = lay(c, band(y, -1, .2), navy)
-            c = lay(c, band(y, .2, .24), blue)
+            c = lay(c, band(y, -1, .24), navy)                                  # lower bumper and splitter
+            c = lay(c, band(np.abs(x), -1, .6) * band(y, -1, .66), navy)          # grille surround and nose
+            c = lay(c, band(np.abs(x), .6, .66) * band(y, .24, .66), blue)        # blue edge beside the grille
         if view == 'rear':
             c = lay(c, band(y, -1, .22), navy)
         return c
@@ -696,23 +728,31 @@ def L_redbull(A, kind):
                (1060, 512), (1000, 507), (860, 507), (600, 507), (330, 507), (200, 502), (90, 492), (80, 440)]
     glass = [[(366, 320), (368, 300), (392, 270), (470, 262), (560, 262), (640, 272), (682, 296), (708, 320)]]
     T, N, B = '#141416', '#26246a', '#2f8ad8'          # tyre, navy, blue: never lettering
-    decals = [((150, 324, 522, 380), ['#e6e6e8', N, B, T], 75, 'erase'),    # CAMARO
-              ((356, 406, 598, 478), [N, '#3a3f8a', T], 85),                # Red Bull
+    decals = [((150, 324, 522, 380), ['#e6e6e8', N, B, T], 75, 'erase'),    # CAMARO: redrawn in the badge's block letters
+              ((356, 406, 598, 478), [N, '#3a3f8a', T], 85, 'erase'),       # Red Bull: replaced by the flat wordmark
               ((1024, 412, 1094, 480), ['#eeeef0', T, B], 70, 'erase'),      # AMPOL AMPLIFY Premium Fuels (front)
               ((104, 402, 206, 464), ['#eeeef0', T, B], 70, 'erase'),       # (rear)
               ((384, 476, 582, 504), [N, '#3a3f8a', T], 75),                # Avery Dennison, mtaa super
               ((296, 275, 341, 316), ['#eeeef0'], 70),                      # hp
-              ((893, 350, 1016, 388), ['#eeeef0', B, N, '#f3c51b'], 70)]                # GM, SV
+              ((893, 350, 1016, 388), ['#eeeef0', B, N, '#f3c51b'], 70, 'erase')]   # GM, SV: redrawn as badges
     A.project(outline, 'right', glass=glass, decals=decals)
-    # clean vector marks, laid straight
-    camaro = text('CAMARO', 'Michroma-Regular', 220, '#3a3a40', track=.42)
-    A.plogo(camaro, 336, 351, 30, maxw_px=355)
+    from PIL import ImageDraw
+    # GM and SV badges (above the front wheel arch, and on the nose)
+    gm = Image.new('RGBA', (300, 300), (0, 0, 0, 0)); d = ImageDraw.Draw(gm)
+    d.rounded_rectangle((0, 0, 299, 299), 46, fill='#1f6fc1')
+    g = text('GM', 'Montserrat', 150, '#ffffff', weight=700); g.thumbnail((210, 130))
+    gm.alpha_composite(g, ((300 - g.width) // 2, 60)); d.rectangle((62, 222, 238, 236), fill='#ffffff')
+    sv_s = text('S', 'Michroma-Regular', 260, '#3c3c44'); sv_v = text('V', 'Michroma-Regular', 260, '#d8202e')
+    sv = plate(row(sv_s, sv_v, gap=.0), '#ffffff', pad=.12, radius=.12, outline='#9a9aa2', ow=.05)
+    A.plogo(gm, 910, 366, 28)
+    A.plogo(sv, 966, 368, 30, maxw_px=86)
+    A.plogo(camaro_word(), 336, 352, 38, maxw_px=362)
+    # Red Bull across the doors, flat and straight
+    A.plogo(logo('74cca6ffe5'), 477, 441, 50, maxw_px=232)
     ampw = recol(logo('ampol_word'), '#e01b24')
     amply = text('AMPLIFY', 'ArchivoBlack-Regular', 200, '#e01b24', slant=.12)
     bar = Image.new('RGBA', (int(amply.height * 1.0), amply.height), (0, 0, 0, 0))
-    from PIL import ImageDraw
     ImageDraw.Draw(bar).polygon([(bar.width * .45, 0), (bar.width, 0), (bar.width * .55, bar.height), (0, bar.height)], fill='#e01b24')
-    amp_block = Image.new('RGBA', (1, 1))
     top = row(Image.new('RGBA', (bar.width, 2)), ampw.resize((int(ampw.width * amply.height / ampw.height), amply.height)), gap=.05)
     bot = row(bar, amply, gap=.05)
     prem = text('Premium Fuels', 'Montserrat', 130, '#303034', weight=600)
@@ -725,10 +765,18 @@ def L_redbull(A, kind):
     amp_small.alpha_composite(top, (0, 0)); amp_small.alpha_composite(bot, (0, top.height + 25))
     A.plogo(amp_small, 1016, 428, 26)
     A.plogo(amp_block, 155, 433, 54)
-    rbl = logo('5630d1cdfa')
-    A.bonnet(rbl, A.f + .32, .62, maxw=.95)
-    A.roof(logo('ampol_a'), -.05, .42, maxw=.6)
-    A.put('rear', rbl, 0, .53, .25, maxw=.7)
+    # front: AMPOL AMPLIFY on each bumper face beside the grille, GM + SV across the upper grille bar,
+    # National Storage along the splitter lip
+    for sx in (-.7, .7):
+        A.put('front', amp_block, sx, .47, .15, maxw=.26)
+    A.put('front', row(gm, sv, gap=.3), 0, .56, .08, maxw=.5)
+    ns = plate(text('NATIONAL STORAGE', 'ArchivoBlack-Regular', 160, '#141416', track=.06), '#e8e23a', pad=.15, radius=.05)
+    A.put('front', ns, 0, .12, .07, maxw=1.0)
+    # bonnet: big bulls and sun further up towards the screen, Red Bull ahead of them
+    A.bonnet(logo('ed202fc404'), A.f - .05, .55, maxw=1.45)
+    A.bonnet(logo('74cca6ffe5'), A.f + .4, .25, maxw=1.3)
+    A.roof(logo('ampol_a'), -.05, .62, maxw=.9)
+    A.put('rear', logo('5630d1cdfa'), 0, .53, .25, maxw=.7)
     A.wingtop(recol(logo('5a20684e34'), '#ffffff'), -2.2, .1, maxw=1.0)
 
 
