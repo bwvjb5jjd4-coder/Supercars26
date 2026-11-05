@@ -1044,8 +1044,10 @@ def L_shell(A, kind):
     for bx in RELAY:         # each mark exactly where the photo has it, reading the right way on both flanks
         cut = crop('djr/18', bx, bg='#f2f2f2', tol=60)
         b0, b1, b2, b3 = LAST_BB
-        du, dv = (40, 12) if bx[0] == 273 else (0, 0)      # national tiles: back and down a little, clear of the fender crown
-        A.plogo(cut, bx[0] + (b0 + b2) / 8 + du, bx[1] + (b1 + b3) / 8 + dv, (b3 - b1) / 4)
+        if bx[0] == 273:     # national tiles: centred over the front wheel arch, up on the fender, clear of Rheem
+            A.put('sides', cut, A.f, .73, (b3 - b1) / 4 / A.px_per_m(), maxw=.5)
+            continue
+        A.plogo(cut, bx[0] + (b0 + b2) / 8, bx[1] + (b1 + b3) / 8, (b3 - b1) / 4)
     # front corner under the headlight: repainted flat (the photo's corner smeared red and white into the lamp)
     def ends(x, y, z, view):
         c = fill(x.shape, wht)
@@ -1053,7 +1055,6 @@ def L_shell(A, kind):
         c = lay(c, band(y, .30, .32), yel)
         return c
     A.over(ends, lambda x, y, z, view: np.clip((z - (A.f + .42)) / .06, 0, 1))
-    A.plogo(crop('djr/18', (120, 660, 183, 716), bg='#d6202b', tol=60), 151.5, 688, 50)     # OTR, back on the corner
     A.soft = _soft
     pect = logo('755f654419').crop((0, 0, 324, 302))
     vpow = logo('755f654419').crop((456, 0, 1302, 302))
@@ -1067,7 +1068,9 @@ def L_shell(A, kind):
     sh[ring] = (244, 244, 242, 255)
     sh[pad:-pad, pad:-pad][al] = pa[al]
     pect_ring = Image.fromarray(sh)
-    A.bonnet(pect_ring, A.f + .35, .95, maxw=1.15)    # a little further down the bonnet, towards the nose
+    _soft, A.soft = A.soft, None    # placed exactly (auto-fit kept pushing it off the vent to the back of the bonnet)
+    A.bonnet(pect_ring, A.f + .2, 1.1, maxw=1.3)      # big, in the middle of the bonnet shield
+    A.soft = _soft
     A.roof(pect, -.1, .3, maxw=.5)
     A.roof(recol(vpow, '#ffffff'), .35, .1, maxw=.6)
     A.wingtop(crop('djr/14', (480, 228, 1135, 282), bg='#111111'), -2.24, .09, maxw=1.3)    # DXC
@@ -1710,6 +1713,8 @@ def build(key):
     A = Atlas(make)
     A.kind_key = kind + '_' + make
     DESIGNS[key](A, kind)
+    if kind == 'mustang':    # a small Ford oval at the nose of the bonnet, like the real cars
+        A.bonnet(logo('ford_oval'), 2.40, .055, maxw=.17)
     if kind == 'mustang':    # splitter shelf (seen through the SHELBY cut-outs in the lip face): black, so no lettering shows
         A.over(lambda x, y, z, view: fill(x.shape, '#141416'), lambda x, y, z, view: np.clip((z - 2.44) / .01, 0, 1), views=('top',))
     if not A.exact:          # a photo-exact livery already carries every real mark
