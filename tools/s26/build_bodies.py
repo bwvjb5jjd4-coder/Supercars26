@@ -195,6 +195,9 @@ def box(c, s, rot=0.0):
     return V, N, F
 
 
+ENDPLATE_UV = (55.0, 300.0)      # atlas pixel the wing endplates sample (paint_liveries.ENDPLATE paints it)
+
+
 def wing_parts(top_y, tail_z, width=1.72):
     """Gen3-style rear wing: a cambered main plane on two swan-neck stands, with endplates.
     tail_z is the rearmost point of the body; the blade's trailing edge sits just inside it."""
@@ -229,7 +232,7 @@ def wing_parts(top_y, tail_z, width=1.72):
     parts.append(('black',) + box((0, y + .07 + .004 + .018, zt + .004), (span, .036, .006)))
     # endplates
     for sx in (-1, 1):
-        parts.append(('black',) + box((sx * (span / 2 + .004), y + .025, zl - chord / 2 + .01), (.006, .15, .33)))
+        parts.append(('endplate',) + box((sx * (span / 2 + .004), y + .025, zl - chord / 2 + .01), (.006, .15, .33)))
     # swan-neck stands: an upright from the boot lid to the blade's underside
     h = y - top_y
     for sx in (-1, 1):
@@ -689,6 +692,8 @@ def build(path, kind, make, key, wing=True):
                 if r == 'hood':
                     uv = uv.copy(); uv[:, 1] = 1.5 - uv[:, 1]   # dc35RawGeometry flips hood v back
                 rows += rows_for(r, v3, n3, uv, f3, key + '_' + r)
+            elif r == 'endplate':     # painted from one flat patch of the livery atlas (paint_liveries ENDPLATE)
+                rows += rows_for('wing', v2, n2, np.tile(np.array(ENDPLATE_UV) / ATLAS, (len(v2), 1)), f2, key + '_endplate')
             elif r == 'glass':
                 v3, n3, uv, f3, sp = glass_uv(v2, n2, f2, make)
                 spots = spots or sp

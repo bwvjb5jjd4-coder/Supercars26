@@ -29,6 +29,7 @@ FIT = not os.environ.get('S26_NOFIT')
 GRID = json.load(open(os.path.join(HERE, 'grid.json')))
 
 # wheel axles (z) of each chassis; liveries are drawn against them
+ENDPLATE = (55, 300)      # atlas pixel of the wing endplates (build_bodies.ENDPLATE_UV)
 AX = {'Ford': (1.565, -1.264), 'Holden': (1.6215, -1.3125)}
 # body tail / nose z (from build_bodies.py's spec.s26.bounds), for registering top-down photos
 BODY_Z = {'mustang_Ford': (-2.383, 2.528), 'camaro_Holden': (-2.3565, 2.587), 'supra_Holden': (-2.31, 2.664), 'supra_Ford': (-2.261, 2.607)}
@@ -237,6 +238,7 @@ class Atlas:
         self.logos = []
         self.soft = False
         self.exact = False
+        self.endplate = '#141416'     # rear wing endplates (one flat patch, see build_bodies.ENDPLATE_UV)
 
     def coords(self, view):
         u0, v0 = REGION[view]
@@ -620,6 +622,8 @@ class Atlas:
         from scipy import ndimage
         idx = ndimage.distance_transform_edt(~filled, return_distances=False, return_indices=True)
         self.img = self.img[idx[0], idx[1]]
+        eu, ev = ENDPLATE
+        self.img[(ev - 40) * K:(ev + 40) * K, (eu - 35) * K:(eu + 35) * K] = hexc(self.endplate)
 
         out = Image.fromarray(np.clip(self.img, 0, 255).astype(np.uint8)).convert('RGBA')
         self.moved = []
@@ -1174,71 +1178,125 @@ def grunge(z, y, z0, slope, width, seed=3):
     return np.clip((e - z) / width + .5, 0, 1)
 
 
+def key_out(im, col, tol=70):
+    """Make one background colour transparent (e.g. the DEWALT box yellow, so the body paint shows through)."""
+    a = np.asarray(im.convert('RGBA')).astype(np.float32)
+    d = np.abs(a[..., :3] - hexc(col)).sum(-1)
+    a[..., 3] *= np.clip((d - tol * .5) / tol, 0, 1)
+    out = Image.fromarray(a.astype(np.uint8))
+    return out.crop(out.getbbox())
+
+
+def triangle(c='#f26b21', px=120):
+    from PIL import ImageDraw
+    im = Image.new('RGBA', (int(px * 1.15), px), (0, 0, 0, 0))
+    ImageDraw.Draw(im).polygon([(0, px - 1), (im.width / 2, 0), (im.width - 1, px - 1)], fill=c)
+    return im
+
+
 def L_team18(A, kind, main, brand):
-    """Team 18 Camaros from Riley's photos (riley/3_team18_20, 4_team18_18): body in the main colour, black
-    bonnet, roof and deck, a smoky black rear quarter and sill, the giant door name, a red HINO plate or
-    white TOYOTA FORKLIFTS plate on the rear quarter, Coca-Cola or TRADIE on the front guard, Industrial
-    Batteries panels on the bumper corners, HUNGRY JACK'S on the splitter."""
-    blk = '#141414'
+    """Team 18 Camaros from Riley's photos (riley/9_t18_18, 10_t18_20). Shared: black bonnet, nose band, roof and
+    deck with body-colour fender tops, black sill and rear quarter, HUNGRY JACK'S splitter, BUILDING TRUST under
+    the bow tie, Industrial Batteries panels, red wing endplates. #18: giant DEWALT door logo, smoky edge to the
+    black quarter, HINO plates, white FUCHS bonnet. #20: SNOWY RIVER / CARAVANS door lettering, a white
+    mountain-ridge slash into the black quarter, TOYOTA FORKLIFTS, TRADIE, Snowy River bonnet, KENWORTH wing."""
+    blk, wht = '#141414', '#f4f4f2'
     f, r = A.f, A.r
+    snowy = brand != 'dewalt'
+
+    def edge(y):                       # front edge of the black rear quarter (leans back towards the roof)
+        return (-.50 - .45 * (y - .3)) if snowy else -.6 + 0 * y
 
     def base(x, y, z, view):
         c = fill(x.shape, main)
         if view in ('left', 'right'):
-            c = lay(c, grunge(z, y, r + .62, -.5, .32), blk)                         # rear quarter
-            c = lay(c, np.clip((.27 - y) / .05 + .5, 0, 1) * (1 - .35 * grunge(-y * 4, z, 0, 0, 1.5, 7)), blk)   # sill
-            c = lay(c, band(y, .9, 9), blk)                                            # roof edge
+            if snowy:
+                e = edge(y)
+                ridge = e + .07 * np.sin(y * 23) + .04 * np.sin(y * 57 + 1)        # jagged mountain ridge
+                c = lay(c, ((z < ridge) & (z > e - .16)).astype(np.float32), wht)
+                shard = (z >= ridge) & (z < ridge + .14) & (np.sin((z * 1.3 + y) * 34) > .35)
+                c = lay(c, shard.astype(np.float32), '#c3cacd')
+                c = lay(c, (z <= e - .16).astype(np.float32), blk)
+                c = lay(c, ((z < e - .3) & (z > e - .6) & (np.abs(y - .33 - .25 * (z - e)) < .018)).astype(np.float32), main)  # teal streak
+            else:
+                c = lay(c, grunge(z, y, -.62, .05, .16), blk)                         # smoky edge onto the door
+                c = lay(c, ((z < -2.12) & (y > .72)).astype(np.float32), main)           # tail panel wraps the corner
+            c = lay(c, np.clip((.27 - y) / .04 + .5, 0, 1) * (1 - .3 * grunge(-y * 4, z, 0, 0, 1.5, 7)), blk)   # sill
         if view == 'top':
             c = fill(x.shape, blk)
+            c = lay(c, (np.abs(x) > .74) * band(z, .55, 9), main)                    # fender tops
+            c = lay(c, (np.abs(x) > .6) * band(z, -.55, .55), main)                  # roof rails
         if view == 'front':
             c = lay(c, band(np.abs(x), -1, .42) * band(y, .2, 9), blk)
             c = lay(c, band(y, -1, .17), blk)
         if view == 'rear':
-            c = lay(c, band(y, -1, .58), blk)
-            c = lay(c, band(y, .95, 9), blk)
+            c = lay(c, band(y, -1, .7), blk)
         return c
     A.paint(base)
-    hino = hino_badge()
+    A.soft = None                      # every mark exactly where the photos have it
+    A.endplate = '#d8262c'
     ib = text('', lines=[('Industrial', 1), ('Batteries', 1)], font='Montserrat', weight=800, px=120, fill='#ffffff')
+    fuchs = logo('fuchs').crop((0, 0, 1460, 1230))
+    kw_badge = logo('kenworth-53a6f510ec').crop((0, 0, 118, 128))
     hj = plate(text("HUNGRY JACK'S", 'ArchivoBlack-Regular', 160, '#ffffff', track=.04), '#d71e28', pad=.25, radius=.1)
-    if brand == 'dewalt':
-        A.put('sides', logo('4ed2777886'), .12, .5, .34, maxw=2.1)
-        A.put('sides', hino, r + .05, .74, .17, maxw=.75)
-        A.put('sides', logo('cocacola'), f - .3, .74, .1, maxw=.5)
-        A.put('sides', text('Cub Cadet', 'KaushanScript-Regular', 200, '#f6b91a'), r - .2, .33, .09, maxw=.6)
-        A.put('sides', plate(row(ib, recol(logo('fuchs').crop((0, 0, 1460, 1000)), '#ffffff')), blk, pad=.2, radius=.15), f + .62, .36, .14, maxw=.55)
-        A.put('sides', hino, f + .65, .55, .09, maxw=.45)
-        A.bonnet(recol(logo('seiko2'), '#ffffff'), f + .72, .08, maxw=.5)
-        A.bonnet(logo('4ed2777886'), f + .55, .09, maxw=.45)
-        A.put('front', recol(logo('seiko2'), '#ffffff'), -.62, .48, .05, maxw=.32)
-        A.put('front', recol(logo('seiko2'), '#ffffff'), .62, .48, .05, maxw=.32)
-        A.put('front', logo('4ed2777886'), 0, .55, .06, maxw=.35)
-        A.put('front', hino, -.62, .36, .06, maxw=.3)
-        A.put('front', hino, .62, .36, .06, maxw=.3)
-        A.put('rear', logo('4ed2777886'), -.3, .76, .09, maxw=.55)
-        A.put('rear', hino, -.4, .38, .1, maxw=.5)
-        A.put('rear', recol(logo('fuchs').crop((0, 0, 1460, 1000)), '#ffffff'), .05, .4, .08)
-        A.wingtop(recol(logo('4ed2777886'), '#ffffff'), -2.2, .1, maxw=1.0)
-    else:
-        name = text('', lines=[('SNOWY RIVER', 1)], font='BebasNeue-Regular', px=300, fill='#262626', track=.2)
-        car = text('CARAVANS', 'BebasNeue-Regular', 300, '#262626', track=.45)
-        A.put('sides', name, .2, .55, .22, maxw=1.95)
-        A.put('sides', car, .2, .35, .075, maxw=1.0)
-        tf = plate(text('', lines=[('TOYOTA', 1), ('FORKLIFTS', .62)], font='ArchivoBlack-Regular', px=150, fill='#141414'), '#f4f4f4', pad=.15, radius=.08)
-        A.put('sides', tf, r + .05, .74, .2, maxw=.7)
-        A.put('sides', text('TRADIE', 'ArchivoBlack-Regular', 200, '#141414', slant=.18), f - .32, .73, .1, maxw=.6)
-        A.put('sides', plate(row(ib, recol(logo('mack') if False else logo('hino').crop((0, 0, 1460, 1000)), '#ffffff')), blk, pad=.2, radius=.15), f + .62, .36, .14, maxw=.55)
-        A.bonnet(logo('e25c0e6ab0'), f + .15, .3, maxw=1.35)
-        A.put('front', logo('cocacola'), -.55, .52, .06, maxw=.32)
-        A.put('front', logo('cocacola'), .55, .52, .06, maxw=.32)
-        A.put('front', recol(logo('sika'), '#f08a1c'), 0, .45, .04, maxw=.3)
-        A.put('rear', text('', lines=[('SNOWY RIVER', 1), ('CARAVANS', .45)], font='BebasNeue-Regular', px=200, fill='#141414'), 0, .78, .12, maxw=.75)
-        A.put('rear', text('Taubmans', 'KaushanScript-Regular', 160, '#ffffff'), -.45, .5, .05, maxw=.3)
-        A.put('rear', text('WAVERLEY FORK LIFTS', 'ArchivoBlack-Regular', 120, '#ffffff'), .15, .25, .035, maxw=.6)
-        A.wingtop(text('KENWORTH', 'ArchivoBlack-Regular', 200, '#ffffff', track=.1), -2.2, .1, maxw=1.0)
+    bt = row(triangle(), text('BUILDING TRUST', 'ArchivoBlack-Regular', 120, '#f26b21', track=.03), triangle(), gap=.35)
+    tri = triangle('#f26b21', 200)
+    # nose band under the headlights (top view, faces forward): BUILDING TRUST, partners each side
+    A.bonnet(bt, 2.47, .035, maxw=.55)
     A.put('front', hj, 0, .1, .055, maxw=.95)
+    A.put('sides', tri, f + .55, .66, .08, maxw=.1)
+    A.roof(text('Industrial Batteries', 'Montserrat', 160, '#ffffff', weight=800), .45, .08, maxw=.8)
+    if not snowy:
+        hino = hino_badge()
+        dw = key_out(logo('4ed2777886'), '#fcbd12')                       # black letters and bars on the body yellow
+        A.put('sides', dw, .13, .58, .44, maxw=1.5)
+        A.put('sides', hino, -1.02, .8, .15, maxw=.62)
+        A.put('sides', plate(recol(logo('cocacola'), '#ffffff'), '#e41e2b', pad=.2, radius=.2), 1.12, .8, .1, maxw=.42)
+        cub = recol(key_out(logo('cubcadet').crop((60, 195, 560, 300)), '#ffffff', 200), main)
+        A.put('sides', cub, -.78, .36, .08, maxw=.32)
+        A.put('sides', plate(row(ib, recol(fuchs, '#ffffff')), blk, pad=.2, radius=.15), f + .62, .36, .12, maxw=.42)
+        fw = recol(fuchs, '#ffffff')
+        fw = fw.resize((int(fw.width * 1.7), fw.height), Image.LANCZOS)        # stretched across the bonnet, as raced
+        A.bonnet(fw, 1.85, .6, maxw=1.35)
+        A.bonnet(logo('4ed2777886'), 2.33, .05, maxw=.32)
+        for s in (-1, 1):
+            A.bonnet(recol(logo('seiko2'), '#ffffff'), 2.46, .03, x=s * .5, maxw=.22)
+            A.put('front', hino, s * .74, .46, .05, maxw=.26)
+        A.put('rear', dw, 0, .875, .07, maxw=.48)
+        A.put('rear', hino, -.38, .575, .09, maxw=.42)
+        A.put('rear', recol(fuchs, '#ffffff'), .1, .575, .08)
+        A.put('rear', text('Taubmans', 'KaushanScript-Regular', 160, '#ffffff'), .45, .6, .045, maxw=.28)
+        A.put('rear', text('WAVERLEY FORK LIFTS', 'ArchivoBlack-Regular', 120, '#ffffff'), -.38, .47, .025, maxw=.42)
+    else:
+        ink = '#1b1b1b'
+        A.put('sides', text('SNOWY RIVER', 'Montserrat', 220, ink, track=.12, weight=800), .1, .67, .17, maxw=1.42)
+        A.put('sides', text('CARAVANS', 'Montserrat', 160, ink, track=.55, weight=700), .1, .47, .07, maxw=.95)
+        toy = logo('toyota')
+        em = recol(toy.crop((0, 0, int(toy.height * 1.55), toy.height)), '#ffffff')
+        word = recol(toy.crop((int(toy.height * 1.55), 0, toy.width, toy.height)), '#ffffff')
+        fk = plate(text('FORKLIFTS', 'ArchivoBlack-Regular', 120, ink, track=.06), wht, pad=.18, radius=.05)
+        top = row(em.crop(em.getbbox()), word.crop(word.getbbox()), gap=.2)
+        stack = Image.new('RGBA', (max(top.width, fk.width), top.height + fk.height + 20), (0, 0, 0, 0))
+        stack.alpha_composite(top, (0, 0))
+        stack.alpha_composite(fk, (stack.width - fk.width, top.height + 20))
+        A.put('sides', stack.rotate(6, expand=True, resample=Image.BICUBIC), -1.3, .77, .3, maxw=.95)
+        A.put('sides', text('TRADIE', 'ArchivoBlack-Regular', 200, ink, slant=.2), 1.12, .79, .1, maxw=.5)
+        A.put('sides', plate(row(ib, kw_badge), blk, pad=.2, radius=.15), f + .62, .36, .12, maxw=.42)
+        sr = logo('e25c0e6ab0')
+        mtn = sr.crop((0, 0, int(sr.height * 1.0), sr.height))
+        A.bonnet(mtn.crop(mtn.getbbox()), 1.55, .55, maxw=.75)
+        A.bonnet(text('SNOWY RIVER', 'Montserrat', 220, '#ffffff', track=.12, weight=800), 2.13, .1, maxw=1.25)
+        A.bonnet(text('CARAVANS', 'Montserrat', 160, '#ffffff', track=.45, weight=700), 2.28, .05, maxw=.6)
+        coke = plate(recol(logo('cocacola'), '#ffffff'), '#c81e2b', pad=.2, radius=.2)
+        for s in (-1, 1):
+            A.bonnet(coke, 2.46, .035, x=s * .5, maxw=.22)
+            A.put('front', kw_badge, s * .74, .45, .055)
+        A.put('rear', text('SNOWY RIVER', 'Montserrat', 220, ink, track=.1, weight=800), 0, .905, .045, maxw=.55)
+        A.put('rear', text('CARAVANS', 'Montserrat', 160, ink, track=.45, weight=700), 0, .86, .02, maxw=.22)
+        A.put('rear', text('Taubmans', 'KaushanScript-Regular', 160, '#ffffff'), -.2, .62, .045, maxw=.28)
+        A.put('rear', text('WAVERLEY FORK LIFTS', 'ArchivoBlack-Regular', 120, '#ffffff'), .05, .47, .025, maxw=.42)
+        A.wingtop(logo('kenworth-53a6f510ec'), -2.11, .2, maxw=1.25)
     A.exact = True           # the photos' own sponsor set only
-    A.roof(text('Industrial Batteries', 'Montserrat', 160, '#ffffff', weight=800), .3, .08, maxw=.8)
 
 
 def L_dewalt(A, kind):
