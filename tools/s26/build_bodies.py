@@ -196,6 +196,8 @@ def box(c, s, rot=0.0):
 
 
 ENDPLATE_UV = (55.0, 300.0)      # atlas pixel the wing endplates sample (paint_liveries.ENDPLATE paints it)
+WINGPLANE = (4, 400, 103, 593)   # atlas patch (u0, v0, w, h px) of the rear wing blade: u along z (front = +u),
+#                                  v along x (car's left edge at v0); paint_liveries fills it (see WING)
 
 
 def wing_parts(top_y, tail_z, width=1.72):
@@ -226,7 +228,7 @@ def wing_parts(top_y, tail_z, width=1.72):
     fn = np.cross(V[F[:, 1]] - V[F[:, 0]], V[F[:, 2]] - V[F[:, 0]])
     flip = (fn * N[F[:, 0]]).sum(1) < 0
     F[flip] = F[flip][:, ::-1]
-    parts.append(('wing', V, N, F))
+    parts.append(('wingplane', V, N, F))
     zt = zl - chord
     # gurney flap on the trailing edge
     parts.append(('black',) + box((0, y + .07 + .004 + .018, zt + .004), (span, .036, .006)))
@@ -692,6 +694,13 @@ def build(path, kind, make, key, wing=True):
                 if r == 'hood':
                     uv = uv.copy(); uv[:, 1] = 1.5 - uv[:, 1]   # dc35RawGeometry flips hood v back
                 rows += rows_for(r, v3, n3, uv, f3, key + '_' + r)
+            elif r == 'wingplane':    # the blade has its own atlas patch, so a livery can colour it apart from the deck
+                u0, w0, uw, vh = WINGPLANE
+                zz, xx = v2[:, 2], v2[:, 0]
+                zs = (zz - zz.min()) / max(zz.max() - zz.min(), 1e-6)
+                xs = (.86 - xx) / 1.72
+                uv = np.stack([u0 + .5 + zs * (uw - 1), w0 + .5 + np.clip(xs, 0, 1) * (vh - 1)], 1) / ATLAS
+                rows += rows_for('wing', v2, n2, uv, f2, key + '_wingplane')
             elif r == 'endplate':     # painted from one flat patch of the livery atlas (paint_liveries ENDPLATE)
                 rows += rows_for('wing', v2, n2, np.tile(np.array(ENDPLATE_UV) / ATLAS, (len(v2), 1)), f2, key + '_endplate')
             elif r == 'glass':
