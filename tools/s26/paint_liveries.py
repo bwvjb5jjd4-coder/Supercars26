@@ -194,9 +194,6 @@ def safe_mask(kind_key, margin=.018):
         for i in np.argsort(depth):            # painter's order: the outermost skin wins
             cv2.fillPoly(lab, [q[i]], 1 if ok[i] else 2, cv2.LINE_8, 4)
     safe = lab == 1
-    if kind_key.startswith('mustang'):     # the GT bonnet vent (black trim, not paint) sits at z 1.45..2.12
-        u0, v0 = REGION['top']
-        safe[int((v0 + (XL - .5) * S) * K):int((v0 + (XL + .5) * S) * K), int((u0 + (1.45 - ZB) * S) * K):int((u0 + (2.12 - ZB) * S) * K)] = False
     # specks (door handles, fuel caps, a stray curved triangle) don't cut a logo: fill unsafe blobs under 5 cm
     nlab, cc, stats, _ = cv2.connectedComponentsWithStats((~safe).astype(np.uint8), connectivity=4)
     small = np.zeros(nlab, bool)
@@ -221,6 +218,7 @@ class Atlas:
         self.f, self.r = AX[make]
         self.img = np.zeros((ATLAS * K, ATLAS * K, 3), np.float32)
         self.logos = []
+        self.soft = False
 
     def coords(self, view):
         u0, v0 = REGION[view]
@@ -280,12 +278,14 @@ class Atlas:
         if rot:
             im = im.rotate(rot, expand=True, resample=Image.BICUBIC)
         cx, cy = (u0 + u) * K, (v0 + v) * K
-        self.logos.append((im, int(round(cx - im.width / 2)), int(round(cy - im.height / 2)), view))
+        self.logos.append((im, int(round(cx - im.width / 2)), int(round(cy - im.height / 2)), view, self.soft))
 
-    def fit(self, im, x, y, view):
+    def fit(self, im, x, y, view, occ=None, soft=False):
         """Shrink, and nudge if needed, a logo until all of it sits on one flat painted panel (see safe_mask), so
         no logo is cut by a window, vent, arch or crease. Returns the (possibly resized) image and position."""
         safe = safe_mask(self.kind_key)
+        if occ is not None:
+            safe = safe & ~occ
         import cv2
         a = (np.asarray(im)[:, :, 3] > 60).astype(np.uint8)
         n0 = a.sum()
@@ -301,7 +301,7 @@ class Atlas:
             shifts = [(0, j * st * .6) for j in (0, -1, 1)]
         shifts.sort(key=lambda d: abs(d[0]) + 1.5 * abs(d[1]))
         best = None
-        for sc in (1, .94, .88, .82, .76, .7, .64, .58, .52, .46, .4):
+        for sc in ((1, .9, .8, .7, .6) if soft else (1, .94, .88, .82, .76, .7, .64, .58, .52, .46, .4)):
             w, h = max(1, int(im.width * sc)), max(1, int(im.height * sc))
             aa = cv2.resize(a, (w, h), interpolation=cv2.INTER_NEAREST)
             n = aa.sum()
@@ -317,6 +317,8 @@ class Atlas:
                     if sc < 1 or dx or dy:
                         self.moved.append((view, round(sc, 2), round(dx / S / K, 2), round(dy / S / K, 2), im.width, im.height))
                     return (im if sc == 1 else im.resize((w, h), Image.LANCZOS)), x0, y0
+        if soft:
+            return None, x, y
         if best is not None and best[3] < .4:
             sc, x0, y0, fr = best
             self.moved.append((view, 'BEST', round(sc, 2), round(fr, 3), im.width, im.height))
@@ -501,9 +503,19 @@ class Atlas:
 
         out = Image.fromarray(np.clip(self.img, 0, 255).astype(np.uint8)).convert('RGBA')
         self.moved = []
-        for im, x, y, view in self.logos:
+        import cv2
+        occ = np.zeros((ATLAS * K, ATLAS * K), bool)
+        pad = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (int(.05 * S * K) | 1,) * 2)
+        for im, x, y, view, soft in self.logos:
             if FIT:
-                im, x, y = self.fit(im, x, y, view)
+                im, x, y = self.fit(im, x, y, view, occ if soft else None, soft)
+                if im is None:
+                    continue
+            al = (np.asarray(im)[:, :, 3] > 40).astype(np.uint8)
+            x0, y0 = max(0, x), max(0, y)
+            sub = cv2.dilate(al, pad)[y0 - y:, x0 - x:]
+            h, w = min(sub.shape[0], occ.shape[0] - y0), min(sub.shape[1], occ.shape[1] - x0)
+            occ[y0:y0 + h, x0:x0 + w] |= sub[:h, :w] > 0
             out.alpha_composite(im, (max(0, x), max(0, y)), (max(0, -x), max(0, -y)))
         return out.convert('RGB').resize((ATLAS, ATLAS), Image.LANCZOS)
 
@@ -1258,6 +1270,88 @@ def L_objective(A, kind):
 DESIGNS = {k[2:]: v for k, v in globals().items() if k.startswith('L_')}
 
 
+# real partner logos per livery (files in assets/img or tools/s26/logos); Repco and Dunlop go on every car
+PARTNER_LOGOS = {'Ampol': 'e160ac7f24', 'Ford Racing': 'fordracing', 'Gates': 'gates', 'Snap-on': 'snapon', 'PPG': 'ppg',
+                 'Coca-Cola': 'cocacola', 'Toyota': 'toyota', 'Pirtek': 'pirtek', 'Repco': 'repco', 'DXC': 'dxc',
+                 'MAN': 'man', 'Cub Cadet': 'cubcadet', 'FUCHS': 'fuchs', 'Hino': 'hino', 'Seiko': 'seiko2', 'Sika': 'sika',
+                 '3M': '3m', 'Trico': 'trico', 'Dayco': 'dayco', 'NAPA': 'napa', 'Panasonic': 'panasonic', 'Mobil 1': 'd5e7ef776a'}
+EXTRA = {'optus': ['Mobil 1'], 'truckassist': ['Mobil 1', 'Coca-Cola'], 'alphatheta': ['Toyota'], 'dare': ['Toyota'],
+         'rjbatteries': ['Toyota'], 'redbull': ['Ampol']}
+
+
+def contrast_pick(im, base):
+    """Keep a logo's own colours if they stand out on the paint under it, else white or near-black."""
+    a = np.asarray(im).astype(np.float32)
+    m = a[..., 3] > 100
+    if not m.any():
+        return im
+    lum = lambda c: c @ np.array([.3, .59, .11])
+    lo = lum(a[..., :3][m]).mean()
+    lb = lum(base)
+    if abs(lo - lb) > 70:
+        return im
+    return recol(im, '#ffffff' if lb < 128 else '#141414')
+
+
+def decals(A, key, kind):
+    """Cover the car in its partners like the real thing: Repco and Dunlop on every car, then the team's
+    partners along the sills, up the rear quarters, on the front guards, the bumpers, roof and boot. These are
+    placed last and only where they fit clear of the main graphics (Atlas.soft)."""
+    info = GRID['liveries'].get(key, {})
+    names = [n for n in info.get('partners', []) + EXTRA.get(key, []) if n in PARTNER_LOGOS]
+    names = list(dict.fromkeys(names))
+    f, r = A.f, A.r
+    m = (f + r) / 2
+    base = A.img
+
+    def under(view, a, b):
+        u0, v0 = REGION[view]
+        if view in ('left', 'right'):
+            u = (ZF - a) * S if view == 'left' else (a - ZB) * S
+            v = (YT - b) * S
+        elif view == 'top':
+            u, v = (a - ZB) * S, (XL - b) * S
+        else:
+            u = (a + XL) * S2 if view == 'front' else (XL - a) * S2
+            v = (YT - b) * S2
+        y, x = int((v0 + v) * K), int((u0 + u) * K)
+        return base[max(0, y - 6):y + 6, max(0, x - 6):x + 6].reshape(-1, 3).mean(0)
+
+    def place(view, nm, a, b, h, maxw, how='put'):
+        im = logo(PARTNER_LOGOS.get(nm, nm))
+        views = ['left', 'right'] if view == 'sides' else [view]
+        for vw in views:
+            img = contrast_pick(im, under(vw, a, b))
+            if how == 'bonnet':
+                A.put('top', img, a, b, h, maxw, rot=90)
+            elif how == 'wing':
+                A.put('top', img, a, b, h, maxw, rot=-90)
+            else:
+                A.put(vw, img, a, b, h, maxw)
+
+    A.soft = True
+    # series marks
+    place('sides', 'repco', f - .42, .79, .08, .55)
+    place('sides', 'dunlop', f - .62, .3, .07, .45)
+    place('sides', 'dunlop', r + .62, .3, .07, .45)
+    place('front', 'repco', 0, .22, .045, .5)
+    place('rear', 'repco', 0, .3, .05, .55)
+    if names:
+        spots = [('sides', m - .6, .29, .08, .5), ('sides', m, .29, .08, .5), ('sides', m + .6, .29, .08, .5),
+                 ('sides', r + .62, .74, .08, .48), ('sides', r + .62, .58, .08, .48), ('sides', r + .62, .43, .08, .48),
+                 ('sides', f - .6, .66, .07, .42), ('sides', f - .6, .52, .07, .42), ('sides', m + .1, .82, .06, .5)]
+        for i, (vw, a, b, h, mw) in enumerate(spots):
+            place(vw, names[i % len(names)], a, b, h, mw)
+        place('rear', names[0], -.45, .42, .05, .4)
+        place('rear', names[1 % len(names)], .45, .42, .05, .4)
+        place('front', names[0], -.5, .32, .04, .34)
+        place('front', names[-1], .5, .32, .04, .34)
+        place('top', names[0], f + .75, 0, .12, .8, how='bonnet')
+        place('top', names[-1], .55, 0, .14, .9, how='bonnet')
+        place('top', names[1 % len(names)], r - .75, 0, .12, .9, how='wing')
+    A.soft = False
+
+
 def chassis_of(key):
     """The livery's body and chassis, from the roster."""
     MAKE = {0: 'Ford', 1: 'Ford', 2: 'Ford', 3: 'Holden', 4: 'Ford', 5: 'Holden', 6: 'Holden', 7: 'Holden', 8: 'Holden', 9: 'Holden', 10: 'Ford', 11: 'Ford'}
@@ -1273,6 +1367,8 @@ def build(key):
     A = Atlas(make)
     A.kind_key = kind + '_' + make
     DESIGNS[key](A, kind)
+    maker(A, kind, dark=float(A.img.mean()) < 110)
+    decals(A, key, kind)
     im = A.finish()
     os.makedirs(OUT, exist_ok=True)
     png = os.path.join(OUT, key + '.png')

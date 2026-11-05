@@ -541,6 +541,20 @@ def build(path, kind, make, key, wing=True):
             fitted['wing'] = (np.concatenate([vw, v[used]]), np.concatenate([nw, n[used]]), np.concatenate([fw, inv.reshape(-1, 3) + len(vw)]))
             fitted['black'] = (v, n, f[~roof])
             print(f'   black roof panel: {roof.sum()} triangles -> paint')
+    # Black bonnet vent surrounds and louvre panels (the Mustang's big GT vent): on a Supercar they carry the
+    # livery like the rest of the bonnet, so upward-facing trim on the bonnet becomes paint too.
+    if 'black' in fitted:
+        v, n, f = fitted['black']
+        c = v[f].mean(1)
+        nu = n[f].mean(1)
+        bon = (np.abs(c[:, 0]) < .75) & (c[:, 1] > .8) & (c[:, 2] > AXLE[make]['f'] - .6) & (nu[:, 1] > .3)
+        if bon.any():
+            used, inv = np.unique(f[bon].ravel(), return_inverse=True)
+            tgt = 'hood' if 'hood' in fitted else 'wing'
+            vh, nh, fh = fitted[tgt]
+            fitted[tgt] = (np.concatenate([vh, v[used]]), np.concatenate([nh, n[used]]), np.concatenate([fh, inv.reshape(-1, 3) + len(vh)]))
+            fitted['black'] = (v, n, f[~bon])
+            print(f'   black bonnet panels: {bon.sum()} triangles -> paint')
     # Some bodies have no roof liner or pillar trims at all, and the paint is double sided, so from the seat
     # you look at the underside of the paint. Line the cabin with a dark skin 15 mm inside the roof and glasshouse.
     liner = []
