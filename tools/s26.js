@@ -15,7 +15,7 @@ const FILES={mustang_ford:'assets/s26/mustang_ford.json.gz.bin',camaro_holden:'a
 const MODEL={mustang:'Mustang GT',camaro:'Camaro ZL1',supra:'GR Supra'};
 const BRAND={mustang:'Ford',camaro:'Chevrolet',supra:'Toyota'};
 // RAW team index -> manufacturer the game runs it as (the chassis), and each seat's body, number and livery.
-const MAKE={0:'Ford',1:'Ford',2:'Ford',3:'Holden',4:'Ford',5:'Holden',6:'Holden',7:'Holden',8:'Holden',9:'Holden',10:'Ford',11:'Ford'};
+const MAKE={0:'Holden',1:'Ford',2:'Ford',3:'Holden',4:'Ford',5:'Holden',6:'Holden',7:'Holden',8:'Holden',9:'Holden',10:'Ford',11:'Ford'};
 const ROSTER=/*S26_ROSTER*/{};
 const LIVERY=/*S26_LIVERIES*/{};
 S26.ROSTER=ROSTER;S26.LIVERY=LIVERY;S26.MAKE=MAKE;S26.MODEL=MODEL;

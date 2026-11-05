@@ -3,13 +3,13 @@
  "roster": {
   "0": [
    {
-    "body": "mustang",
+    "body": "camaro",
     "number": 88,
     "livery": "redbull",
     "name": "Broc Feeney"
    },
    {
-    "body": "mustang",
+    "body": "camaro",
     "number": 888,
     "livery": "redbull",
     "name": "Will Brown"
@@ -190,7 +190,7 @@
     "Wurth",
     "KMC"
    ],
-   "body": "mustang",
+   "body": "camaro",
    "note": "Striking blue, Ford Racing stripes (reveal, 7 Feb 2026)",
    "logo": "assets/img/5630d1cdfa.png"
   },

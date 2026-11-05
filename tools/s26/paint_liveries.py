@@ -85,6 +85,7 @@ def lighten(im, keep_hue=True):
 def crop(name, box, bg=None, tol=45, soft=25, keep=None, ink=None):
     """Cut a sponsor mark out of a reveal photo: box = (x0, y0, x1, y1) photo pixels; the backing colour
     (bg, or the median of the box border) is keyed out. keep = colours to keep (others keyed too)."""
+    global LAST_BB
     im = np.asarray(Image.open(os.path.join(REFS, name + '.jpg')).convert('RGB'), np.float32)[box[1]:box[3], box[0]:box[2]]
     if ink is not None:      # dark lettering on a light panel: cut by brightness, filled solid in one colour
         from scipy import ndimage
@@ -99,7 +100,8 @@ def crop(name, box, bg=None, tol=45, soft=25, keep=None, ink=None):
         out[..., :3] = hexc(ink).astype(np.uint8)
         out[..., 3] = ab * 255
         img = Image.fromarray(out, 'RGBA')
-        return img.crop(img.getbbox() or (0, 0, 1, 1))
+        LAST_BB = img.getbbox() or (0, 0, 1, 1)
+        return img.crop(LAST_BB)
     if bg is None:
         border = np.concatenate([im[0], im[-1], im[:, 0], im[:, -1]])
         bgc = np.median(border, 0)
@@ -119,7 +121,11 @@ def crop(name, box, bg=None, tol=45, soft=25, keep=None, ink=None):
     q = np.asarray(big.quantize(colors=4 if keep is None else max(2, len(keep)), method=Image.Quantize.MEDIANCUT).convert('RGB'))
     out = np.dstack([q, ab * 255]).astype(np.uint8)
     img = Image.fromarray(out, 'RGBA')
-    return img.crop(img.getbbox() or (0, 0, 1, 1))
+    LAST_BB = img.getbbox() or (0, 0, 1, 1)
+    return img.crop(LAST_BB)
+
+
+LAST_BB = (0, 0, 1, 1)
 
 
 def vectorise(lab, n, eps):
@@ -219,6 +225,7 @@ class Atlas:
         self.img = np.zeros((ATLAS * K, ATLAS * K, 3), np.float32)
         self.logos = []
         self.soft = False
+        self.exact = False
 
     def coords(self, view):
         u0, v0 = REGION[view]
@@ -350,6 +357,7 @@ class Atlas:
             A.append([0, 0, 0, z, y, 1, -v * z, -v * y, -v])
         H = np.linalg.svd(np.array(A))[2][-1].reshape(3, 3)
         self.ph = (im, H / H[2, 2])
+        self.ph_name = name
         return self
 
     def photo_top(self, name, nose_u, tail_u, centre_v, half_px, nose_left=True, left_down=True):
@@ -455,6 +463,59 @@ class Atlas:
             cur = self.img[v0 * K:v0 * K + h, u0 * K:u0 * K + w]
             self.img[v0 * K:v0 * K + h, u0 * K:u0 * K + w] = np.where(m, out, cur)
 
+    def project(self, outline, side, glass=(), belt=1.4, decals=(), arch=.37, blur=1):
+        """Map the registered side photo straight onto both flanks (photo-exact colours and graphics).
+        side = the flank the photo shows ('left' or 'right'); the other flank gets the same design mirrored,
+        like the real cars, but with every piece of lettering in `decals` turned back the right way round:
+        in each box the lettering (pixels away from the backing colours) is lifted off, the paint under it filled in,
+        and the lettering laid back flipped, so it reads correctly once mirrored onto the far flank.
+        outline / glass = photo polygons of the body and its windows (glass is filled from the paint around
+        it, so pillars keep their colour). decals = [(box, backing colours, tol)]."""
+        import cv2
+        from PIL import ImageDraw
+        from scipy import ndimage
+        im, H = self.ph
+        src = cv2.bilateralFilter(im.astype(np.uint8), 5, 18, 3) if blur else im.astype(np.uint8)
+        far = src.copy()
+        for box, keep, tol in decals:
+            x0, y0, x1, y1 = box
+            R = src[y0:y1, x0:x1]
+            kc = np.array([hexc(c) for c in keep], np.float32)      # the backing colours: anything else is lettering
+            M = (np.sqrt(((R[..., None, :].astype(np.float32) - kc) ** 2).sum(-1)).min(-1) > tol).astype(np.uint8)
+            M = cv2.dilate(M, np.ones((3, 3), np.uint8))
+            bgR = cv2.inpaint(R, M, 4, cv2.INPAINT_TELEA)
+            cols = np.nonzero(M.any(0))[0]
+            if not len(cols):
+                continue
+            a0, a1 = cols[0], cols[-1] + 1           # flip about the lettering's own centre, not the box's
+            out = bgR.copy()
+            fl = M[:, a0:a1][:, ::-1] > 0
+            out[:, a0:a1] = np.where(fl[..., None], R[:, a0:a1][:, ::-1], bgR[:, a0:a1])
+            far[y0:y1, x0:x1] = out
+        mk = Image.new('L', (im.shape[1], im.shape[0]), 0)
+        dr = ImageDraw.Draw(mk)
+        dr.polygon([tuple(p) for p in outline], fill=255)
+        for g in glass:
+            dr.polygon([tuple(p) for p in g], fill=0)
+        mk = np.asarray(mk) > 127
+        for view in ('left', 'right'):
+            pic = (src if view == side else far).astype(np.float32)
+            x, y, z = self.coords(view)
+            u, v = self.to_photo(z.ravel(), y.ravel())
+            col = np.stack([ndimage.map_coordinates(pic[..., c], [v, u], order=1, mode='nearest') for c in range(3)], -1).reshape(z.shape + (3,))
+            ok = ndimage.map_coordinates(mk.astype(np.float32), [v, u], order=0, mode='constant').reshape(z.shape) > .5
+            for ax in (self.f, self.r):
+                ok &= ~(np.hypot(z - ax, (y - .34) * 1.1) < arch)
+            ok &= y > .06
+            idx = ndimage.distance_transform_edt(~ok, return_distances=False, return_indices=True)
+            col = col[idx[0], idx[1]]
+            m = (y < belt)[..., None]
+            u0, v0 = REGION[view]
+            h, w = z.shape
+            cur = self.img[v0 * K:v0 * K + h, u0 * K:u0 * K + w]
+            self.img[v0 * K:v0 * K + h, u0 * K:u0 * K + w] = np.where(m, col, cur)
+        self.exact = True
+
     def plogo(self, im, u, v, hpx=None, view='sides', maxw_px=None, rot=0, hm=None, wm=None):
         """A logo placed where it sits in the registered photo: centre (u, v) and height in photo pixels
         (or hm / wm metres on a three-quarter photo, where pixels are foreshortened)."""
@@ -507,7 +568,7 @@ class Atlas:
         occ = np.zeros((ATLAS * K, ATLAS * K), bool)
         pad = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (int(.05 * S * K) | 1,) * 2)
         for im, x, y, view, soft in self.logos:
-            if FIT:
+            if FIT and soft is not None:
                 im, x, y = self.fit(im, x, y, view, occ if soft else None, soft)
                 if im is None:
                     continue
@@ -602,39 +663,53 @@ def common(A, kind, dark):
 
 
 def L_redbull(A, kind):
-    """Triple Eight #88/#888 Red Bull Ampol Mustangs (refs redbull/01-03): matte navy with fine tonal
-    horizontal stripes, the Red Bull sun and bulls over the front fender and door, a giant white AMPOL over
-    the rear door and quarter, a bright blue skirt line."""
-    navy, navy2, blue, red = '#1b2150', '#262e66', '#1f56d6', '#d6001c'
+    """Triple Eight #88/#888 Red Bull Ampol Camaros, from Riley's renders (riley/1_t8_side, 2_t8_front):
+    white car, navy and blue mountain shards from the front wheel back to the rear door, the Red Bull sun and
+    charging bull on the door, Red Bull across the sill, CAMARO along the rear quarter, AMPOL AMPLIFY on both
+    bumpers, navy bonnet with the sun, two bulls and Red Bull."""
+    wht, navy, blue, sun, red = '#f1f1f3', '#26246a', '#2f8ad8', '#f3c51b', '#d42049'
 
     def base(x, y, z, view):
-        c = fill(x.shape, navy)
-        if view in ('left', 'right', 'front', 'rear'):
-            c = lay(c, (np.mod(y, .07) < .03).astype(np.float32) * band(y, .12, .9), navy2)
-            c = lay(c, band(y, .1, .13), blue)
+        c = fill(x.shape, wht)
         if view == 'top':
-            c = lay(c, (np.mod(x + 2, .07) < .03).astype(np.float32), navy2)
+            bon = band(z, A.f - .62, 9) * band(np.abs(x), -1, .8)
+            c = lay(c, bon, navy)
+            c = lay(c, band(z, A.f - .62, 9) * band(np.abs(x), .62, .8), blue)
+            rr = np.hypot(z - (A.f + .12), x * 1.15)
+            c = lay(c, (rr < .24).astype(np.float32), sun)
+        if view == 'front':
+            c = lay(c, band(y, -1, .2), navy)
+            c = lay(c, band(y, .2, .24), blue)
         if view == 'rear':
-            c = lay(c, band(y, .9, 9), red)
+            c = lay(c, band(y, -1, .22), navy)
         return c
     A.paint(base)
-    bulls = logo('ed202fc404')
-    rb = logo('74cca6ffe5')
-    amp = logo('e160ac7f24')
-    A.put('sides', bulls, A.f - .7, .52, .5, maxw=1.2)
-    A.put('sides', rb, -.2, .34, .17, maxw=.75)
-    A.put('sides', amp, -.85, .7, .22, maxw=1.35)
-    A.put('sides', recol(logo('a91bdcf82d'), '#ffffff'), A.r - .25, .4, .07, maxw=.4)
-    A.put('sides', logo('3952a5b529'), A.r - .3, .25, .06, maxw=.3)
-    A.bonnet(bulls, A.f - .25, .5, maxw=1.0)
-    A.bonnet(rb, A.f + .45, .14, maxw=.7)
-    A.roof(amp, .1, .14, maxw=1.0)
+    A.photo('riley/1_t8_side', [(930, 453), (290, 450), (930, 383), (290, 385)], tyre=.33)
+    outline = [(85, 330), (110, 315), (160, 280), (250, 262), (330, 252), (420, 248), (520, 248), (600, 252), (650, 262),
+               (700, 290), (760, 322), (840, 330), (960, 345), (1040, 360), (1080, 372), (1095, 385), (1100, 440), (1098, 500),
+               (1060, 512), (1000, 507), (860, 507), (600, 507), (330, 507), (200, 502), (90, 492), (80, 440)]
+    glass = [[(366, 320), (368, 300), (392, 270), (470, 262), (560, 262), (640, 272), (682, 296), (708, 320)]]
+    T, N, B = '#141416', '#26246a', '#2f8ad8'          # tyre, navy, blue: never lettering
+    decals = [((150, 324, 522, 380), ['#e6e6e8', N, B, T], 75),             # CAMARO
+              ((356, 406, 598, 478), [N, '#3a3f8a', T], 85),                # Red Bull
+              ((1024, 412, 1094, 480), ['#eeeef0', T, B], 70),               # AMPOL AMPLIFY Premium Fuels (front)
+              ((104, 402, 206, 464), ['#eeeef0', T, B], 70),                # (rear)
+              ((384, 476, 582, 504), [N, '#3a3f8a', T], 75),                # Avery Dennison, mtaa super
+              ((296, 275, 341, 316), ['#eeeef0'], 70),                      # hp
+              ((893, 350, 1016, 388), ['#eeeef0', B, N, '#f3c51b'], 70)]                # GM, SV
+    A.project(outline, 'right', glass=glass, decals=decals)
+    bulls, rb = logo('ed202fc404'), logo('74cca6ffe5')
+    A.bonnet(bulls, A.f + .1, .4, maxw=1.0)
+    A.bonnet(rb, A.f + .62, .17, maxw=1.0)
+    amp = crop('riley/1_t8_side', (972, 416, 1052, 453), bg='#f0f0f2', tol=60, keep=['#e01b24'])
+    prem = crop('riley/1_t8_side', (975, 455, 1052, 476), bg='#f0f0f2', tol=60, keep=['#303034'])
+    for sx in (-.55, .55):
+        A.put('front', amp, sx, .45, .09, maxw=.4)
+        A.put('front', prem, sx, .36, .035, maxw=.3)
+    A.put('rear', amp, -.45, .45, .09, maxw=.4)
+    A.put('rear', logo('ed202fc404'), .45, .48, .12, maxw=.45)
+    A.roof(logo('e160ac7f24'), .1, .14, maxw=1.0)
     A.wingtop(recol(logo('5a20684e34'), '#ffffff'), -2.2, .1, maxw=1.0)
-    A.put('front', rb, 0, .55, .06)
-    A.put('front', amp, 0, .25, .06)
-    A.put('rear', bulls, .5, .6, .14)
-    A.put('rear', rb, -.4, .6, .1)
-    A.put('rear', amp, 0, .35, .08)
 
 
 def L_penrite(A, kind):
@@ -799,24 +874,38 @@ def L_shell(A, kind):
         return c
     A.paint(base)
     A.photo('djr/18', [(315, 668), (1157, 668), (315, 572), (1157, 572)], tyre=.33)
-    A.trace([wht, red, yel, blk], belt=.88, erase=[(890, 500, 1030, 600), (480, 560, 660, 650)], allow={3: (-9, -9)})
-    k = A.px_per_m()
+    outline = [(117, 571), (187, 527), (400, 504), (560, 473), (627, 440), (747, 403), (933, 397), (1093, 420), (1200, 447), (1307, 467), (1393, 493), (1413, 527), (1433, 627), (1427, 700), (1333, 713), (1040, 733), (453, 737), (200, 733), (91, 727), (107, 627)]
+    glass = [[(593, 503), (627, 460), (693, 424), (800, 407), (933, 407), (1053, 424), (1109, 443), (1073, 473), (933, 488), (747, 497), (627, 505)]]
+    W, R, Y, T = '#f2f2f2', red, '#f2b81c', '#141416'
+    decals = [((273, 515, 456, 543), [W], 70),                 # national tiles
+              ((437, 541, 525, 625), [W], 70),                 # Rheem
+              ((444, 635, 543, 688), [W, T], 70),              # DUNLOP, Repco
+              ((693, 535, 813, 588), [W], 70),                 # Shell
+              ((693, 588, 1003, 641), [W], 70),                 # V-Power
+              ((967, 527, 1023, 580), [W], 70),                 # V-Power star
+              ((1083, 493, 1339, 549), [W], 70),                # Repco
+              ((1123, 441, 1211, 485), [W], 70),                 # MAN
+              ((1309, 571, 1403, 605), [W], 70),                # Jet couriers
+              ((1267, 627, 1379, 696), [R, W, Y], 75),          # Ford, RACING
+              ((987, 660, 1037, 699), [R, Y], 70),              # PPG
+              ((120, 660, 183, 716), [W, R], 70),               # OTR
+              ((507, 711, 1016, 735), [R, Y, T], 70)]           # sill partners
+    A.project(outline, 'left', glass=glass, decals=decals)
     pect = logo('755f654419').crop((0, 0, 324, 302))
     vpow = logo('755f654419').crop((456, 0, 1302, 302))
-    A.plogo(pect, 613, 604, 104)
-    A.plogo(vpow, 848, 593, 96)
-    A.plogo(crop('djr/18', (440, 540, 525, 625)), 483, 582, 76)               # Rheem
-    A.plogo(logo('71cdf80cee'), 1211, 526, 52)                                  # Repco
-    A.plogo(logo('71cdf80cee'), 495, 678, 15)
-    A.plogo(logo('4e18d3dc8c'), 470, 648, 15)
-    A.plogo(crop('djr/18', (275, 518, 455, 545)), 365, 531, 22)               # national tiles
-    A.plogo(logo('941b73578c'), 1016, 680, 24)                                   # PPG
-    A.plogo(logo('3952a5b529'), 1324, 651, 28)
-    A.plogo(recol(crop('djr/18', (1275, 668, 1420, 690)), '#ffffff'), 1347, 679, 16)   # RACING
-    A.plogo(crop('djr/18', (955, 518, 1022, 582)), 988, 550, 52)               # V-Power star
-    A.plogo(crop('djr/18', (1330, 575, 1400, 605)), 1365, 590, 26)             # Jet
-    A.bonnet(pect, A.f + .2, .55, maxw=.8)
-    A.roof(recol(vpow, '#ffffff'), -.25, .11, maxw=.5)
+    from scipy import ndimage
+    pa = np.asarray(pect.convert('RGBA')).copy()
+    al = pa[..., 3] > 60
+    pad = 60
+    big = np.pad(al, pad)
+    ring = ndimage.binary_dilation(big, iterations=48) & ~ndimage.binary_dilation(big, iterations=34)
+    sh = np.zeros(big.shape + (4,), np.uint8)
+    sh[ring] = (244, 244, 242, 255)
+    sh[pad:-pad, pad:-pad][al] = pa[al]
+    pect_ring = Image.fromarray(sh)
+    A.bonnet(pect_ring, A.f + .25, .95, maxw=1.15)
+    A.roof(pect, -.1, .3, maxw=.5)
+    A.roof(recol(vpow, '#ffffff'), .35, .1, maxw=.6)
     A.wingtop(crop('djr/14', (480, 228, 1135, 282), bg='#111111'), -2.24, .09, maxw=1.3)    # DXC
     A.put('front', recol(logo('b609ba68f2').crop((560, 0, 1419, 369)), '#ffffff'), 0, .22, .05, maxw=.7)
     A.put('front', logo('3952a5b529'), 0, .62, .06)
@@ -825,84 +914,174 @@ def L_shell(A, kind):
     A.put('rear', crop('djr/14', (545, 400, 1030, 450), bg='#d6202b'), 0, .885, .035, maxw=.7)
 
 
-def L_dewalt(A, kind):
-    """Team 18 #18 DEWALT Camaro (refs dewalt/02): DEWALT yellow, black bonnet with a giant FUCHS, black roof,
-    black nose and front fenders, black tail fading in over the rear quarters, huge DEWALT on the doors."""
-    yel, blk, red = '#febd17', '#121212', '#e0262c'
+# ---------------------------------------------------------------- typeset marks (any font, any colour)
+FONTS = os.path.join(HERE, 'fonts')
+
+
+def text(txt, font='ArchivoBlack-Regular', px=200, fill='#ffffff', track=0.0, slant=0.0, weight=None, lines=None):
+    """A sharp RGBA wordmark in a real typeface (tools/s26/fonts): track = extra letter spacing (fraction of px),
+    slant = italic shear. lines = [(txt, scale)] for stacked text, centred."""
+    from PIL import ImageDraw, ImageFont
+    def one(t, size):
+        f = ImageFont.truetype(os.path.join(FONTS, font + '.ttf'), int(size))
+        if weight:
+            try:
+                f.set_variation_by_axes([weight])
+            except Exception:
+                pass
+        ws = [f.getbbox(ch)[2] - f.getbbox(ch)[0] if ch != ' ' else size * .3 for ch in t]
+        adv = [f.getlength(ch) for ch in t]
+        W = int(sum(adv) + track * size * (len(t) - 1) + size)
+        H = int(size * 1.6)
+        im = Image.new('RGBA', (W, H), (0, 0, 0, 0))
+        d = ImageDraw.Draw(im)
+        x = size * .2
+        for ch, ad in zip(t, adv):
+            d.text((x, size * .1), ch, font=f, fill=fill)
+            x += ad + track * size
+        return im.crop(im.getbbox())
+    if lines:
+        parts = [one(t, px * k) for t, k in lines]
+        W = max(p.width for p in parts)
+        gap = int(px * .18)
+        H = sum(p.height for p in parts) + gap * (len(parts) - 1)
+        im = Image.new('RGBA', (W, H), (0, 0, 0, 0))
+        y = 0
+        for p in parts:
+            im.alpha_composite(p, ((W - p.width) // 2, y))
+            y += p.height + gap
+    else:
+        im = one(txt, px)
+    if slant:
+        sh = int(im.height * slant)
+        im = im.transform((im.width + sh, im.height), Image.AFFINE, (1, slant, -sh, 0, 1, 0), Image.BICUBIC)
+        im = im.crop(im.getbbox())
+    return im
+
+
+def plate(im, fill, pad=.18, radius=.25, outline=None, ow=.04):
+    """A rounded decal plate behind a mark (pad / radius as a fraction of the mark's height)."""
+    from PIL import ImageDraw
+    p = int(im.height * pad)
+    W, H = im.width + 2 * p, im.height + 2 * p
+    out = Image.new('RGBA', (W, H), (0, 0, 0, 0))
+    d = ImageDraw.Draw(out)
+    d.rounded_rectangle((0, 0, W - 1, H - 1), int(H * radius), fill=fill, outline=outline, width=int(H * ow) if outline else 0)
+    out.alpha_composite(im, (p, p))
+    return out
+
+
+def row(*ims, gap=.25):
+    """Marks side by side, centred vertically (gap as a fraction of the tallest)."""
+    H = max(i.height for i in ims)
+    g = int(H * gap)
+    out = Image.new('RGBA', (sum(i.width for i in ims) + g * (len(ims) - 1), H), (0, 0, 0, 0))
+    x = 0
+    for i in ims:
+        out.alpha_composite(i, (x, (H - i.height) // 2))
+        x += i.width + g
+    return out
+
+
+def hino_badge():
+    """HINO as raced: a red rounded plate, white Hino emblem in a white ring and HINO in heavy caps."""
+    from PIL import ImageDraw
+    em = recol(logo('hino').crop((0, 0, 1460, 1000)), '#ffffff')
+    em = em.crop(em.getbbox())
+    em.thumbnail((170, 170))
+    ring = Image.new('RGBA', (220, 220), (0, 0, 0, 0))
+    ImageDraw.Draw(ring).ellipse((4, 4, 215, 215), outline='#ffffff', width=14)
+    ring.alpha_composite(em, ((220 - em.width) // 2, (220 - em.height) // 2))
+    word = text('HINO', 'ArchivoBlack-Regular', 230, '#ffffff', track=.08)
+    return plate(row(ring, word, gap=.18), '#e3242b', pad=.22, radius=.22, outline='#ffffff', ow=.05)
+
+
+def grunge(z, y, z0, slope, width, seed=3):
+    """A smoky, broken edge: 1 behind z0 + slope*(y-.5) (towards the tail), fading over `width` with noise."""
+    rng = np.random.default_rng(seed)
+    from scipy import ndimage
+    n = ndimage.gaussian_filter(rng.standard_normal((64, 64)), 2)
+    n = n / (np.abs(n).max() + 1e-6)
+    ny = ndimage.map_coordinates(n, [np.mod(y * 40, 63), np.mod(z * 25, 63)], order=1, mode='wrap')
+    e = z0 + slope * (y - .5) + ny * width * .6
+    return np.clip((e - z) / width + .5, 0, 1)
+
+
+def L_team18(A, kind, main, brand):
+    """Team 18 Camaros from Riley's photos (riley/3_team18_20, 4_team18_18): body in the main colour, black
+    bonnet, roof and deck, a smoky black rear quarter and sill, the giant door name, a red HINO plate or
+    white TOYOTA FORKLIFTS plate on the rear quarter, Coca-Cola or TRADIE on the front guard, Industrial
+    Batteries panels on the bumper corners, HUNGRY JACK'S on the splitter."""
+    blk = '#141414'
+    f, r = A.f, A.r
 
     def base(x, y, z, view):
-        c = fill(x.shape, yel)
-        t = ss(A.r + .6, A.r - .1, z)
-        if view == 'rear':
-            t = np.ones_like(z)
-        c = c * (1 - t[..., None]) + C(blk) * t[..., None]
+        c = fill(x.shape, main)
         if view in ('left', 'right'):
-            c = lay(c, band(y, -1, .2), blk)
-            c = lay(c, band(y, .93, 9), blk)
-            c = lay(c, ss(A.f + .02, A.f + .12, z + (y - .35) * .5), blk)        # black nose and fender tip
-            c = lay(c, band(y, .86, .9) * band(z, A.r + .3, A.f - .2), blk)     # shoulder pinstripe
+            c = lay(c, grunge(z, y, r + .62, -.5, .32), blk)                         # rear quarter
+            c = lay(c, np.clip((.27 - y) / .05 + .5, 0, 1) * (1 - .35 * grunge(-y * 4, z, 0, 0, 1.5, 7)), blk)   # sill
+            c = lay(c, band(y, .9, 9), blk)                                            # roof edge
         if view == 'top':
-            shoulder = band(np.abs(x), .8, 9) * band(z, A.r + .5, A.f - .45)
             c = fill(x.shape, blk)
-            c = lay(c, shoulder, yel)
         if view == 'front':
-            c = fill(x.shape, blk)
-            c = lay(c, band(np.abs(x), .72, 9) * band(y, .2, .6), yel)
+            c = lay(c, band(np.abs(x), -1, .42) * band(y, .2, 9), blk)
+            c = lay(c, band(y, -1, .17), blk)
+        if view == 'rear':
+            c = lay(c, band(y, -1, .58), blk)
+            c = lay(c, band(y, .95, 9), blk)
         return c
     A.paint(base)
-    dw = logo('4ed2777886')
-    hino_badge = crop('dewalt/02', (901, 736, 1067, 784), keep=['#e0262c', '#ffffff'])
-    A.put('sides', dw, -.05, .52, .46, maxw=2.15)
-    A.put('sides', recol(logo('seiko'), '#ffffff'), A.f + .55, .6, .07, maxw=.42)
-    A.put('sides', hino_badge, A.f + .5, .45, .1, maxw=.45)
-    A.put('sides', recol(logo('fuchs'), '#ffffff'), A.f + .5, .3, .1, maxw=.32)
-    A.put('sides', logo('5e0810194f'), A.f - .55, .78, .08, maxw=.4)
-    A.put('sides', hino_badge, A.r - .3, .72, .12, maxw=.5)
-    A.bonnet(recol(logo('fuchs'), '#ffffff'), A.f + .45, .75, maxw=1.1)
-    A.roof(logo('79c3639571'), -.4, .14, maxw=.8)
-    A.wingtop(dw, -2.2, .1, maxw=1.0)
-    A.put('front', dw, 0, .5, .07)
-    A.put('front', logo('bowtie'), 0, .42, .05)
-    A.put('front', hino_badge, .5, .2, .06)
-    A.put('rear', hino_badge, 0, .82, .1)
+    hino = hino_badge()
+    ib = text('', lines=[('Industrial', 1), ('Batteries', 1)], font='Montserrat', weight=800, px=120, fill='#ffffff')
+    hj = plate(text("HUNGRY JACK'S", 'ArchivoBlack-Regular', 160, '#ffffff', track=.04), '#d71e28', pad=.25, radius=.1)
+    if brand == 'dewalt':
+        A.put('sides', logo('4ed2777886'), .12, .5, .34, maxw=2.1)
+        A.put('sides', hino, r + .05, .74, .17, maxw=.75)
+        A.put('sides', logo('cocacola'), f - .3, .74, .1, maxw=.5)
+        A.put('sides', text('Cub Cadet', 'KaushanScript-Regular', 200, '#f6b91a'), r - .2, .33, .09, maxw=.6)
+        A.put('sides', plate(row(ib, recol(logo('fuchs').crop((0, 0, 1460, 1000)), '#ffffff')), blk, pad=.2, radius=.15), f + .62, .36, .14, maxw=.55)
+        A.put('sides', hino, f + .65, .55, .09, maxw=.45)
+        A.bonnet(recol(logo('seiko2'), '#ffffff'), f + .72, .08, maxw=.5)
+        A.bonnet(logo('4ed2777886'), f + .55, .09, maxw=.45)
+        A.put('front', recol(logo('seiko2'), '#ffffff'), -.62, .48, .05, maxw=.32)
+        A.put('front', recol(logo('seiko2'), '#ffffff'), .62, .48, .05, maxw=.32)
+        A.put('front', logo('4ed2777886'), 0, .55, .06, maxw=.35)
+        A.put('front', hino, -.62, .36, .06, maxw=.3)
+        A.put('front', hino, .62, .36, .06, maxw=.3)
+        A.put('rear', logo('4ed2777886'), -.3, .76, .09, maxw=.55)
+        A.put('rear', hino, -.4, .38, .1, maxw=.5)
+        A.put('rear', recol(logo('fuchs').crop((0, 0, 1460, 1000)), '#ffffff'), .05, .4, .08)
+        A.wingtop(recol(logo('4ed2777886'), '#ffffff'), -2.2, .1, maxw=1.0)
+    else:
+        name = text('', lines=[('SNOWY RIVER', 1)], font='BebasNeue-Regular', px=300, fill='#262626', track=.2)
+        car = text('CARAVANS', 'BebasNeue-Regular', 300, '#262626', track=.45)
+        A.put('sides', name, .2, .55, .22, maxw=1.95)
+        A.put('sides', car, .2, .35, .075, maxw=1.0)
+        tf = plate(text('', lines=[('TOYOTA', 1), ('FORKLIFTS', .62)], font='ArchivoBlack-Regular', px=150, fill='#141414'), '#f4f4f4', pad=.15, radius=.08)
+        A.put('sides', tf, r + .05, .74, .2, maxw=.7)
+        A.put('sides', text('TRADIE', 'ArchivoBlack-Regular', 200, '#141414', slant=.18), f - .32, .73, .1, maxw=.6)
+        A.put('sides', plate(row(ib, recol(logo('mack') if False else logo('hino').crop((0, 0, 1460, 1000)), '#ffffff')), blk, pad=.2, radius=.15), f + .62, .36, .14, maxw=.55)
+        A.bonnet(logo('e25c0e6ab0'), f + .15, .3, maxw=1.35)
+        A.put('front', logo('cocacola'), -.55, .52, .06, maxw=.32)
+        A.put('front', logo('cocacola'), .55, .52, .06, maxw=.32)
+        A.put('front', recol(logo('sika'), '#f08a1c'), 0, .45, .04, maxw=.3)
+        A.put('rear', text('', lines=[('SNOWY RIVER', 1), ('CARAVANS', .45)], font='BebasNeue-Regular', px=200, fill='#141414'), 0, .78, .12, maxw=.75)
+        A.put('rear', text('Taubmans', 'KaushanScript-Regular', 160, '#ffffff'), -.45, .5, .05, maxw=.3)
+        A.put('rear', text('WAVERLEY FORK LIFTS', 'ArchivoBlack-Regular', 120, '#ffffff'), .15, .25, .035, maxw=.6)
+        A.wingtop(text('KENWORTH', 'ArchivoBlack-Regular', 200, '#ffffff', track=.1), -2.2, .1, maxw=1.0)
+    A.put('front', hj, 0, .1, .055, maxw=.95)
+    A.exact = True           # the photos' own sponsor set only
+    A.roof(text('Industrial Batteries', 'Montserrat', 160, '#ffffff', weight=800), .3, .08, maxw=.8)
+
+
+def L_dewalt(A, kind):
+    """Team 18 #18 DEWALT Camaro (riley/4_team18_18)."""
+    L_team18(A, kind, '#fcbd19', 'dewalt')
 
 
 def L_snowyriver(A, kind):
-    """Team 18 #20 Snowy River Caravans Camaro (refs snowyriver/06): the #18 layout in teal. Black bonnet with
-    SNOWY RIVER CARAVANS, black nose, white rear quarters with a black mountain line, giant name on the doors."""
-    teal, blk, wht = '#2ec4c6', '#121314', '#f4f6f6'
-
-    def base(x, y, z, view):
-        c = fill(x.shape, teal)
-        if view in ('left', 'right'):
-            q = ss(A.r + .75, A.r + .55, z)                                    # white rear quarter
-            c = lay(c, q * band(y, .2, .93), wht)
-            ridge = .5 + .08 * np.sin(z * 9) + .05 * np.sin(z * 23)            # mountain silhouette
-            c = lay(c, q * band(y, -1, ridge), blk)
-            c = lay(c, band(y, -1, .2), blk)
-            c = lay(c, band(y, .2, .26) * band(z, A.r + .5, A.f - .4), wht)
-            c = lay(c, ss(A.f + .02, A.f + .12, z + (y - .35) * .5) * band(y, .45, 9), blk)
-        if view == 'top':
-            c = lay(c, band(z, A.f - 1.25, 9) * band(np.abs(x), -1, .78), blk)
-            c = lay(c, band(z, -9, A.r - .55), blk)
-        if view == 'front':
-            c = lay(c, band(y, .3, 9), blk)
-            c = lay(c, band(y, -1, .12), blk)
-        if view == 'rear':
-            c = fill(x.shape, blk)
-        return c
-    A.paint(base)
-    sr = logo('e25c0e6ab0')
-    A.put('sides', recol(sr, '#ffffff'), .05, .56, .42, maxw=2.0)
-    A.put('sides', recol(logo('f372e7f1ca'), '#121314'), A.f - .45, .82, .09, maxw=.5)
-    A.put('sides', logo('5e0810194f'), A.f + .5, .62, .06, maxw=.4)
-    A.put('sides', recol(logo('hino'), '#ffffff'), A.r - .3, .7, .1, maxw=.3)
-    A.bonnet(recol(sr, '#ffffff'), A.f + .45, .4, maxw=1.2)
-    A.roof(recol(logo('f372e7f1ca'), '#121314'), -.4, .14, maxw=.8)
-    A.wingtop(logo('f372e7f1ca'), -2.2, .1, maxw=1.0)
-    A.put('front', logo('bowtie'), 0, .42, .05)
-    A.put('front', recol(sr, '#ffffff'), 0, .55, .06)
-    A.put('rear', logo('f372e7f1ca'), 0, .82, .08)
+    """Team 18 #20 Snowy River Caravans Camaro (riley/3_team18_20)."""
+    L_team18(A, kind, '#43c6c0', 'snowy')
 
 
 def L_rjbatteries(A, kind):
@@ -1354,7 +1533,7 @@ def decals(A, key, kind):
 
 def chassis_of(key):
     """The livery's body and chassis, from the roster."""
-    MAKE = {0: 'Ford', 1: 'Ford', 2: 'Ford', 3: 'Holden', 4: 'Ford', 5: 'Holden', 6: 'Holden', 7: 'Holden', 8: 'Holden', 9: 'Holden', 10: 'Ford', 11: 'Ford'}
+    MAKE = {0: 'Holden', 1: 'Ford', 2: 'Ford', 3: 'Holden', 4: 'Ford', 5: 'Holden', 6: 'Holden', 7: 'Holden', 8: 'Holden', 9: 'Holden', 10: 'Ford', 11: 'Ford'}
     for t, seats in GRID['roster'].items():
         for e in seats:
             if e['livery'] == key:
@@ -1367,8 +1546,9 @@ def build(key):
     A = Atlas(make)
     A.kind_key = kind + '_' + make
     DESIGNS[key](A, kind)
-    maker(A, kind, dark=float(A.img.mean()) < 110)
-    decals(A, key, kind)
+    if not A.exact:          # a photo-exact livery already carries every real mark
+        maker(A, kind, dark=float(A.img.mean()) < 110)
+        decals(A, key, kind)
     im = A.finish()
     os.makedirs(OUT, exist_ok=True)
     png = os.path.join(OUT, key + '.png')
