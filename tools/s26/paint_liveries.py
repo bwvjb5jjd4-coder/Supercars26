@@ -915,22 +915,32 @@ def celebrating(gold, ink):
     return row(h, right, gap=.05)
 
 
-def wreath(gold, n=10, px=600):
-    """Gold laurel branches round the door disc (two arcs of leaves, open at the top)."""
+def wreath(gold, n=14, px=600, gap=(-.21, .56)):
+    """Gold laurel branches round the door disc: a thin stem with slender pointed leaves either side, only
+    above and below the black lettering band (gap = sin(angle) range left clear of the PENRITE letters)."""
     from PIL import ImageDraw
     import math
     im = Image.new('RGBA', (px, px), (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
     cx = cy = px / 2
-    R = px * .44
-    for s in (-1, 1):
+    R = px * .41
+    L, W = px * .1, px * .032
+    leaf = Image.new('RGBA', (int(W) + 4, int(L) + 4), (0, 0, 0, 0))
+    side = lambda sg: [(W / 2 + 2 + sg * W / 2 * math.sin(math.pi * t / 24), 2 + L * t / 24) for t in range(25)]
+    ImageDraw.Draw(leaf).polygon(side(1) + side(-1)[::-1], fill=gold)
+    for sg in (-1, 1):
         for k in range(n):
-            a = math.radians(-105 + k * 19)                    # from the bottom up the side
-            x, y = cx + s * R * math.cos(a), cy - R * math.sin(a)
-            leaf = Image.new('RGBA', (int(px * .055), int(px * .15)), (0, 0, 0, 0))
-            ImageDraw.Draw(leaf).ellipse((0, 0, leaf.width - 1, leaf.height - 1), fill=gold)
-            ang = s * (math.degrees(a) - 90 + 35)
-            leaf = leaf.rotate(-ang if s > 0 else -ang, expand=True, resample=Image.BICUBIC)
-            im.alpha_composite(leaf, (int(x - leaf.width / 2), int(y - leaf.height / 2)))
+            a = math.radians(-80 + k * 12)
+            if gap[0] < math.sin(a) < gap[1] or math.sin(a) > .93:
+                continue
+            x, y = cx + sg * R * math.cos(a), cy - R * math.sin(a)
+            base = math.degrees(math.atan2(-(-math.cos(a)), sg * -math.sin(a) * -1))
+            for tilt, out in ((32, 1), (-32, -1)):
+                th = base + tilt * sg
+                lf = leaf.rotate(th - 90, expand=True, resample=Image.BICUBIC)
+                ox, oy = math.cos(math.radians(th)) * L * .45, -math.sin(math.radians(th)) * L * .45
+                im.alpha_composite(lf, (int(x + ox - lf.width / 2), int(y + oy - lf.height / 2)))
+            d.ellipse((x - 3, y - 3, x + 3, y + 3), fill=gold)
     return im
 
 
@@ -1019,7 +1029,9 @@ def L_penrite(A, kind):
     h.alpha_composite(yrs, (int(h.width * .83 - yrs.width / 2), int(h.height / 2 - yrs.height / 2)))
     A.bonnet(h, 1.92, .55, maxw=1.45)
     A.bonnet(word, 1.38, .13, maxw=.85)
-    A.roof(celebrating(gold, blk), .3, .12, maxw=.55)
+    A.roof(celebrating(gold, blk), .32, .1, maxw=.5)
+    flag = Image.open(os.path.join(ROOT, 'tools/livery/logos/pr_ausflag21.png')).convert('RGBA')
+    A.roof(flag, -.1, .32, maxw=.64)              # Riley: medium, centred, reading from the front
     # nose
     for s in (-1, 1):       # the bright strip beside the grille (only the frame, this strip and the lip bar are paintable)
         A.put('front', grove_word(), s * .62, .5, .04, maxw=.15)
