@@ -112,6 +112,9 @@ function withBody(make,key,fn){
  try{return fn();}finally{DC35_ASSETS.cars[make]=stock;building=prevB;}
 }
 S26.withBody=withBody;
+// The stock cars' B-pillar blackout (IN55) is drawn in the paint shader at the ZB's pillar position: on these
+// bodies it lands on the roof rail and door top as two black squares, so it is skipped while an S26 car builds.
+if(typeof in55PillarShader==='function'){const prevPillar=in55PillarShader;in55PillarShader=function(m){if(building)return;return prevPillar.apply(this,arguments);};}
 // Right-hand drive: the cockpit pieces the later layers place for the left-hand seat move across.
 const RHD_NAMES=['CP65 column display','IN55 centre screen','IN55 dash sponsor'];
 function rhd(car){

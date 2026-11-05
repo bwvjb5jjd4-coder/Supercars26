@@ -21,8 +21,10 @@ K = 2                     # supersampling
 ATLAS = 2048
 S, S2 = 345.0, 180.0
 ZF, ZB, YT, XL = 2.62, -2.62, 1.48, 1.06
-REGION = {'left': (110, 0), 'right': (110, 520), 'top': (110, 1040), 'front': (40, 1772), 'rear': (500, 1772)}
-SIZE = {'left': (1808, 511), 'right': (1808, 511), 'top': (1808, 732), 'front': (382, 267), 'rear': (382, 267)}
+REGION = {'left': (110, 0), 'right': (110, 520), 'top': (110, 1040), 'front': (40, 1772), 'rear': (500, 1772), 'lip': (905, 1780)}
+SIZE = {'left': (1808, 511), 'right': (1808, 511), 'top': (1808, 732), 'front': (382, 267), 'rear': (382, 267), 'lip': (1116, 236)}
+S3, LX0, LY1, LA = 900.0, -.62, .33, .698   # the splitter strip (lip bodies, see build_bodies.LIP): x = LX0 + u / S3,
+#                                             w = LY1 - v / S3 where w = y cos LA - (z - 2.5) sin LA (seen from in front, above)
 FIT = not os.environ.get('S26_NOFIT')
 GRID = json.load(open(os.path.join(HERE, 'grid.json')))
 
@@ -176,6 +178,11 @@ def safe_mask(kind_key, margin=.018):
     view[ny > .62] = 'top'
     view[(nz > .78) & (ny <= .62)] = 'front'
     view[(nz < -.78) & (ny <= .62)] = 'rear'
+    if kind_key.split('_')[0] in ('camaro',):      # matches build_bodies.view_of(lip=True)
+        view[(nz > .45) & (ny <= .62) & (np.abs(nx) < .35)] = 'front'
+        view[(nz < -.45) & (ny <= .62) & (np.abs(nx) < .35)] = 'rear'
+        c = t.mean(1)
+        view[(c[:, 2] > 2.38) & (c[:, 1] < .3) & (np.abs(c[:, 0]) < .6) & (np.abs(nx) < .5) & ((nz > .3) | (ny > .5))] = 'lip'
     for name in REGION:
         sel = np.nonzero(view == name)[0]
         if not len(sel):
@@ -191,6 +198,10 @@ def safe_mask(kind_key, margin=.018):
             u, w = u0 + (v[..., 2] - ZB) * S, v0 + (XL - v[..., 0]) * S
             ok = ny[sel] > .85
             depth = v[..., 1].mean(1)
+        elif name == 'lip':
+            u, w = u0 + (v[..., 0] - LX0) * S3, v0 + (LY1 - (v[..., 1] * np.cos(LA) - (v[..., 2] - 2.5) * np.sin(LA))) * S3
+            ok = np.ones(len(sel), bool)
+            depth = v[..., 2].mean(1)
         else:
             u = u0 + ((v[..., 0] + XL) if name == 'front' else (XL - v[..., 0])) * S2
             w = v0 + (YT - v[..., 1]) * S2
@@ -239,6 +250,10 @@ class Atlas:
             z = ZB + uu / S
             x = XL - vv / S
             y = np.full_like(z, 1.3)
+        elif view == 'lip':
+            x = LX0 + uu / S3
+            y = LY1 - vv / S3
+            z = np.full_like(x, 2.55)
         else:
             x = uu / S2 - XL if view == 'front' else XL - uu / S2
             y = YT - vv / S2
@@ -250,7 +265,7 @@ class Atlas:
         self.img[:] = 0
         for view in REGION:
             x, y, z = self.coords(view)
-            col = fn(x, y, z, view)
+            col = fn(x, y, z, 'front' if view == 'lip' else view)     # the lip carries the front design
             u0, v0 = REGION[view]
             h, w = x.shape
             self.img[v0 * K:v0 * K + h, u0 * K:u0 * K + w] = col
@@ -281,6 +296,9 @@ class Atlas:
         elif view == 'top':
             s = S
             u, v = (a - ZB) * S, (XL - b) * S
+        elif view == 'lip':
+            s = S3
+            u, v = (a - LX0) * S3, (LY1 - b) * S3
         else:
             s = S2
             u = (a + XL) * S2 if view == 'front' else (XL - a) * S2
@@ -309,7 +327,7 @@ class Atlas:
         if n0 == 0:
             return im, x, y
         cx, cy = x + im.width / 2, y + im.height / 2
-        st = .05 * (S2 if view in ('front', 'rear') else S) * K
+        st = .05 * (S2 if view in ('front', 'rear') else S3 if view == 'lip' else S) * K
         if view == 'top':
             shifts = [(i * st, 0) for i in range(0, 15)] + [(-i * st, 0) for i in range(1, 15)]
         elif view in ('left', 'right'):
@@ -473,7 +491,7 @@ class Atlas:
             cur = self.img[v0 * K:v0 * K + h, u0 * K:u0 * K + w]
             self.img[v0 * K:v0 * K + h, u0 * K:u0 * K + w] = np.where(m, out, cur)
 
-    def project(self, outline, side, glass=(), belt=1.4, decals=(), arch=.37, blur=1):
+    def project(self, outline, side, glass=(), belt=1.4, decals=(), arch=.37, blur=1, glass_fill=None, glass_pad=6, above=None):
         """Map the registered side photo straight onto both flanks (photo-exact colours and graphics).
         side = the flank the photo shows ('left' or 'right'); the other flank gets the same design mirrored,
         like the real cars, but with every piece of lettering in `decals` turned back the right way round:
@@ -499,12 +517,17 @@ class Atlas:
             if mode == 'erase':             # wiped on both flanks: a clean vector mark goes on instead
                 M = cv2.dilate(M, np.ones((3, 3), np.uint8))
                 bgR = cv2.inpaint(R, M, 4, cv2.INPAINT_TELEA)
-                if len(dec) > 4:            # a flat panel: lettering and any grey smudge become the panel colour
+                if len(dec) > 4:            # a clean panel: lettering and grey smudges refilled from the paint around
                     Rf = R.astype(np.float32)
-                    grey = (Rf.max(-1) - Rf.min(-1) < 28) & (Rf.mean(-1) < 200)
-                    W_ = cv2.dilate((M > 0).astype(np.uint8) | grey.astype(np.uint8), np.ones((5, 5), np.uint8)) > 0
-                    sat = Rf.max(-1) - Rf.min(-1) > 40
-                    bgR = np.where((W_ & ~sat)[..., None], hexc(dec[4]).astype(np.uint8), bgR)
+                    lum = Rf.mean(-1)
+                    sat = Rf.max(-1) - Rf.min(-1)
+                    pan = np.median(lum[(M == 0) & (sat < 25)]) if ((M == 0) & (sat < 25)).any() else 230
+                    grey = (sat < 30) & (lum < pan - 18)
+                    W_ = cv2.dilate(((M > 0) | grey).astype(np.uint8), np.ones((5, 5), np.uint8))
+                    W_ &= (sat < 45).astype(np.uint8) | (M > 0).astype(np.uint8)
+                    bgR = cv2.inpaint(R, W_, 9, cv2.INPAINT_TELEA)
+                    bgR = cv2.GaussianBlur(bgR, (0, 0), 1.2) * (W_[..., None] > 0) + bgR * (W_[..., None] == 0)
+                    bgR = bgR.astype(np.uint8)
                 src[y0:y1, x0:x1] = bgR
                 far[y0:y1, x0:x1] = bgR
                 continue
@@ -516,6 +539,14 @@ class Atlas:
             fl = M[:, a0:a1][:, ::-1] > 0
             out[:, a0:a1] = np.where(fl[..., None], R[:, a0:a1][:, ::-1], bgR[:, a0:a1])
             far[y0:y1, x0:x1] = out
+        if glass_fill is not None:     # the photo's windows and their black surround become plain paint
+            gm_ = Image.new('L', (im.shape[1], im.shape[0]), 0)
+            for g in glass:
+                ImageDraw.Draw(gm_).polygon([tuple(p) for p in g], fill=255)
+            gm_ = cv2.dilate(np.asarray(gm_), np.ones((2 * glass_pad + 1, 2 * glass_pad + 1), np.uint8)) > 127
+            src[gm_] = hexc(glass_fill).astype(np.uint8)
+            far[gm_] = hexc(glass_fill).astype(np.uint8)
+            glass = ()
         mk = Image.new('L', (im.shape[1], im.shape[0]), 0)
         dr = ImageDraw.Draw(mk)
         dr.polygon([tuple(p) for p in outline], fill=255)
@@ -533,6 +564,8 @@ class Atlas:
             ok &= y > .06
             idx = ndimage.distance_transform_edt(~ok, return_distances=False, return_indices=True)
             col = col[idx[0], idx[1]]
+            if above is not None:      # off the photo's body (above its roofline): plain paint, not smeared edge pixels
+                col = np.where((~ok & (y > above[0]))[..., None], hexc(above[1]).astype(np.float32), col)
             m = (y < belt)[..., None]
             u0, v0 = REGION[view]
             h, w = z.shape
@@ -730,9 +763,11 @@ def L_redbull(A, kind):
             bon = band(z, A.f - .62, 9) * band(np.abs(x), -1, .8)
             c = lay(c, bon, navy)
             c = lay(c, band(z, A.f - .62, 9) * band(np.abs(x), .62, .8), blue)
+            c = lay(c, band(z, A.f - .82, A.f - .62) * band(np.abs(x), -1, .8), '#17172c')   # cowl: dark, meets the black trim
         if view == 'front':
             c = lay(c, band(y, -1, .24), navy)                                  # lower bumper and splitter
             c = lay(c, band(np.abs(x), -1, .6) * band(y, -1, .66), navy)          # grille surround and nose
+            c = lay(c, band(y, .62, 9), navy)                                    # navy round the headlights, corner to corner
         if view == 'rear':
             c = lay(c, band(y, -1, .22), navy)
         return c
@@ -748,22 +783,26 @@ def L_redbull(A, kind):
               ((1024, 412, 1094, 480), ['#eeeef0', T, B], 70, 'erase'),      # AMPOL AMPLIFY Premium Fuels (front)
               ((104, 402, 206, 464), ['#eeeef0', T, B], 70, 'erase'),       # (rear)
               ((384, 476, 582, 504), [N, '#3a3f8a', T], 75),                # Avery Dennison, mtaa super
-              ((296, 275, 341, 316), ['#eeeef0'], 70),                      # hp
+              ((296, 275, 341, 316), ['#eeeef0'], 70, 'erase'),             # hp: re-laid a little lower
               ((893, 350, 1016, 388), ['#eeeef0', B, N, '#f3c51b'], 70, 'erase')]   # GM, SV: redrawn as badges
-    A.project(outline, 'right', glass=glass, decals=decals)
+    hp = crop('riley/1_t8_side', (296, 275, 341, 316), bg='#eeeef0', tol=60)
+    glass = glass + [[(652, 296), (700, 292), (712, 322), (690, 336), (655, 330)]]     # the ACDelco mirror
+    A.project(outline, 'right', glass=glass, decals=decals, glass_fill='#eeeef0', glass_pad=7, above=(.95, '#eeeef0'))
+    A.plogo(hp, 318, 303, 38)
     from PIL import ImageDraw
     # front and rear corners, ahead of / behind the wheel arches: repainted flat (the photo is patchy there)
     def ends(x, y, z, view):
         c = fill(x.shape, wht)
         c = lay(c, band(y, -1, .26), navy)
         c = lay(c, band(y, .26, .29), blue)
+        c = lay(c, band(z, 2.12, 9) * band(y, .62, 9), navy)       # navy into the headlight, as on the nose
         return c
     A.over(ends, lambda x, y, z, view: np.clip((z - 1.98) / .06, 0, 1) + np.clip((-1.74 - z) / .06, 0, 1))
     # GM | SV badge (Riley's artwork) over the front wheel arch, on the flat of the fender below the crown
     gmsv = logo('gmsv')
     _soft, A.soft = A.soft, None
-    A.put('sides', gmsv, 1.5, .70, .075, maxw=.46)
-    A.put('front', gmsv, 0, .56, .06, maxw=.36)
+    A.put('sides', gmsv, 1.6, .69, .066, maxw=.41)
+    A.put('lip', gmsv, 0, .152, .055, maxw=.34)      # centred on the navy splitter under the grille (w = .152: its shelf)
     A.soft = _soft
     A.plogo(camaro_word(), 336, 352, 38, maxw_px=362)
     # Red Bull across the doors, flat and straight
@@ -783,7 +822,7 @@ def L_redbull(A, kind):
     amp_small = Image.new('RGBA', (W, top.height + bot.height + 25), (0, 0, 0, 0))   # front bumper side is narrow
     amp_small.alpha_composite(top, (0, 0)); amp_small.alpha_composite(bot, (0, top.height + 25))
     # AMPOL AMPLIFY on the clean front and rear corners, where the panel is flat enough to hold them whole
-    A.put('sides', amp_small, 2.09, .58, .1, maxw=.22)
+    A.put('sides', amp_small, 2.05, .57, .1, maxw=.21)
     A.put('sides', amp_block, -1.93, .52, .17, maxw=.3)
     # bonnet: big bulls and sun further up towards the screen, Red Bull ahead of them
     A.bonnet(logo('ed202fc404'), A.f - .05, .55, maxw=1.45)

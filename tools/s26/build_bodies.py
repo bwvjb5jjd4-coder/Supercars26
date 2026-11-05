@@ -44,6 +44,8 @@ S = 345.0           # px per metre on the side and top views
 S2 = 180.0          # px per metre on the front and rear views
 ZF, ZB, YT, XL = 2.62, -2.62, 1.48, 1.06
 REGION = {'left': (110, 0), 'right': (110, 520), 'top': (110, 1040), 'front': (40, 1772), 'rear': (500, 1772)}
+LIP = dict(at=(905, 1780), s=900.0, x0=-.62, w1=.33, a=.698)   # high-res strip for the splitter (lip bodies only):
+#   seen from in front and 40 degrees above, so its top shelf and front face read as one band (w = y cos a - (z - 2.5) sin a)
 INTERIOR = {'fabric', 'cage', 'helmet', 'harness', 'screen', 'screen2', 'led', 'rearview'}
 KEEP_AS_IS = {'steering', 'glove'}
 WHEEL = ('wheelrubber', 'wheelmetal', 'wheelmark', 'rotorblack', 'rotor', 'caliper')
@@ -258,24 +260,39 @@ def end_uv(v, front):
     return u, v0 + (YT - v[:, 1]) * S2
 
 
-def view_of(fn):
+LIP_KINDS = ('camaro',)      # bodies whose raked nose/tail faces go to the front/rear views (see view_of)
+
+
+def lip_uv(v):
+    u0, v0 = LIP['at']
+    w = v[:, 1] * np.cos(LIP['a']) - (v[:, 2] - 2.5) * np.sin(LIP['a'])
+    return u0 + (v[:, 0] - LIP['x0']) * LIP['s'], v0 + (LIP['w1'] - w) * LIP['s']
+
+
+def view_of(fn, lip=False, c=None):
     nx, ny, nz = fn[:, 0], fn[:, 1], fn[:, 2]
     k = np.full(len(fn), 'left', object)
     k[nx < 0] = 'right'
     k[(ny > .62)] = 'top'
     k[(nz > .78) & (ny <= .62)] = 'front'
     k[(nz < -.78) & (ny <= .62)] = 'rear'
+    if lip:     # raked faces across the nose and tail (the splitter lip, the grille bar) read from the front/rear,
+        #         not squashed edge-on into a side view
+        k[(nz > .45) & (ny <= .62) & (np.abs(nx) < .35)] = 'front'
+        k[(nz < -.45) & (ny <= .62) & (np.abs(nx) < .35)] = 'rear'
+        if c is not None:      # the lower lip under the grille gets its own sharp strip
+            k[(c[:, 2] > 2.38) & (c[:, 1] < .3) & (np.abs(c[:, 0]) < .6) & (np.abs(nx) < .5) & ((nz > .3) | (ny > .5))] = 'lip'
     return k
 
 
-def paint_uv(v, n, f):
+def paint_uv(v, n, f, lip=False):
     """Unweld per view so every triangle sits in exactly one projection region."""
     fn = np.cross(v[f[:, 1]] - v[f[:, 0]], v[f[:, 2]] - v[f[:, 0]])
     fn /= np.maximum(np.linalg.norm(fn, axis=1, keepdims=True), 1e-12)
-    views = view_of(fn)
+    views = view_of(fn, lip, v[f].mean(1) if lip else None)
     OV, ON, OU, OF = [], [], [], []
     base = 0
-    for name in ('left', 'right', 'top', 'front', 'rear'):
+    for name in ('left', 'right', 'top', 'front', 'rear', 'lip'):
         sel = f[views == name]
         if not len(sel):
             continue
@@ -285,6 +302,8 @@ def paint_uv(v, n, f):
             u, w = side_uv(vv, name == 'left')
         elif name == 'top':
             u, w = top_uv(vv)
+        elif name == 'lip':
+            u, w = lip_uv(vv)
         else:
             u, w = end_uv(vv, name == 'front')
         OV.append(vv); ON.append(nn); OU.append(np.stack([u, w], 1) / ATLAS); OF.append(inv.reshape(-1, 3) + base)
@@ -654,7 +673,7 @@ def build(path, kind, make, key, wing=True):
             if not len(f2):
                 continue
             if r in ('wing', 'hood'):
-                v3, n3, uv, f3 = paint_uv(v2, n2, f2)
+                v3, n3, uv, f3 = paint_uv(v2, n2, f2, kind in LIP_KINDS)
                 if r == 'hood':
                     uv = uv.copy(); uv[:, 1] = 1.5 - uv[:, 1]   # dc35RawGeometry flips hood v back
                 rows += rows_for(r, v3, n3, uv, f3, key + '_' + r)
