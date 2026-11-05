@@ -374,7 +374,7 @@ def rows_for(role, v, n, uv, f, source):
     return out
 
 
-def clip_row(row, hm, lo, cell, fm=None, flo=None, sm=None, slo=None):
+def clip_row(row, hm, lo, cell, fm=None, flo=None, sm=None, slo=None, sr=None):
     """Drop stock-interior triangles that poke through this body's lower roof (the stock ZB/Mustang liner and
     cage top sit higher than the Supra and Camaro roofs)."""
     if not row.get('q'):
@@ -394,6 +394,12 @@ def clip_row(row, hm, lo, cell, fm=None, flo=None, sm=None, slo=None):
         kb = np.clip(((p[:, 2] - slo[1]) / cell).astype(int), 0, sm.shape[1] - 1)
         over |= (p[:, 1] > .6) & (sm[ka, kb] > 0) & (np.abs(p[:, 0]) > sm[ka, kb] - .03)
     bad = over[f].any(1)
+    if sr is not None and row.get('source') == 'Interior':     # ...and big panels whose middle pokes out of a waisted body side (Camaro rear quarter)
+        T = p[f]
+        pts = np.concatenate([T.mean(1, keepdims=True), (T + np.roll(T, 1, 1)) / 2], 1)     # centroid + edge midpoints
+        ka = np.clip(((pts[..., 1] - slo[0]) / cell).astype(int), 0, sr.shape[0] - 1)
+        kb = np.clip(((pts[..., 2] - slo[1]) / cell).astype(int), 0, sr.shape[1] - 1)
+        bad |= ((pts[..., 1] > .8) & (pts[..., 1] < 1.05) & (pts[..., 2] < -.3) & (sr[ka, kb] > 0) & (np.abs(pts[..., 0]) > sr[ka, kb] - .015)).any(1)
     if not bad.any():
         return row
     r = dict(row)
@@ -654,6 +660,7 @@ def build(path, kind, make, key, wing=True):
     ka = np.clip(((sv[:, 1] - side_lo[0]) / .04).astype(int), 0, side_m.shape[0] - 1)
     kb = np.clip(((sv[:, 2] - side_lo[1]) / .04).astype(int), 0, side_m.shape[1] - 1)
     np.maximum.at(side_m, (ka, kb), np.abs(sv[:, 0]))
+    side_raw = side_m.copy() if kind in LIP_KINDS else None
     side_m = _nd2.maximum_filter(side_m, size=3)
     levels = []
     spots = None
@@ -689,7 +696,7 @@ def build(path, kind, make, key, wing=True):
             if role.split('_')[0] in WHEEL or role in KEEP_AS_IS:
                 rows.append(row)
             elif role in INTERIOR and not os.environ.get('S26_NOINT'):
-                rows.append(clip_row(mirror_row(row), roof_hm, roof_lo, .04, front_m, front_lo, side_m, side_lo))
+                rows.append(clip_row(mirror_row(row), roof_hm, roof_lo, .04, front_m, front_lo, side_m, side_lo, side_raw))
         levels.append(rows)
         print(f'   LOD{L}: {sum(r["triangles"] for r in rows)} triangles ({sum(r["triangles"] for r in rows if r.get("s26"))} body)')
     spec = dict(STOCK['cars'][make]['spec'])

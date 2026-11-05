@@ -517,17 +517,19 @@ class Atlas:
             if mode == 'erase':             # wiped on both flanks: a clean vector mark goes on instead
                 M = cv2.dilate(M, np.ones((3, 3), np.uint8))
                 bgR = cv2.inpaint(R, M, 4, cv2.INPAINT_TELEA)
-                if len(dec) > 4:            # a clean panel: lettering and grey smudges refilled from the paint around
+                if len(dec) > 4:            # lettering lifted off the photo's own panel: only the letter pixels go,
+                    # found as grey strokes darker than the paint around them, and refilled by a smooth (Laplace)
+                    # fill from their edges, so the panel's shading carries straight through with no box or patch
                     Rf = R.astype(np.float32)
                     lum = Rf.mean(-1)
                     sat = Rf.max(-1) - Rf.min(-1)
-                    pan = np.median(lum[(M == 0) & (sat < 25)]) if ((M == 0) & (sat < 25)).any() else 230
-                    grey = (sat < 30) & (lum < pan - 18)
-                    W_ = cv2.dilate(((M > 0) | grey).astype(np.uint8), np.ones((5, 5), np.uint8))
-                    W_ &= (sat < 45).astype(np.uint8) | (M > 0).astype(np.uint8)
-                    bgR = cv2.inpaint(R, W_, 9, cv2.INPAINT_TELEA)
-                    bgR = cv2.GaussianBlur(bgR, (0, 0), 1.2) * (W_[..., None] > 0) + bgR * (W_[..., None] == 0)
-                    bgR = bgR.astype(np.uint8)
+                    bgl = cv2.morphologyEx(lum, cv2.MORPH_CLOSE, np.ones((21, 21), np.uint8))
+                    L = ((bgl - lum > 45) & (sat < 40)).astype(np.uint8)
+                    n_, lab, st, _ = cv2.connectedComponentsWithStats(L, 8)
+                    L = np.isin(lab, [i for i in range(1, n_) if st[i, 4] > 60]).astype(np.uint8)
+                    L = cv2.dilate(L, np.ones((5, 5), np.uint8))
+                    bgR = laplace_fill(Rf, L > 0).astype(np.uint8)
+                    self.letters = (x0, y0, L)
                 src[y0:y1, x0:x1] = bgR
                 far[y0:y1, x0:x1] = bgR
                 continue
@@ -750,6 +752,22 @@ def camaro_word(fill='#4a4a50'):
     return out
 
 
+def laplace_fill(img, hole, iters=1500):
+    """Fill the hole pixels of img with the harmonic interpolation of the pixels around them."""
+    import cv2
+    out = img.astype(np.float32).copy()
+    # start from a coarse guess (mean of nearby known pixels), then relax
+    known = (~hole).astype(np.float32)
+    num = cv2.GaussianBlur(out * known[..., None], (0, 0), 6)
+    den = cv2.GaussianBlur(known, (0, 0), 6)[..., None]
+    out[hole] = (num / np.maximum(den, 1e-4))[hole]
+    k = np.array([[0, .25, 0], [.25, 0, .25], [0, .25, 0]], np.float32)
+    for _ in range(iters):
+        sm = cv2.filter2D(out, -1, k, borderType=cv2.BORDER_REPLICATE)
+        out[hole] = sm[hole]
+    return np.clip(out, 0, 255)
+
+
 def L_redbull(A, kind):
     """Triple Eight #88/#888 Red Bull Ampol Camaros, from Riley's renders (riley/1_t8_side, 2_t8_front):
     white car, navy and blue mountain shards from the front wheel back to the rear door, the Red Bull sun and
@@ -764,10 +782,11 @@ def L_redbull(A, kind):
             c = lay(c, bon, navy)
             c = lay(c, band(z, A.f - .62, 9) * band(np.abs(x), .62, .8), blue)
             c = lay(c, band(z, A.f - .82, A.f - .62) * band(np.abs(x), -1, .8), '#17172c')   # cowl: dark, meets the black trim
+            c = lay(c, np.clip((z - 1.98) / .08, 0, 1), navy)                   # fender tops round the headlights: navy like the nose
         if view == 'front':
             c = lay(c, band(y, -1, .24), navy)                                  # lower bumper and splitter
             c = lay(c, band(np.abs(x), -1, .6) * band(y, -1, .66), navy)          # grille surround and nose
-            c = lay(c, band(y, .62, 9), navy)                                    # navy round the headlights, corner to corner
+            c = lay(c, band(y, .24, 9), navy)                                    # whole nose navy: no white corners under the headlights
         if view == 'rear':
             c = lay(c, band(y, -1, .22), navy)
         return c
@@ -788,23 +807,28 @@ def L_redbull(A, kind):
     hp = crop('riley/1_t8_side', (296, 275, 341, 316), bg='#eeeef0', tol=60)
     glass = glass + [[(652, 296), (700, 292), (712, 322), (690, 336), (655, 330)]]     # the ACDelco mirror
     A.project(outline, 'right', glass=glass, decals=decals, glass_fill='#eeeef0', glass_pad=7, above=(.95, '#eeeef0'))
-    A.plogo(hp, 318, 303, 38)
+    # the quarter window's sill (top-view texels just outside the glass) is the black window surround, not a white streak
+    A.over(lambda x, y, z, view: fill(x.shape, '#141416'),
+           lambda x, y, z, view: band(np.abs(x), .665, .745) * band(z, -1.0, -.62), views=('top',))
+    _soft, A.soft = A.soft, None
+    A.plogo(hp, 318, 303, 38)      # exactly where the photo has it, full size
+    A.soft = _soft
     from PIL import ImageDraw
     # front and rear corners, ahead of / behind the wheel arches: repainted flat (the photo is patchy there)
     def ends(x, y, z, view):
         c = fill(x.shape, wht)
         c = lay(c, band(y, -1, .26), navy)
         c = lay(c, band(y, .26, .29), blue)
-        c = lay(c, band(z, 2.12, 9) * band(y, .62, 9), navy)       # navy into the headlight, as on the nose
+        c = lay(c, np.clip((z - 1.98) / .12, 0, 1) * band(y, .62, 9), navy)   # navy into the headlight, as on the nose
         return c
     A.over(ends, lambda x, y, z, view: np.clip((z - 1.98) / .06, 0, 1) + np.clip((-1.74 - z) / .06, 0, 1))
     # GM | SV badge (Riley's artwork) over the front wheel arch, on the flat of the fender below the crown
     gmsv = logo('gmsv')
     _soft, A.soft = A.soft, None
-    A.put('sides', gmsv, 1.6, .69, .066, maxw=.41)
+    A.put('sides', gmsv, 1.6, .70, .05, maxw=.32)
     A.put('lip', gmsv, 0, .152, .055, maxw=.34)      # centred on the navy splitter under the grille (w = .152: its shelf)
     A.soft = _soft
-    A.plogo(camaro_word(), 336, 352, 38, maxw_px=362)
+    A.plogo(camaro_word(), 336, 352, 38, maxw_px=362)     # same spot and size as before, on the untouched panel
     # Red Bull across the doors, flat and straight
     A.plogo(logo('74cca6ffe5'), 477, 441, 50, maxw_px=232)
     ampw = recol(logo('ampol_word'), '#e01b24')
