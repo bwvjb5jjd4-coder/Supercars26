@@ -477,13 +477,21 @@ class Atlas:
         im, H = self.ph
         src = cv2.bilateralFilter(im.astype(np.uint8), 5, 18, 3) if blur else im.astype(np.uint8)
         far = src.copy()
-        for box, keep, tol in decals:
+        for dec in decals:
+            box, keep, tol = dec[:3]
+            mode = dec[3] if len(dec) > 3 else 'flip'
             x0, y0, x1, y1 = box
             R = src[y0:y1, x0:x1]
             kc = np.array([hexc(c) for c in keep], np.float32)      # the backing colours: anything else is lettering
             M = (np.sqrt(((R[..., None, :].astype(np.float32) - kc) ** 2).sum(-1)).min(-1) > tol).astype(np.uint8)
             M = cv2.dilate(M, np.ones((3, 3), np.uint8))
             bgR = cv2.inpaint(R, M, 4, cv2.INPAINT_TELEA)
+            if mode == 'erase':             # wiped on both flanks: a clean vector mark goes on instead
+                M = cv2.dilate(M, np.ones((3, 3), np.uint8))
+                bgR = cv2.inpaint(R, M, 4, cv2.INPAINT_TELEA)
+                src[y0:y1, x0:x1] = bgR
+                far[y0:y1, x0:x1] = bgR
+                continue
             cols = np.nonzero(M.any(0))[0]
             if not len(cols):
                 continue
@@ -675,8 +683,6 @@ def L_redbull(A, kind):
             bon = band(z, A.f - .62, 9) * band(np.abs(x), -1, .8)
             c = lay(c, bon, navy)
             c = lay(c, band(z, A.f - .62, 9) * band(np.abs(x), .62, .8), blue)
-            rr = np.hypot(z - (A.f + .12), x * 1.15)
-            c = lay(c, (rr < .24).astype(np.float32), sun)
         if view == 'front':
             c = lay(c, band(y, -1, .2), navy)
             c = lay(c, band(y, .2, .24), blue)
@@ -690,25 +696,39 @@ def L_redbull(A, kind):
                (1060, 512), (1000, 507), (860, 507), (600, 507), (330, 507), (200, 502), (90, 492), (80, 440)]
     glass = [[(366, 320), (368, 300), (392, 270), (470, 262), (560, 262), (640, 272), (682, 296), (708, 320)]]
     T, N, B = '#141416', '#26246a', '#2f8ad8'          # tyre, navy, blue: never lettering
-    decals = [((150, 324, 522, 380), ['#e6e6e8', N, B, T], 75),             # CAMARO
+    decals = [((150, 324, 522, 380), ['#e6e6e8', N, B, T], 75, 'erase'),    # CAMARO
               ((356, 406, 598, 478), [N, '#3a3f8a', T], 85),                # Red Bull
-              ((1024, 412, 1094, 480), ['#eeeef0', T, B], 70),               # AMPOL AMPLIFY Premium Fuels (front)
-              ((104, 402, 206, 464), ['#eeeef0', T, B], 70),                # (rear)
+              ((1024, 412, 1094, 480), ['#eeeef0', T, B], 70, 'erase'),      # AMPOL AMPLIFY Premium Fuels (front)
+              ((104, 402, 206, 464), ['#eeeef0', T, B], 70, 'erase'),       # (rear)
               ((384, 476, 582, 504), [N, '#3a3f8a', T], 75),                # Avery Dennison, mtaa super
               ((296, 275, 341, 316), ['#eeeef0'], 70),                      # hp
               ((893, 350, 1016, 388), ['#eeeef0', B, N, '#f3c51b'], 70)]                # GM, SV
     A.project(outline, 'right', glass=glass, decals=decals)
-    bulls, rb = logo('ed202fc404'), logo('74cca6ffe5')
-    A.bonnet(bulls, A.f + .1, .4, maxw=1.0)
-    A.bonnet(rb, A.f + .62, .17, maxw=1.0)
-    amp = crop('riley/1_t8_side', (972, 416, 1052, 453), bg='#f0f0f2', tol=60, keep=['#e01b24'])
-    prem = crop('riley/1_t8_side', (975, 455, 1052, 476), bg='#f0f0f2', tol=60, keep=['#303034'])
-    for sx in (-.55, .55):
-        A.put('front', amp, sx, .45, .09, maxw=.4)
-        A.put('front', prem, sx, .36, .035, maxw=.3)
-    A.put('rear', amp, -.45, .45, .09, maxw=.4)
-    A.put('rear', logo('ed202fc404'), .45, .48, .12, maxw=.45)
-    A.roof(logo('e160ac7f24'), .1, .14, maxw=1.0)
+    # clean vector marks, laid straight
+    camaro = text('CAMARO', 'Michroma-Regular', 220, '#3a3a40', track=.42)
+    A.plogo(camaro, 336, 351, 30, maxw_px=355)
+    ampw = recol(logo('ampol_word'), '#e01b24')
+    amply = text('AMPLIFY', 'ArchivoBlack-Regular', 200, '#e01b24', slant=.12)
+    bar = Image.new('RGBA', (int(amply.height * 1.0), amply.height), (0, 0, 0, 0))
+    from PIL import ImageDraw
+    ImageDraw.Draw(bar).polygon([(bar.width * .45, 0), (bar.width, 0), (bar.width * .55, bar.height), (0, bar.height)], fill='#e01b24')
+    amp_block = Image.new('RGBA', (1, 1))
+    top = row(Image.new('RGBA', (bar.width, 2)), ampw.resize((int(ampw.width * amply.height / ampw.height), amply.height)), gap=.05)
+    bot = row(bar, amply, gap=.05)
+    prem = text('Premium Fuels', 'Montserrat', 130, '#303034', weight=600)
+    W = max(top.width, bot.width)
+    amp_block = Image.new('RGBA', (W, top.height + bot.height + prem.height + 60), (0, 0, 0, 0))
+    amp_block.alpha_composite(top, (0, 0))
+    amp_block.alpha_composite(bot, (0, top.height + 25))
+    amp_block.alpha_composite(prem, (W - prem.width, top.height + bot.height + 55))
+    amp_small = Image.new('RGBA', (W, top.height + bot.height + 25), (0, 0, 0, 0))   # front bumper side is narrow
+    amp_small.alpha_composite(top, (0, 0)); amp_small.alpha_composite(bot, (0, top.height + 25))
+    A.plogo(amp_small, 1016, 428, 26)
+    A.plogo(amp_block, 155, 433, 54)
+    rbl = logo('5630d1cdfa')
+    A.bonnet(rbl, A.f + .32, .62, maxw=.95)
+    A.roof(logo('ampol_a'), -.05, .42, maxw=.6)
+    A.put('rear', rbl, 0, .53, .25, maxw=.7)
     A.wingtop(recol(logo('5a20684e34'), '#ffffff'), -2.2, .1, maxw=1.0)
 
 
