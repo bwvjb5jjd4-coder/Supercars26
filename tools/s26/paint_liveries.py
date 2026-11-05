@@ -741,11 +741,14 @@ def L_redbull(A, kind):
     gm = Image.new('RGBA', (300, 300), (0, 0, 0, 0)); d = ImageDraw.Draw(gm)
     d.rounded_rectangle((0, 0, 299, 299), 46, fill='#1f6fc1')
     g = text('GM', 'Montserrat', 150, '#ffffff', weight=700); g.thumbnail((210, 130))
-    gm.alpha_composite(g, ((300 - g.width) // 2, 60)); d.rectangle((62, 222, 238, 236), fill='#ffffff')
-    sv_s = text('S', 'Michroma-Regular', 260, '#3c3c44'); sv_v = text('V', 'Michroma-Regular', 260, '#d8202e')
-    sv = plate(row(sv_s, sv_v, gap=.0), '#ffffff', pad=.12, radius=.12, outline='#9a9aa2', ow=.05)
-    A.plogo(gm, 910, 366, 28)
-    A.plogo(sv, 966, 368, 30, maxw_px=86)
+    g = g.crop(g.getbbox()); g.thumbnail((200, 120)); gm.alpha_composite(g, ((300 - g.width) // 2, 70)); d.rectangle((62, 222, 238, 236), fill='#ffffff')
+    sv_s = text('S', 'ArchivoBlack-Regular', 260, '#3c3c44'); sv_v = text('V', 'ArchivoBlack-Regular', 260, '#d8202e')
+    sv_s, sv_v = sv_s.crop(sv_s.getbbox()), sv_v.crop(sv_v.getbbox())
+    sv = plate(row(sv_s, sv_v, gap=.12), '#ffffff', pad=.12, radius=.12, outline='#9a9aa2', ow=.05)
+    _soft, A.soft = A.soft, None       # placed exactly where the photo has it, no auto-fit
+    A.plogo(gm, 906, 386, 26)   # a touch below the photo spot: the fender crown belongs to the bonnet's texels
+    A.plogo(sv, 962, 388, 28, maxw_px=82)
+    A.soft = _soft
     A.plogo(camaro_word(), 336, 352, 38, maxw_px=362)
     # Red Bull across the doors, flat and straight
     A.plogo(logo('74cca6ffe5'), 477, 441, 50, maxw_px=232)
