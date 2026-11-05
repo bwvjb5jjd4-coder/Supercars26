@@ -256,6 +256,16 @@ class Atlas:
             self.img[v0 * K:v0 * K + h, u0 * K:u0 * K + w] = col
 
     # logo placement -------------------------------------------------------
+    def over(self, fn, where, views=('left', 'right')):
+        """Repaint part of the atlas: fn as for paint(), where(x, y, z, view) -> 0..1 coverage."""
+        for view in views:
+            x, y, z = self.coords(view)
+            u0, v0 = REGION[view]
+            h, w = x.shape
+            a = np.clip(where(x, y, z, view), 0, 1).astype(np.float32)[..., None]
+            cur = self.img[v0 * K:v0 * K + h, u0 * K:u0 * K + w]
+            self.img[v0 * K:v0 * K + h, u0 * K:u0 * K + w] = cur * (1 - a) + fn(x, y, z, view) * a
+
     def put(self, view, im, a, b, h, maxw=None, rot=0):
         """Centre (a, b) in metres: side (z, y), top (z, x), front/rear (x, y). h = height in metres,
         maxw = max width in metres. rot: degrees CCW in the atlas."""
@@ -489,6 +499,12 @@ class Atlas:
             if mode == 'erase':             # wiped on both flanks: a clean vector mark goes on instead
                 M = cv2.dilate(M, np.ones((3, 3), np.uint8))
                 bgR = cv2.inpaint(R, M, 4, cv2.INPAINT_TELEA)
+                if len(dec) > 4:            # a flat panel: lettering and any grey smudge become the panel colour
+                    Rf = R.astype(np.float32)
+                    grey = (Rf.max(-1) - Rf.min(-1) < 28) & (Rf.mean(-1) < 200)
+                    W_ = cv2.dilate((M > 0).astype(np.uint8) | grey.astype(np.uint8), np.ones((5, 5), np.uint8)) > 0
+                    sat = Rf.max(-1) - Rf.min(-1) > 40
+                    bgR = np.where((W_ & ~sat)[..., None], hexc(dec[4]).astype(np.uint8), bgR)
                 src[y0:y1, x0:x1] = bgR
                 far[y0:y1, x0:x1] = bgR
                 continue
@@ -717,7 +733,6 @@ def L_redbull(A, kind):
         if view == 'front':
             c = lay(c, band(y, -1, .24), navy)                                  # lower bumper and splitter
             c = lay(c, band(np.abs(x), -1, .6) * band(y, -1, .66), navy)          # grille surround and nose
-            c = lay(c, band(np.abs(x), .6, .66) * band(y, .24, .66), blue)        # blue edge beside the grille
         if view == 'rear':
             c = lay(c, band(y, -1, .22), navy)
         return c
@@ -728,7 +743,7 @@ def L_redbull(A, kind):
                (1060, 512), (1000, 507), (860, 507), (600, 507), (330, 507), (200, 502), (90, 492), (80, 440)]
     glass = [[(366, 320), (368, 300), (392, 270), (470, 262), (560, 262), (640, 272), (682, 296), (708, 320)]]
     T, N, B = '#141416', '#26246a', '#2f8ad8'          # tyre, navy, blue: never lettering
-    decals = [((150, 324, 522, 380), ['#e6e6e8', N, B, T], 75, 'erase'),    # CAMARO: redrawn in the badge's block letters
+    decals = [((150, 324, 522, 380), ['#e6e6e8', N, B, T], 75, 'erase', '#ececef'),   # CAMARO: redrawn; panel wiped clean under it
               ((356, 406, 598, 478), [N, '#3a3f8a', T], 85, 'erase'),       # Red Bull: replaced by the flat wordmark
               ((1024, 412, 1094, 480), ['#eeeef0', T, B], 70, 'erase'),      # AMPOL AMPLIFY Premium Fuels (front)
               ((104, 402, 206, 464), ['#eeeef0', T, B], 70, 'erase'),       # (rear)
@@ -737,17 +752,18 @@ def L_redbull(A, kind):
               ((893, 350, 1016, 388), ['#eeeef0', B, N, '#f3c51b'], 70, 'erase')]   # GM, SV: redrawn as badges
     A.project(outline, 'right', glass=glass, decals=decals)
     from PIL import ImageDraw
-    # GM and SV badges (above the front wheel arch, and on the nose)
-    gm = Image.new('RGBA', (300, 300), (0, 0, 0, 0)); d = ImageDraw.Draw(gm)
-    d.rounded_rectangle((0, 0, 299, 299), 46, fill='#1f6fc1')
-    g = text('GM', 'Montserrat', 150, '#ffffff', weight=700); g.thumbnail((210, 130))
-    g = g.crop(g.getbbox()); g.thumbnail((200, 120)); gm.alpha_composite(g, ((300 - g.width) // 2, 70)); d.rectangle((62, 222, 238, 236), fill='#ffffff')
-    sv_s = text('S', 'ArchivoBlack-Regular', 260, '#3c3c44'); sv_v = text('V', 'ArchivoBlack-Regular', 260, '#d8202e')
-    sv_s, sv_v = sv_s.crop(sv_s.getbbox()), sv_v.crop(sv_v.getbbox())
-    sv = plate(row(sv_s, sv_v, gap=.12), '#ffffff', pad=.12, radius=.12, outline='#9a9aa2', ow=.05)
-    _soft, A.soft = A.soft, None       # placed exactly where the photo has it, no auto-fit
-    A.plogo(gm, 906, 386, 26)   # a touch below the photo spot: the fender crown belongs to the bonnet's texels
-    A.plogo(sv, 962, 388, 28, maxw_px=82)
+    # front and rear corners, ahead of / behind the wheel arches: repainted flat (the photo is patchy there)
+    def ends(x, y, z, view):
+        c = fill(x.shape, wht)
+        c = lay(c, band(y, -1, .26), navy)
+        c = lay(c, band(y, .26, .29), blue)
+        return c
+    A.over(ends, lambda x, y, z, view: np.clip((z - 1.98) / .06, 0, 1) + np.clip((-1.74 - z) / .06, 0, 1))
+    # GM | SV badge (Riley's artwork) over the front wheel arch, on the flat of the fender below the crown
+    gmsv = logo('gmsv')
+    _soft, A.soft = A.soft, None
+    A.put('sides', gmsv, 1.5, .70, .075, maxw=.46)
+    A.put('front', gmsv, 0, .56, .06, maxw=.36)
     A.soft = _soft
     A.plogo(camaro_word(), 336, 352, 38, maxw_px=362)
     # Red Bull across the doors, flat and straight
@@ -766,19 +782,13 @@ def L_redbull(A, kind):
     amp_block.alpha_composite(prem, (W - prem.width, top.height + bot.height + 55))
     amp_small = Image.new('RGBA', (W, top.height + bot.height + 25), (0, 0, 0, 0))   # front bumper side is narrow
     amp_small.alpha_composite(top, (0, 0)); amp_small.alpha_composite(bot, (0, top.height + 25))
-    A.plogo(amp_small, 1016, 428, 26)
-    A.plogo(amp_block, 155, 433, 54)
-    # front: AMPOL AMPLIFY on each bumper face beside the grille, GM + SV across the upper grille bar,
-    # National Storage along the splitter lip
-    for sx in (-.7, .7):
-        A.put('front', amp_block, sx, .47, .15, maxw=.26)
-    A.put('front', row(gm, sv, gap=.3), 0, .56, .08, maxw=.5)
-    ns = plate(text('NATIONAL STORAGE', 'ArchivoBlack-Regular', 160, '#141416', track=.06), '#e8e23a', pad=.15, radius=.05)
-    A.put('front', ns, 0, .12, .07, maxw=1.0)
+    # AMPOL AMPLIFY on the clean front and rear corners, where the panel is flat enough to hold them whole
+    A.put('sides', amp_small, 2.09, .58, .1, maxw=.22)
+    A.put('sides', amp_block, -1.93, .52, .17, maxw=.3)
     # bonnet: big bulls and sun further up towards the screen, Red Bull ahead of them
     A.bonnet(logo('ed202fc404'), A.f - .05, .55, maxw=1.45)
     A.bonnet(logo('74cca6ffe5'), A.f + .4, .25, maxw=1.3)
-    A.roof(logo('ampol_a'), -.05, .62, maxw=.9)
+    A.roof(logo('ampol_a'), -.35, .62, maxw=.9)    # middle of the roof (roof panel runs z -1.15..0.45)
     A.put('rear', logo('5630d1cdfa'), 0, .53, .25, maxw=.7)
     A.wingtop(recol(logo('5a20684e34'), '#ffffff'), -2.2, .1, maxw=1.0)
 
