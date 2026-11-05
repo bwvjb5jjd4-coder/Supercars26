@@ -1271,12 +1271,14 @@ def L_team18(A, kind, main, brand):
                 for k, off in ((0, .33), (1, .43)):                                   # teal streaks low on the quarter
                     c = lay(c, ((z < back - .05) & (z > back - .7) & (np.abs(y - off - .22 * (z - back)) < .012)).astype(np.float32), main)
             else:
-                c = lay(c, grunge(z, y, -.7, .05, .16), blk)                          # smoky edge onto the door
+                c = lay(c, grunge(z, y, -.62, .05, .1) * .55, blk)                     # smoke drifting onto the door
+                c = lay(c, grunge(z, y, -.74, .05, .3, seed=11), blk)                  # smoky edge of the black quarter
                 c = lay(c, ((z < -2.12) & (y > .72)).astype(np.float32), main)           # tail panel wraps the corner
                 c = lay(c, band(y, .779, .821) * band(z, .8, 1.32), blk)                  # DEWALT bars run on along the guard
                 c = lay(c, band(y, .349, .391) * band(z, .8, 1.08), blk)
             c = lay(c, np.clip((.27 - y) / .04 + .5, 0, 1) * (1 - .3 * grunge(-y * 4, z, 0, 0, 1.5, 7)), blk)   # sill
             c = lay(c, band(z, 2.2, 9) * band(y, .505, .7), blk)                         # nose corners beside the headlights
+            c = lay(c, band(z, .25, .6) * band(y, .94, 1.12), '#d8262c')                  # red mirrors
         if view == 'top':
             c = fill(x.shape, blk)
             c = lay(c, (np.abs(x) > .74) * band(z, .55, 9), main)                    # fender tops
@@ -1301,6 +1303,12 @@ def L_team18(A, kind, main, brand):
     A.put('front', hj, 0, .1, .06, maxw=1.0)
     A.put('sides', triangle('#f26b21', 200), f + .55, .66, .08, maxw=.1)
     A.roof(text('Industrial Batteries', 'Montserrat', 160, '#ffffff', weight=800), .45, .08, maxw=.8)
+    # side detail as raced: series partners along the black sill, team partners on the black C-pillar
+    sill = [recol(logo('repco'), '#ffffff'), logo('dunlop'), text('Industrial Batteries', 'Montserrat', 160, '#ffffff', weight=800)]
+    for zc, im in zip((.62, .12, -.38), sill):
+        A.put('sides', im, zc, .21, .05, maxw=.42)
+    A.put('sides', recol(fuchs, '#ffffff'), -1.2, 1.0, .08, maxw=.2)
+    A.put('sides', plate(text('JAX', 'ArchivoBlack-Regular', 160, '#141414'), '#f6c800', pad=.15, radius=.1), -1.48, .96, .05, maxw=.2)
     if not snowy:
         hino = hino_badge()
         dw = key_out(logo('4ed2777886'), '#fcbd12')                       # black letters and bars on the body yellow
@@ -1309,14 +1317,13 @@ def L_team18(A, kind, main, brand):
         A.put('sides', hino, -1.12, .8, .17, maxw=.7)
         A.put('sides', plate(recol(logo('cocacola'), '#ffffff'), '#e41e2b', pad=.2, radius=.2), 1.15, .8, .1, maxw=.45)
         cub = recol(key_out(logo('cubcadet').crop((60, 195, 560, 300)), '#ffffff', 200), main)
-        A.put('sides', cub, -2.0, .4, .1, maxw=.45)
+        A.put('sides', cub, -2.12, .44, .08, maxw=.28)
         A.put('sides', plate(row(ib, recol(fuchs, '#ffffff')), blk, pad=.2, radius=.15), f + .63, .36, .14, maxw=.45)
         fw = recol(fuchs, '#ffffff')
         fw = fw.resize((int(fw.width * 1.7), fw.height), Image.LANCZOS)        # stretched across the bonnet, as raced
         A.bonnet(fw, 1.75, .62, maxw=1.45)
         A.bonnet(logo('4ed2777886'), 2.27, .055, maxw=.36)
         for s in (-1, 1):
-            A.put('front', recol(logo('seiko2'), '#ffffff'), s * .62, .527, .034, maxw=.22)
             A.put('front', hino, s * .7, .47, .055, maxw=.28)
         A.put('top', recol(dw, main), -1.05, 0, .12, maxw=.7, rot=-90)          # roof tail, reads from behind
         A.put('rear', dw, 0, .875, .085, maxw=.55)
@@ -1327,7 +1334,7 @@ def L_team18(A, kind, main, brand):
     else:
         ink = '#161616'
         word = lambda t, c, px=200, tr=.1, amt=.04, st=1.0: distress(text(t, 'ArchivoBlack-Regular', px, c, track=tr), amt, stretch=st)
-        A.put('sides', word('SNOWY RIVER', ink, st=2.0), .1, .68, .33, maxw=1.5)
+        A.put('sides', word('SNOWY RIVER', ink, st=2.0), .08, .68, .33, maxw=1.42)
         A.put('sides', word('CARAVANS', ink, 120, .45, st=1.3), .1, .44, .1, maxw=1.1)
         toy = logo('toyota')
         em = recol(toy.crop((0, 0, int(toy.height * 1.55), toy.height)), '#ffffff')
@@ -1338,7 +1345,7 @@ def L_team18(A, kind, main, brand):
         stack.alpha_composite(top, (0, 0))
         stack.alpha_composite(fk, (stack.width - fk.width, top.height + 20))
         A.put('sides', stack.rotate(6, expand=True, resample=Image.BICUBIC), -1.4, .79, .3, maxw=1.0)
-        A.put('sides', distress(text('TRADIE', 'ArchivoBlack-Regular', 200, ink, slant=.2), .03), 1.1, .78, .16, maxw=.7)
+        A.put('sides', distress(text('TRADIE', 'ArchivoBlack-Regular', 200, ink, slant=.2), .03), 1.1, .8, .13, maxw=.5)
         A.put('sides', plate(row(ib, kw_badge), blk, pad=.2, radius=.15), f + .63, .36, .14, maxw=.45)
         sr = logo('e25c0e6ab0')
         mtn = sr.crop((0, 0, int(sr.height * 1.0), sr.height))
@@ -1347,7 +1354,6 @@ def L_team18(A, kind, main, brand):
         A.bonnet(word('CARAVANS', '#ffffff', 120, .45), 2.33, .05, maxw=.7)
         coke = plate(recol(logo('cocacola'), '#ffffff'), '#c81e2b', pad=.2, radius=.2)
         for s in (-1, 1):
-            A.put('front', coke, s * .62, .527, .038, maxw=.22)
             A.put('front', kw_badge, s * .7, .47, .055)
         A.put('rear', word('SNOWY RIVER', ink, tr=.12), 0, .905, .055, maxw=.65)
         A.put('rear', word('CARAVANS', ink, 120, .45), 0, .855, .025, maxw=.3)
