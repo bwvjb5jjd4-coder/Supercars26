@@ -63,7 +63,7 @@ def unb64(s, t):
 def classify_mustang(p):
     n, m = p['name'], p['mat']
     drop = ('leather', 'seat', 'lambert1', 'tire', 'brake', 'plate', 'roll')
-    if m in drop or 'Wheel' in n:
+    if m in drop or 'Wheel' in n or 'Badge' in n:     # GT500 badges: a road car's, not a Supercar's
         return None
     if any(k in n for k in ('Sunvisor', 'Steeringbox', 'Screen', 'Lowerarm', 'Subframe', 'Swaybar', 'RadiatorFan', 'Strutbar',
                             'Radiator', 'Transmission', 'Engine', 'Stut', 'Hub', 'Pedal', 'Stalk', 'Gauges', 'Supercharger',
@@ -273,6 +273,11 @@ def view_of(fn, lip=False, c=None):
     nx, ny, nz = fn[:, 0], fn[:, 1], fn[:, 2]
     k = np.full(len(fn), 'left', object)
     k[nx < 0] = 'right'
+    if c is not None:      # flank faces go by which side of the car they are on, not by winding: a backwards-wound
+        #                    panel would otherwise take the other flank's design (mirrored lettering, z-fighting)
+        out = np.abs(c[:, 0]) > .3
+        k[out & (c[:, 0] > 0)] = 'left'
+        k[out & (c[:, 0] < 0)] = 'right'
     k[(ny > .62)] = 'top'
     k[(nz > .78) & (ny <= .62)] = 'front'
     k[(nz < -.78) & (ny <= .62)] = 'rear'
@@ -280,7 +285,7 @@ def view_of(fn, lip=False, c=None):
         #         not squashed edge-on into a side view
         k[(nz > .45) & (ny <= .62) & (np.abs(nx) < .35)] = 'front'
         k[(nz < -.45) & (ny <= .62) & (np.abs(nx) < .35)] = 'rear'
-        if c is not None:      # the lower lip under the grille gets its own sharp strip
+        if c is not None and lip:      # the lower lip under the grille gets its own sharp strip
             k[(c[:, 2] > 2.38) & (c[:, 1] < .3) & (np.abs(c[:, 0]) < .6) & (np.abs(nx) < .5) & ((nz > .3) | (ny > .5))] = 'lip'
     return k
 
@@ -289,7 +294,7 @@ def paint_uv(v, n, f, lip=False):
     """Unweld per view so every triangle sits in exactly one projection region."""
     fn = np.cross(v[f[:, 1]] - v[f[:, 0]], v[f[:, 2]] - v[f[:, 0]])
     fn /= np.maximum(np.linalg.norm(fn, axis=1, keepdims=True), 1e-12)
-    views = view_of(fn, lip, v[f].mean(1) if lip else None)
+    views = view_of(fn, lip, v[f].mean(1))
     OV, ON, OU, OF = [], [], [], []
     base = 0
     for name in ('left', 'right', 'top', 'front', 'rear', 'lip'):

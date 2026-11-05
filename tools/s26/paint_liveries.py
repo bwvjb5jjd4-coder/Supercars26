@@ -805,13 +805,20 @@ def L_redbull(A, kind):
               ((296, 275, 341, 316), ['#eeeef0'], 70, 'erase'),             # hp: re-laid a little lower
               ((893, 350, 1016, 388), ['#eeeef0', B, N, '#f3c51b'], 70, 'erase')]   # GM, SV: redrawn as badges
     hp = crop('riley/1_t8_side', (296, 275, 341, 316), bg='#eeeef0', tol=60)
+    from scipy import ndimage as _ndi      # keep only the HP disc: the photo crop also catches a blue fleck of the pillar
+    _a = np.asarray(hp)[..., 3] > 60
+    _lab, _n = _ndi.label(_a)
+    if _n > 1:
+        _keep = _ndi.binary_fill_holes(_lab == (np.argmax(np.bincount(_lab.ravel())[1:]) + 1))
+        _arr = np.asarray(hp).copy(); _arr[..., 3] = np.where(_keep, _arr[..., 3], 0); hp = Image.fromarray(_arr)
+        hp = hp.crop(hp.getbbox())
     glass = glass + [[(652, 296), (700, 292), (712, 322), (690, 336), (655, 330)]]     # the ACDelco mirror
     A.project(outline, 'right', glass=glass, decals=decals, glass_fill='#eeeef0', glass_pad=7, above=(.95, '#eeeef0'))
     # the quarter window's sill (top-view texels just outside the glass) is the black window surround, not a white streak
     A.over(lambda x, y, z, view: fill(x.shape, '#141416'),
            lambda x, y, z, view: band(np.abs(x), .665, .745) * band(z, -1.0, -.62), views=('top',))
     _soft, A.soft = A.soft, None
-    A.plogo(hp, 318, 303, 38)      # exactly where the photo has it, full size
+    A.plogo(hp, 318, 309, 34)      # the photo's spot, a touch lower so its top doesn't wrap onto the C-pillar edge
     A.soft = _soft
     from PIL import ImageDraw
     # front and rear corners, ahead of / behind the wheel arches: repainted flat (the photo is patchy there)
@@ -1021,20 +1028,33 @@ def L_shell(A, kind):
     outline = [(117, 571), (187, 527), (400, 504), (560, 473), (627, 440), (747, 403), (933, 397), (1093, 420), (1200, 447), (1307, 467), (1393, 493), (1413, 527), (1433, 627), (1427, 700), (1333, 713), (1040, 733), (453, 737), (200, 733), (91, 727), (107, 627)]
     glass = [[(593, 503), (627, 460), (693, 424), (800, 407), (933, 407), (1053, 424), (1109, 443), (1073, 473), (933, 488), (747, 497), (627, 505)]]
     W, R, Y, T = '#f2f2f2', red, '#f2b81c', '#141416'
-    decals = [((273, 515, 456, 543), [W], 70),                 # national tiles
-              ((437, 541, 525, 625), [W], 70),                 # Rheem
-              ((444, 635, 543, 688), [W, T], 70),              # DUNLOP, Repco
+    RELAY = [(273, 515, 456, 543), (437, 541, 525, 625), (444, 635, 543, 661), (444, 661, 543, 688), (1123, 441, 1211, 485),
+             (1309, 571, 1403, 605)]     # national tiles, Rheem, DUNLOP, Repco, MAN, Jet: lifted off, re-laid as cut-outs
+    decals = [(bx, [W, T], 70, 'erase') for bx in RELAY] + [
               ((693, 535, 813, 588), [W], 70),                 # Shell
               ((693, 588, 1003, 641), [W], 70),                 # V-Power
               ((967, 527, 1023, 580), [W], 70),                 # V-Power star
               ((1083, 493, 1339, 549), [W], 70),                # Repco
-              ((1123, 441, 1211, 485), [W], 70),                 # MAN
-              ((1309, 571, 1403, 605), [W], 70),                # Jet couriers
               ((1267, 627, 1379, 696), [R, W, Y], 75),          # Ford, RACING
               ((987, 660, 1037, 699), [R, Y], 70),              # PPG
-              ((120, 660, 183, 716), [W, R], 70),               # OTR
               ((507, 711, 1016, 735), [R, Y, T], 70)]           # sill partners
-    A.project(outline, 'left', glass=glass, decals=decals)
+    A.exact = True           # the photo carries every real partner
+    A.project(outline, 'left', glass=glass, decals=decals, glass_fill='#f4f4f2', glass_pad=7, above=(.95, '#f4f4f2'))
+    _soft, A.soft = A.soft, None
+    for bx in RELAY:         # each mark exactly where the photo has it, reading the right way on both flanks
+        cut = crop('djr/18', bx, bg='#f2f2f2', tol=60)
+        b0, b1, b2, b3 = LAST_BB
+        du, dv = (40, 12) if bx[0] == 273 else (0, 0)      # national tiles: back and down a little, clear of the fender crown
+        A.plogo(cut, bx[0] + (b0 + b2) / 8 + du, bx[1] + (b1 + b3) / 8 + dv, (b3 - b1) / 4)
+    # front corner under the headlight: repainted flat (the photo's corner smeared red and white into the lamp)
+    def ends(x, y, z, view):
+        c = fill(x.shape, wht)
+        c = lay(c, band(y, -1, .30), red)
+        c = lay(c, band(y, .30, .32), yel)
+        return c
+    A.over(ends, lambda x, y, z, view: np.clip((z - (A.f + .42)) / .06, 0, 1))
+    A.plogo(crop('djr/18', (120, 660, 183, 716), bg='#d6202b', tol=60), 151.5, 688, 50)     # OTR, back on the corner
+    A.soft = _soft
     pect = logo('755f654419').crop((0, 0, 324, 302))
     vpow = logo('755f654419').crop((456, 0, 1302, 302))
     from scipy import ndimage
@@ -1047,7 +1067,7 @@ def L_shell(A, kind):
     sh[ring] = (244, 244, 242, 255)
     sh[pad:-pad, pad:-pad][al] = pa[al]
     pect_ring = Image.fromarray(sh)
-    A.bonnet(pect_ring, A.f + .25, .95, maxw=1.15)
+    A.bonnet(pect_ring, A.f + .35, .95, maxw=1.15)    # a little further down the bonnet, towards the nose
     A.roof(pect, -.1, .3, maxw=.5)
     A.roof(recol(vpow, '#ffffff'), .35, .1, maxw=.6)
     A.wingtop(crop('djr/14', (480, 228, 1135, 282), bg='#111111'), -2.24, .09, maxw=1.3)    # DXC
@@ -1690,6 +1710,8 @@ def build(key):
     A = Atlas(make)
     A.kind_key = kind + '_' + make
     DESIGNS[key](A, kind)
+    if kind == 'mustang':    # splitter shelf (seen through the SHELBY cut-outs in the lip face): black, so no lettering shows
+        A.over(lambda x, y, z, view: fill(x.shape, '#141416'), lambda x, y, z, view: np.clip((z - 2.44) / .01, 0, 1), views=('top',))
     if not A.exact:          # a photo-exact livery already carries every real mark
         maker(A, kind, dark=float(A.img.mean()) < 110)
         decals(A, key, kind)
