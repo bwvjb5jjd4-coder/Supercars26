@@ -1479,65 +1479,265 @@ def L_alphatheta(A, kind):
     A.put('rear', recol(word, '#ffffff'), 0, .8, .07)
 
 
-def L_sherrin(A, kind):
-    """Matt Stone Racing #4 Sherrin Rentals Camaro (refs msr/01, 02, 05): orange, blue rear half and sills,
-    red speed stripes where they meet."""
-    org, blue, red, wht, blk = '#f2a12b', '#2546b5', '#e3262a', '#f0f0f0', '#151515'
+def outline(im, col='#ffffff', w=.06):
+    """A solid outline round a mark (w = thickness as a fraction of its height), like the cut-vinyl borders."""
+    from scipy import ndimage
+    p = max(2, int(im.height * w))
+    a = np.asarray(im).astype(np.float32)
+    big = np.zeros((a.shape[0] + 2 * p, a.shape[1] + 2 * p, 4), np.float32)
+    big[p:-p, p:-p] = a
+    yy, xx = np.mgrid[-p:p + 1, -p:p + 1]
+    ring = ndimage.grey_dilation(big[..., 3], footprint=(xx ** 2 + yy ** 2) <= p * p)
+    out = np.zeros_like(big)
+    out[..., :3] = hexc(col)
+    out[..., 3] = ring
+    o = Image.fromarray(out.astype(np.uint8))
+    o.alpha_composite(Image.fromarray(big.astype(np.uint8)))
+    return o
 
-    def base(x, y, z, view):
-        c = fill(x.shape, org)
-        if view in ('front', 'rear'):
-            c = lay(c, band(y, -1, .34), blue)
-        if view == 'rear':
-            c = fill(x.shape, blue)
-        if view == 'top':
-            c = lay(c, band(z, -9, -.9), blue)
-            c = lay(c, band(z, -9, -2.12), wht)
-        return c
+
+def stack(*ims, gap=.12, align='c'):
+    """Marks one above the other (gap as a fraction of the tallest)."""
+    g = int(max(i.height for i in ims) * gap)
+    W = max(i.width for i in ims)
+    out = Image.new('RGBA', (W, sum(i.height for i in ims) + g * (len(ims) - 1)), (0, 0, 0, 0))
+    y = 0
+    for i in ims:
+        out.alpha_composite(i, ((W - i.width) // 2 if align == 'c' else 0, y))
+        y += i.height + g
+    return out
+
+
+def tyrepower(word='#ffffff'):
+    """Tyrepower: the yellow / red swirl roundel and the word in a rounded sans."""
+    from PIL import ImageDraw
+    n = 240
+    ring = Image.new('RGBA', (n, n), (0, 0, 0, 0))
+    d = ImageDraw.Draw(ring)
+    d.ellipse((0, 0, n - 1, n - 1), fill='#ffffff')
+    d.pieslice((0, 0, n - 1, n - 1), 110, 300, fill='#f5b80c')
+    d.pieslice((0, 0, n - 1, n - 1), 300, 470, fill='#e3262a')
+    d.ellipse((34, 30, n - 30, n - 40), fill='#ffffff')
+    d.ellipse((56, 50, n - 56, n - 62), fill='#1d3da8')
+    t = text('Tyrepower', 'Montserrat', 200, word, weight=700)
+    return row(ring.resize((int(t.height * 1.25),) * 2, Image.LANCZOS), t, gap=.2)
+
+
+def ss_signs():
+    ss = outline(text('SS', 'ArchivoBlack-Regular', 200, '#2a6fd6', slant=.22), '#ffffff', .05)
+    sg = outline(text('SIGNS', 'ArchivoBlack-Regular', 200, '#ffffff', slant=.22, track=.02), '#1b2c8c', .05)
+    return row(ss, sg, gap=.05)
+
+
+def retra(fill='#d8262c'):
+    return plate(text('retraVision.com.au', 'Montserrat', 120, '#ffffff', weight=800, slant=.12), fill, pad=.25, radius=.1)
+
+
+def unit_plate(ink='#1b2c8c'):
+    return plate(text('UNIT', 'ArchivoBlack-Regular', 140, ink, track=.12), '#ffffff', pad=.2, radius=.08)
+
+
+def bruce_rock(c='#ffffff'):
+    return stack(text('Bruce Rock', 'KaushanScript-Regular', 200, c), text('ENGINEERING', 'Michroma-Regular', 70, c, track=.15), gap=.05)
+
+
+def L_msr(A, kind, car):
+    """Matt Stone Racing Camaros from Riley's photos (msr/10_*, 4_*; reveal 02 / 05 for the noses), placed on the
+    measured Camaro map with photo -> (z, y) conversions from the wheel centres. #10 Bendix: sky blue, black rear
+    quarter and a black shard panel behind a huge outlined Bendix, black sill with the red retraVision stripe,
+    black bonnet, TRUCK ASSIST on a black wing. #4 Sherrin: orange front, blue tail behind a fan of red speed
+    stripes, blue sill with a red pinstripe, outlined SHERRIN / Rentals, Tyrepower on the blue quarter."""
+    f, r = A.f, A.r
+    blk, wht, red = '#16181d', '#f4f4f2', '#d8262c'
+    bendix = car == 10
+    if bendix:
+        main = '#1aa0d6'
+
+        def quarter_edge(y):        # front edge of the black rear quarter, leaning back down to the arch
+            return np.where(y > .95, -.56, -.66 - 1.2 * (1.0 - y))
+
+        def base(x, y, z, view):
+            c = fill(x.shape, main)
+            if view in ('left', 'right'):
+                low = np.interp(z, [-9, -1.8, -1.6, 9], [.82, .82, .62, .62])
+                c = lay(c, ((z < quarter_edge(y)) & (y > low)).astype(np.float32), blk)
+                c = lay(c, ((z < -1.7) & (y < .46)).astype(np.float32), blk)                  # rear bumper bottom
+                c = lay(c, ((z > -1.75) & (z < -.85) & (y < .7) & (np.hypot(z + 1.3, (y - .34) * 1.05) < .5)).astype(np.float32), blk)
+                for k, (z0, y0) in enumerate(((-1.0, .74), (-1.15, .7), (-.9, .8))):          # blue shards in the black
+                    t = np.clip((z0 - z) / .75, 0, 1)
+                    c = lay(c, ((z < z0) & (z > z0 - .75) & (np.abs(y - y0 - .09 * (z0 - z)) < .012 * (1 - t) + .002)).astype(np.float32), main)
+                # black shard panel behind the door lettering
+                plate_pts = [(-.97, .935), (-.1, .9), (.88, .83), (1.1, .72), (.94, .64), (1.02, .52), (.88, .45), (-.82, .40)]
+                A_poly = poly_mask(z, y, plate_pts)
+                c = lay(c, A_poly, blk)
+                for z0, y0, ln in ((-.92, .87, .55), (-.86, .5, .45), (.55, .46, .4)):          # blue slivers cut into it
+                    t = np.clip((z - z0) / ln, 0, 1)
+                    c = lay(c, ((z > z0) & (z < z0 + ln) & (np.abs(y - y0 + .03 * (z - z0)) < .016 * (1 - t))).astype(np.float32), main)
+                sill = ((y < .40) & (z > -1.0) & (z < .95)) | ((y < .30) & (z > -1.0) & (z < 1.45)) | ((z > 1.9) & (y < .36))
+                c = lay(c, sill.astype(np.float32), blk)
+                rs = band(y, .205, .25) * np.clip((z + .72) / .05, 0, 1) * np.clip((.6 - z) / .25, 0, 1)
+                c = lay(c, rs, red)
+            if view == 'top':
+                c = lay(c, (np.abs(x) < .74) * band(z, .55, 9), blk)                      # black bonnet and nose band
+                c = lay(c, (np.abs(x) > .6) * band(z, -9, -.6) * band(z, -2.36, 9), blk)    # quarter tops
+                c = lay(c, band(z, -9, -1.9), blk)                                        # deck and the crease under the lamps
+                for k, xs in enumerate((-.62, .62)):                                       # blue shards at the bonnet edge
+                    s = np.sign(xs)
+                    c = lay(c, ((np.abs(x - xs + s * .12 * (z - .7)) < .02) & (z > .7) & (z < 1.5)).astype(np.float32), main)
+            if view == 'front':
+                c = lay(c, band(y, .505, 9), blk)
+                c = lay(c, band(np.abs(x), -1, .42) * band(y, .2, 9), blk)
+                c = lay(c, band(np.abs(x), .42, 9) * band(y, -1, .36), blk)
+                c = lay(c, band(y, -1, .17), blk)
+                c = lay(c, band(np.abs(x), .45, 9) * band(y, -1, .17), red)
+                c = lay(c, band(np.abs(x), .4, .44) * band(y, .2, .5), '#e8e8e8')          # white grille surround
+            if view == 'rear':
+                c = lay(c, band(y, -1, .4), blk)
+                c = lay(c, band(np.abs(x), -1, .37) * band(y, -1, .66), blk)
+                c = lay(c, band(np.abs(x), -1, .5) * band(y, .7, .795), blk)
+                c = lay(c, band(y, .95, 9), blk)                                          # boot spoiler
+            return c
+    else:
+        main, blu = '#e8890f', '#1d3da8'
+
+        def zl(y):                  # the blue tail's front edge (the speed stripes run parallel to it)
+            return -.545 + (y - .986) / .53
+
+        def ys(z):                  # top of the blue sill
+            return np.where(z > 2.0, .265, .345 - .05 * (z + .4))
+
+        def base(x, y, z, view):
+            c = fill(x.shape, main)
+            if view in ('left', 'right'):
+                dz = z - zl(y)
+                c = lay(c, ((dz < 0) | (z < -1.65)).astype(np.float32), blu)
+                c = lay(c, ((dz >= 0) & (dz < .1)).astype(np.float32), red)
+                for k in range(7):
+                    a0 = .16 + .085 * k
+                    w = .05 * (1 - k / 8)
+                    c = lay(c, ((dz > a0) & (dz < a0 + w) & (y > .3)).astype(np.float32), red)
+                s = ys(z)
+                c = lay(c, (y < s + .014).astype(np.float32), red)
+                c = lay(c, (y < s).astype(np.float32), blu)
+                rs = band(y, .185, .235) * np.clip((z + .8) / .04, 0, 1) * np.clip((.6 - z) / .2, 0, 1)
+                c = lay(c, rs, red)
+                c = lay(c, band(z, 2.15, 9) * band(y, -1, .2), red)
+            if view == 'top':
+                zr = -1.05
+                c = lay(c, band(z, -9, zr), blu)
+                c = lay(c, band(z, zr, zr + .08), red)
+                for k in range(5):
+                    a0 = zr + .14 + .07 * k
+                    c = lay(c, band(z, a0, a0 + .035 * (1 - k / 6)), red)
+                c = lay(c, (np.abs(x) > .6) * band(z, -9, -.6), blu)
+                c = lay(c, band(z, 2.42, 9), blu)                                          # nose band
+                c = lay(c, band(z, -9, -2.36), main)                                       # orange strip under the lamps
+            if view == 'front':
+                c = lay(c, band(y, .505, 9), blu)
+                c = lay(c, band(np.abs(x), -1, .42) * band(y, .2, 9), blk)
+                c = lay(c, band(np.abs(x), .38, .44) * band(y, .2, .5), red)               # red grille surround
+                c = lay(c, band(y, -1, .27), blu)
+                c = lay(c, band(y, .265, .28), red)
+                c = lay(c, band(np.abs(x), .5, 9) * band(y, -1, .17), red)
+            if view == 'rear':
+                c = fill(x.shape, blu)
+                c = lay(c, band(np.abs(x), -1, .5) * band(y, .7, .795), main)              # orange strip under the lamps
+                c = lay(c, band(y, -1, .4), blk)
+            return c
     A.paint(base)
-    A.photo('msr/01', [(1269, 704), (395, 704), (1269, 613), (395, 613)], tyre=.33)
-    A.trace([org, blue, red, wht], belt=.92, erase=[(581, 533, 1051, 709), (197, 501, 507, 560)], allow={3: (-9, -.2)},
-            outline=[(125, 700), (130, 520), (165, 460), (250, 440), (330, 420), (560, 395), (780, 390), (960, 480), (1200, 505), (1330, 550), (1395, 600), (1420, 720), (1320, 740), (480, 730)])
-    A.plogo(logo('ddc016a379'), 816, 621, 176, maxw_px=470)
-    A.plogo(crop('msr/01', (197, 501, 507, 560), tol=60), 352, 530, 59)       # Tyrepower
-    A.plogo(crop('msr/01', (1140, 535, 1345, 575), tol=60), 1243, 555, 40)    # EverythingFleet
-    A.plogo(logo('71cdf80cee'), 1085, 744, 14)
-    A.bonnet(logo('ddc016a379'), A.f + .2, .42, maxw=1.0)
-    A.roof(crop('msr/01', (197, 501, 507, 560), tol=60), -.6, .14, maxw=.8)
-    A.wingtop(recol(logo('daf'), '#1d3c8f'), -2.24, .1, maxw=.5)
-    A.put('front', logo('bic'), .5, .45, .07)
-    A.put('front', logo('bic'), -.5, .45, .07)
-    A.put('front', logo('bowtie'), 0, .55, .05)
-    A.put('rear', crop('msr/01', (197, 501, 507, 560), tol=60), 0, .72, .08)
+    A.soft = None
+    mont = lambda t, px=160, c='#ffffff', w=800, **k: text(t, 'Montserrat', px, c, weight=w, **k)
+    daf_w = recol(logo('daf'), '#ffffff')
+    for s in (-1, 1):
+        A.put('top', daf_w, -2.2, s * .42, .05, maxw=.22, rot=-90)
+    A.bonnet(tyrepower(), 2.512, .026, maxw=.6)      # the bar above the grille (only z 2.5-2.525 lands there alone)
+    if bendix:
+        A.endplate = red
+        A.wingcol = blk
+        orangeo = Image.new('RGBA', (200, 200), (0, 0, 0, 0))
+        from PIL import ImageDraw
+        ImageDraw.Draw(orangeo).ellipse((10, 10, 190, 190), outline='#f26b21', width=46)
+        A.wing(row(orangeo, text('TRUCK ASSIST', 'ArchivoBlack-Regular', 200, '#ffffff', slant=.15), gap=.15), .12, maxw=1.4)
+        bx = outline(logo('90cbdec9f0'), blk, .07)
+        A.put('sides', bx, -.03, .665, .38, maxw=1.78)
+        A.put('sides', mont('TRICO', 200, track=.06), -1.52, .935, .14, maxw=.64)
+        A.put('sides', mont('SUPERIOR', 120, w=900), -1.2, 1.13, .04, maxw=.33)
+        A.put('sides', daf_w, -.6, .32, .055, maxw=.25)
+        A.put('sides', mont('ORAFOL', 120), -.25, .315, .03, maxw=.17)
+        A.put('sides', unit_plate('#16181d'), 0.0, .315, .04, maxw=.14)
+        A.put('sides', text('retraVision.com.au', 'Montserrat', 120, '#ffffff', weight=800, slant=.12), -.1, .228, .028, maxw=.52)
+        A.put('sides', recol(logo('repco'), '#ffffff'), 1.42, .21, .035, maxw=.25)
+        A.put('sides', stack(mont('C', 200, w=900), mont('coregas', 80, w=600), gap=.05), 1.07, .79, .1, maxw=.18)
+        A.put('sides', mont('Sullivans', 120, w=700), 1.07, .62, .04, maxw=.26)
+        A.put('sides', stack(mont('PROCUREMENT', 80), mont('DIRECT', 80)), 1.07, .52, .06, maxw=.24)
+        A.put('sides', mont('CAMELBAK', 110, w=900), 1.07, .42, .035, maxw=.25)
+        A.put('sides', mont('TractiX', 120, w=700), 1.9, .8, .04, maxw=.25)
+        A.put('sides', text('Wodens', 'Montserrat', 140, '#ffffff', weight=800), -1.93, .44, .05, maxw=.3)
+        A.bonnet(logo('90cbdec9f0'), 2.02, .2, maxw=1.3)
+        for s in (-1, 1):
+            A.put('front', mont('MGMBULK', 160, '#141414', 900), s * .6, .47, .035, maxw=.27)
+        A.put('rear', ss_signs(), 0, .905, .045, maxw=.45)
+        A.put('rear', logo('90cbdec9f0'), 0, .757, .03, maxw=.36)      # the strip just under the lamps
+        A.put('rear', bruce_rock(), 0, .53, .13, maxw=.56)
+        for s in (-1, 1):
+            A.put('rear', mont('AFFINITY', 120, w=700), s * .58, .62, .035, maxw=.28)
+            A.put('rear', mont('TRIPLE M', 160, w=900), s * .58, .52, .05, maxw=.3)
+            A.put('rear', unit_plate('#16181d'), s * .45, .33, .035, maxw=.15)
+    else:
+        A.endplate = wht
+        A.wingcol = blu
+        A.wing(daf_w, .1, maxw=.6)
+        sh = outline(text('SHERRIN', 'ArchivoBlack-Regular', 260, '#141414'), '#ffffff', .07)
+        rn = outline(text('Rentals', 'ArchivoBlack-Regular', 260, '#e3262a'), '#ffffff', .07)
+        A.put('sides', sh.resize((sh.width, int(sh.height * 1.15)), Image.LANCZOS), .11, .724, .33, maxw=1.56)
+        A.put('sides', rn, .10, .473, .29, maxw=1.08)
+        A.put('sides', tyrepower(), -1.4, .875, .14, maxw=.84)
+        A.put('sides', stack(mont('PCA', 200, w=900, slant=.1), mont('PUMP CONTROLLERS', 60, w=700), gap=.05), -1.19, 1.12, .1, maxw=.4)
+        A.put('sides', mont('AUSPT', 160, w=900), -1.89, .42, .06, maxw=.25)
+        A.put('sides', daf_w, -.77, .313, .048, maxw=.27)
+        A.put('sides', mont('ORAFOL', 120), -.355, .298, .03, maxw=.17)
+        A.put('sides', unit_plate(), -.115, .286, .042, maxw=.15)
+        A.put('sides', text('retraVision.com.au', 'Montserrat', 120, '#ffffff', weight=800, slant=.12), -.3, .21, .028, maxw=.5)
+        A.put('sides', recol(logo('repco'), '#ffffff'), 1.0, .21, .035, maxw=.23)
+        A.put('sides', stack(mont('EverythingFleet', 160, blu, 700), mont('CAR & TRUCK RENTALS', 70, blu, 700), gap=.05), 1.52, .826, .09, maxw=.63)
+        A.put('sides', stack(mont('C', 200, '#141414', 900), mont('coregas', 80, '#141414', 600), gap=.05), 1.04, .73, .12, maxw=.16)
+        A.put('sides', mont('AUSPT', 160, '#141414', 900), 1.04, .59, .05, maxw=.22)
+        A.put('sides', stack(mont('( - )', 160, '#141414', 900), mont('wake up!', 90, '#141414', 700), gap=.05), 1.04, .46, .12, maxw=.2)
+        A.put('sides', logo('bic'), 2.1, .4, .1, maxw=.25)
+        A.bonnet(sh, 1.93, .12, maxw=1.1)
+        A.bonnet(rn, 2.14, .1, maxw=.78)
+        for s in (-1, 1):
+            A.put('front', mont('MGMBULK', 160, '#141414', 900), s * .6, .47, .035, maxw=.27)
+        A.put('rear', ss_signs(), 0, .9, .06, maxw=.5)
+        A.put('rear', row(text('SHERRIN', 'ArchivoBlack-Regular', 200, '#141414'), text('Rentals', 'ArchivoBlack-Regular', 200, '#e3262a')), 0, .757, .03, maxw=.5)
+        A.put('rear', plate(bruce_rock('#141414'), '#ffffff', pad=.15, radius=.15), 0, .54, .12, maxw=.52)
+        for s in (-1, 1):
+            A.put('rear', mont('wake up!', 140, w=700), s * .58, .62, .04, maxw=.28)
+            A.put('rear', mont('TRIPLE M', 160, w=900), s * .58, .52, .05, maxw=.3)
+            A.put('rear', unit_plate(), s * .45, .33, .035, maxw=.15)
+    A.exact = True
+
+
+def poly_mask(z, y, pts):
+    """0/1 mask of a polygon given in (z, y) metres, evaluated on a side view's coordinate grid (z runs
+    linearly along columns, y along rows)."""
+    from PIL import ImageDraw
+    h, w = z.shape
+    z0, z1, y0, y1 = z[0, 0], z[0, -1], y[0, 0], y[-1, 0]
+    q = [((a - z0) / (z1 - z0) * (w - 1), (b - y0) / (y1 - y0) * (h - 1)) for a, b in pts]
+    mk = Image.new('L', (w, h), 0)
+    ImageDraw.Draw(mk).polygon(q, fill=255)
+    return (np.asarray(mk) > 127).astype(np.float32)
+
+
+def L_sherrin(A, kind):
+    """Matt Stone Racing #4 Sherrin Rentals Camaro (refs msr/4_side, 4_rq, 02, 05)."""
+    L_msr(A, kind, 4)
 
 
 def L_bendix(A, kind):
-    """Matt Stone Racing #10 Bendix Camaro (refs msr/03-05): sky blue, black rear half and sills, white Bendix."""
-    lb, blk, wht, red = '#33a9d8', '#1b1d22', '#eeeeee', '#d9262a'
-
-    def base(x, y, z, view):
-        c = fill(x.shape, lb)
-        if view in ('front', 'rear'):
-            c = lay(c, band(y, -1, .3), blk)
-        if view == 'rear':
-            c = fill(x.shape, blk)
-        if view == 'top':
-            c = lay(c, band(z, -9, -.9), blk)
-            c = lay(c, band(z, -9, -2.12), wht)
-        return c
-    A.paint(base)
-    A.photo('msr/03', [(1285, 757), (405, 757), (1285, 667), (405, 667)], tyre=.33)
-    A.trace([lb, blk, wht, red], belt=.92, erase=[(533, 597, 1067, 747, 1), (245, 555, 443, 608, 1)], allow={2: (-9, -9)},
-            outline=[(120, 745), (125, 560), (150, 520), (260, 500), (340, 475), (560, 445), (800, 435), (960, 520), (1200, 550), (1330, 580), (1400, 640), (1420, 760), (1320, 790), (480, 790)])
-    b = logo('90cbdec9f0')
-    A.plogo(b, 795, 672, 128, maxw_px=500)
-    A.plogo(recol(logo('trico'), '#ffffff'), 343, 581, 43)
-    A.plogo(logo('71cdf80cee'), 1100, 805, 14)
-    A.bonnet(b, A.f + .2, .2, maxw=1.0)
-    A.roof(recol(logo('trico'), '#ffffff'), -.6, .12, maxw=.6)
-    A.wingtop(recol(logo('daf'), '#1d3c8f'), -2.24, .1, maxw=.5)
-    A.put('front', logo('bowtie'), 0, .55, .05)
-    A.put('rear', b, 0, .72, .08)
+    """Matt Stone Racing #10 Bendix Camaro (refs msr/10_side, 10_fq, 10_rear, 10_front)."""
+    L_msr(A, kind, 10)
 
 
 def L_chiko(A, kind):
