@@ -2851,7 +2851,7 @@ def bl_hash(A, cols, z0, n, step, w, x0, x1, slope):
 def bl_bar(im, ratio, fill='#141516'):
     """A mark centred on a plain bar `ratio` times as wide as it is tall."""
     H = int(im.height * 1.3)
-    out = Image.new('RGBA', (int(H * ratio), H), fill)
+    out = Image.new('RGBA', (max(int(H * ratio), im.width + H // 2), H), fill)
     out.alpha_composite(im, ((out.width - im.width) // 2, (H - im.height) // 2))
     return out
 
@@ -2917,11 +2917,11 @@ def L_cooldrive(A, kind):
     bl_nose(A, wht, 'blue')
     A.put('front', logo('3952a5b529'), 0, .62, .05)
     A.put('rear', text('FORD RACING', 'ArchivoBlack-Regular', 200, wht, track=.04), 0, .9, .05, maxw=.62)
-    A.put('rear', crop('cooldrive/05', (700, 526, 890, 582), keep=['#ffffff'], tol=60), 0, .68, .065, maxw=.4)
+    A.put('rear', text('Aerpro', 'Montserrat', 200, wht, weight=500), 0, .58, .04, maxw=.24)
     for sx in (-1, 1):
-        A.put('rear', crop('cooldrive/05', (474, 598, 580, 668) if sx < 0 else (1010, 598, 1116, 668), keep=['#ffffff'], tol=60), .6 * sx, .56, .09, maxw=.2)
+        A.put('rear', stack(text('Bremtec', 'Montserrat', 200, wht, weight=700), text('Brakes', 'Montserrat', 200, wht, weight=700), gap=.25), .6 * sx, .56, .09, maxw=.2)
         A.put('rear', plate(text('PPG', 'ArchivoBlack-Regular', 160, '#ffffff'), '#1d5bd8', pad=.25, radius=.2), .42 * sx, .74, .035, maxw=.09)
-    A.put('rear', bl_bar(crop('cooldrive/05', (650, 625, 940, 692), keep=['#ffffff'], tol=60), 4.6), 0, .52, .1, maxw=.62)
+    A.put('rear', bl_bar(crop('cooldrive/05', (650, 625, 940, 692), keep=['#ffffff'], tol=60), 4.6), 0, .5, .075, maxw=.5)
     A.wingcol = wht
     A.wing(crop('cooldrive/05', (452, 314, 1152, 372), keep=['#1a3fd0', '#2a50e0', '#0a2fb0'], tol=60), .14, maxw=1.4)
     A.endplate = blk
@@ -2968,7 +2968,7 @@ def L_liquimoly(A, kind):
     bl_nose(A, blue)
     A.put('front', logo('3952a5b529'), 0, .62, .05)
     A.put('rear', text('FORD RACING', 'ArchivoBlack-Regular', 200, wht, track=.04), 0, .92, .05, maxw=.62)
-    A.put('rear', bl_bar(crop('liquimoly/03', (652, 628, 950, 705), keep=['#ffffff'], tol=60), 3.6), 0, .55, .13, maxw=.62)
+    A.put('rear', bl_bar(text('BLAHST', 'ArchivoBlack-Regular', 200, wht), 3.4), 0, .55, .13, maxw=.62)
     lmr = Image.open(os.path.join(REFS, 'liquimoly/03.jpg')).convert('RGBA').crop((510, 610, 606, 674))
     for sx in (-1, 1):
         A.put('rear', lmr, .55 * sx, .56, .085, maxw=.16)
