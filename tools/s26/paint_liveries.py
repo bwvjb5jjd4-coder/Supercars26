@@ -2640,62 +2640,170 @@ def L_pizzahut(A, kind):
 
 
 def L_chiko(A, kind):
-    """Erebus #9 CHIKO Camaro (refs chiko/01-02): red and orange flames over a black tail."""
-    red, org, blk, wht = '#e5352a', '#f39a1e', '#1a1a1a', '#f0f0f0'
+    """Erebus #9 CHIKO Camaro from Riley's photos (erebus/9_side left flank at Sydney, 9_front34 right front,
+    99chiko_model for the bonnet layout). The flanks are the track photo projected onto the body: orange-to-red
+    fade with the big CHIKO oval on the doors, navy-black rear quarters with Snap-on, PLUMBTRAX on the front guard,
+    lettering turned the right way round on the far flank. The right front guard is black with PEDDERS, TFH, BiC
+    and SS SIGNS (9_front34). Black bonnet with the CHIKO oval at the nose and orange edge lines, black roof and
+    tail, black erebus wing."""
+    red, org, blk, wht, gold = '#e2381f', '#f08a2a', '#14161c', '#f4f2ee', '#e09a3a'
+    A.soft = None
 
     def base(x, y, z, view):
         c = fill(x.shape, red)
+        if view == 'top':
+            c = lay(c, band(np.abs(x), -1, .62) * band(z, A.f - 1.15, 9), blk)             # black bonnet
+            for sx in (-1, 1):
+                edge = .62 + (z - A.f) * .02
+                c = lay(c, ((np.abs(x) > edge) & (np.abs(x) < edge + .03)).astype(np.float32) * band(z, A.f - 1.1, A.f + .9), org)
+            c = lay(c, band(z, -9, A.f - 1.15), blk)                                          # roof, deck
         if view == 'rear':
             c = fill(x.shape, blk)
+            c = lay(c, band(y, -1, .42), red)
         if view == 'front':
             c = lay(c, band(y, -1, .2), blk)
-        if view == 'top':
-            c = lay(c, band(z, -9, -1.2), blk)
-            c = lay(c, band(np.abs(x), .3, .36) * band(z, -1.2, A.f + 1), org)
         return c
     A.paint(base)
-    A.photo('chiko/01', [(613, 827), (1157, 784), (613, 736), (1157, 704)], tyre=.33)
-    A.trace([red, org, blk, wht], belt=.92, erase=[(795, 693, 1067, 821)], allow={3: (-9, -9)},
-            outline=[(225, 820), (250, 700), (300, 650), (560, 610), (640, 560), (800, 545), (1000, 560), (1170, 590), (1180, 760), (1100, 800), (600, 840)])
+    A.photo('erebus/9_side2x', [(850, 668), (1565, 612), (850, 560), (1565, 520)], tyre=.34)
+    import cv2
+    ph = A.ph[0]                       # the track shot carries reflections: smooth them out, keep the paint edges,
+    sm = ph.astype(np.uint8)           # and lift the colour a touch
+    for _ in range(3):
+        sm = cv2.bilateralFilter(sm, 9, 45, 9)
+    sm = sm.astype(np.float32)
+    m = sm.mean(-1, keepdims=True)
+    ph[:] = np.clip(m + (sm - m) * 1.15, 0, 255)
+    outline = [(540, 640), (545, 500), (640, 478), (800, 455), (1000, 445), (1060, 350), (1250, 318), (1420, 328),
+               (1520, 348), (1640, 365), (1705, 410), (1730, 520), (1725, 640), (1700, 685), (1450, 700), (1000, 722),
+               (780, 762), (560, 760)]
+    glass = [[(1000, 400), (1080, 345), (1250, 330), (1400, 345), (1440, 400), (1420, 440), (1250, 445), (1050, 452)],
+             [(1045, 425), (1175, 425), (1175, 505), (1045, 505)]]
+    R1, R2, O1, N1 = '#d4421f', '#c8302a', '#e07a2a', '#1a1c22'
+    decals = [((1058, 466, 1424, 664), [R1, R2, '#b82a2a', '#a8242c'], 70),                      # CHIKO oval
+              ((1448, 436, 1664, 524), [N1, '#14161a', '#262830', '#30323a'], 80),                # Snap-on
+              ((768, 496, 1012, 562), [R1, O1, '#d86028', '#e89040'], 75),                        # PLUMBTRAX
+              ((958, 516, 1034, 722), [R1, R2, '#c03826'], 75),                                   # Marina / sponsor column
+              ((1138, 676, 1242, 704), [N1, '#14161a', '#0c0c0c'], 70),                           # Snap-on (sill)
+              ((1650, 536, 1724, 624), [N1, '#14161a', '#262830', '#8a2a34'], 75)]                # rear-quarter stickers
+    A.project(outline, 'left', glass=glass, decals=decals, above=(1.2, blk), arch=.42)
+    A.wrap = [(.55, 1.0, -2.4, -.5)]
+    # the nose corners (the photo sees them head-on): red with the CHIKO and QUARTZ stickers, black lower intake
+    def ends(x, y, z, view):
+        c = fill(x.shape, red)
+        c = lay(c, band(y, -1, .17), blk)
+        return c
+    A.over(ends, lambda x, y, z, view: np.clip((z - 1.9) / .06, 0, 1), views=('left',))
     ch = logo('57c38ba607')
-    A.plogo(ch, 930, 757, 123)
-    A.plogo(crop('chiko/01', (1088, 651, 1221, 699)), 1155, 675, 46)                              # Snap-on
-    A.bonnet(ch, A.f + .5, .3, maxw=.8)
-    A.roof(ch, -.3, .25, maxw=.7)
-    A.wingtop(crop('chiko/01', (1088, 651, 1221, 699)), -2.24, .1, maxw=1.0)
+    # the big door oval and the rear-quarter Snap-on laid back sharp over the photo's soft ones
+    z0, y0 = A.from_photo(1062, 565)
+    z1, _ = A.from_photo(1420, 565)
+    _, yt = A.from_photo(1240, 470)
+    _, yb = A.from_photo(1240, 662)
+    A.put('sides', ch, (z0 + z1) / 2, (yt + yb) / 2, yt - yb, maxw=abs(z1 - z0))
+    z0, y0 = A.from_photo(1455, 480)
+    z1, y1 = A.from_photo(1658, 470)
+    A.put('sides', text('Snap-on', 'ArchivoBlack-Regular', 200, wht, slant=.18), (z0 + z1) / 2, (y0 + y1) / 2, .12, maxw=abs(z1 - z0), rot=-3)
+    A.put('left', ch, 2.2, .5, .06, maxw=.2)
+    A.put('left', quartz_mark(gold, wht), 2.2, .36, .07, maxw=.22)
+    # right front guard: black panel with the PEDDERS / TFH / BiC / SS SIGNS stickers (9_front34)
+    def guard(x, y, z, view):
+        return fill(x.shape, blk)
+    top = lambda z: .84 + np.clip(z - 1.2, 0, 2) * .03
+    A.over(guard, lambda x, y, z, view: np.clip((z - 1.2) / .03, 0, 1) * band(y, .12, 9) * (y < top(z)), views=('right',))
+    A.over(lambda x, y, z, view: fill(x.shape, org),
+           lambda x, y, z, view: np.clip((z - 1.2) / .02, 0, 1) * (np.abs(y - top(z) - .012) < .012), views=('right',))
+    A.put('right', plate(text('PEDDERS', 'ArchivoBlack-Regular', 200, '#d8202a'), '#ffffff', pad=.2, radius=.1), 1.95, .78, .06, maxw=.36)
+    # the right bumper corner (front-view texels, x < 0) is black too, with TFH and BiC on it
+    A.over(guard, lambda x, y, z, view: np.clip((-x - .42) / .03, 0, 1) * band(y, .1, .5), views=('front',))
+    A.put('front', plate(text('TFH', 'ArchivoBlack-Regular', 200, '#141414'), '#f2c21a', pad=.15, radius=.1), -.64, .42, .055, maxw=.17)
+    A.put('front', plate(text('BiC', 'ArchivoBlack-Regular', 200, '#141414'), '#f2a81a', pad=.15, radius=.5), -.64, .3, .06, maxw=.17)
+    A.put('right', plate(text('TFH', 'ArchivoBlack-Regular', 200, '#141414'), '#f2c21a', pad=.15, radius=.1), 2.3, .56, .08, maxw=.24)
+    A.put('right', plate(text('BiC', 'ArchivoBlack-Regular', 200, '#141414'), '#f2a81a', pad=.15, radius=.5), 2.3, .41, .085, maxw=.24)
+    A.put('right', row(text('SS', 'ArchivoBlack-Regular', 200, '#2f8fe0'), text('SIGNS', 'ArchivoBlack-Regular', 200, '#ffffff'), gap=.1), 1.45, .68, .05, maxw=.26)
+    A.put('right', plate(text('LINCOLN ELECTRIC', 'ArchivoBlack-Regular', 160, '#d8202a'), '#ffffff', pad=.2, radius=.1), 2.2, .22, .045, maxw=.3)
+    # bonnet: the CHIKO oval at the nose, black panel behind
+    A.bonnet(ch, A.f + .62, .3, maxw=.85)
     A.put('front', logo('bowtie'), 0, .55, .05)
-    A.put('front', logo('cc604486c7'), .45, .4, .04)
-    A.put('rear', ch, 0, .7, .1)
+    A.put('rear', ch, 0, .58, .11, maxw=.6)
+    A.put('rear', text('Snap-on', 'ArchivoBlack-Regular', 200, wht, slant=.15), 0, .82, .05, maxw=.4)
+    A.wingcol = blk
+    A.wing(erebus_word('#ffffff'), .12, maxw=1.2)
+    A.endplate = blk
+    A.exact = True
+
+
+def erebus_word(c):
+    """The thin rounded lower-case erebus wordmark."""
+    return text('erebus', 'Montserrat', 200, c, weight=500, track=.06)
+
+
+def quartz_mark(gold, ink):
+    """QUARTZ over an ENGINE OIL tab, in TotalEnergies' gold."""
+    return stack(text('QUARTZ', 'ArchivoBlack-Regular', 200, gold, track=.04),
+                 plate(text('ENGINE OIL', 'Montserrat', 120, ink, weight=700), gold, pad=.15, radius=.1), gap=.04)
 
 
 def L_total(A, kind):
-    """Erebus #99 TotalEnergies Camaro (refs total/01-02): white, black tail, rainbow ribbons from the TE mark."""
-    wht, blk, red, yel, blue, pur = '#f2f3f5', '#16181b', '#e8242d', '#f6c21c', '#2e5bd8', '#8b3fa4'
+    """Erebus #99 TotalEnergies Camaro from Riley's photos (erebus/99_side right flank, 99_front34, 99_front34b).
+    The flanks are the studio side photo projected onto the body: white with the TE mark and TotalEnergies on the
+    door, rainbow ribbons sweeping up the rear quarter and behind the front wheel, black tail and C-pillar, PLUMBTRAX,
+    MARINA, QUARTZ and the sponsor column, lettering turned the right way round on the far flank. White bonnet with
+    the black centre panel and QUARTZ ENGINE OIL, black roof and tail, black erebus wing."""
+    wht, blk, gold = '#f2f2f0', '#121214', '#b98a5a'
+    A.soft = None
 
     def base(x, y, z, view):
         c = fill(x.shape, wht)
+        if view == 'top':
+            c = lay(c, band(np.abs(x), -1, .28) * band(z, A.f - .9, A.f + .2), blk)           # bonnet centre panel
+            c = lay(c, band(z, -9, A.f - 1.15) * band(np.abs(x), -1, .62), blk)               # roof
+            c = lay(c, band(z, -9, A.r - .5), blk)                                            # deck
         if view == 'rear':
             c = fill(x.shape, blk)
         if view == 'front':
             c = lay(c, band(y, -1, .2), blk)
-        if view == 'top':
-            c = lay(c, band(z, -9, -1.7), blk)
         return c
     A.paint(base)
-    A.photo('total/01', [(955, 736), (512, 693), (955, 672), (512, 635)], tyre=.33)
-    A.trace([wht, blk, red, yel, blue, pur], belt=.92, erase=[(651, 624, 795, 736)], min_area=.04,
-            outline=[(400, 640), (405, 560), (440, 520), (560, 505), (700, 495), (800, 520), (950, 560), (1080, 600), (1120, 700), (1080, 740), (900, 745), (500, 700)])
-    te = logo('2dd6e13bf9')
-    A.plogo(te, 722, 677, 112)
-    A.plogo(crop('total/01', (880, 615, 1010, 650)), 945, 632, 26)                                # Plumbtrax
-    A.plogo(logo('cc604486c7'), 1105, 735, 14)
-    A.bonnet(te, A.f + .2, .5, maxw=.8)
-    A.roof(logo('cdadefee3e'), -.3, .12, maxw=.8)
-    A.wingtop(recol(logo('cdadefee3e'), '#ffffff'), -2.24, .08, maxw=1.2)
+    A.photo('erebus/99_side', [(1275, 835), (357, 767), (1275, 705), (357, 655)], tyre=.34)
+    outline = [(180, 600), (190, 545), (260, 500), (380, 470), (480, 445), (600, 425), (800, 430), (950, 450), (1050, 510),
+               (1150, 560), (1300, 575), (1450, 600), (1560, 625), (1640, 690), (1690, 760), (1720, 840), (1700, 930),
+               (1480, 960), (1050, 940), (420, 890), (300, 900), (200, 860), (180, 760)]
+    glass = [[(500, 470), (560, 458), (800, 455), (900, 490), (960, 560), (840, 560), (700, 555), (520, 550)],
+             [(838, 538), (955, 560), (955, 610), (838, 600)]]
+    W1, W2 = '#e3e2e0', '#d6d5d3'
+    decals = [((640, 610, 936, 838), [W1, W2, '#ecebe9', '#c9c8c6'], 70),                 # TE mark + TotalEnergies
+              ((1108, 625, 1402, 692), [W1, W2, '#ffffff', '#f2f2f2'], 70),               # PLUMBTRAX
+              ((1008, 652, 1098, 692), [W1, W2, '#ffffff', '#f2f2f2'], 70),               # MARINA
+              ((1045, 745, 1148, 885), [W1, W2, '#ffffff', '#f2f2f2'], 70),               # sponsor column
+              ((1532, 836, 1672, 892), [W1, W2, '#ffffff', '#f2f2f2'], 70),               # QUARTZ
+              ((1565, 712, 1672, 748), ['#121214', '#1e1e20', '#2a2a2c'], 70),            # DRIVEN
+              ((182, 636, 252, 722), ['#121214', '#1e1e20', '#323035'], 70),              # SUPAGAS / RedCut
+              ((556, 812, 668, 848), ['#121214', '#1e1e20', '#0e0c0d'], 70),              # Snap-on (sill)
+              ((1488, 926, 1702, 962), ['#121214', '#1e1e20', '#0e0c0d'], 70)]            # FASTMASTER / Clear-Com
+    ph = A.ph[0]                       # the black tail and C-pillar carry studio reflections: take them back to black
+    lum, sat = ph.mean(-1), ph.max(-1) - ph.min(-1)
+    yy, xx = np.mgrid[:ph.shape[0], :ph.shape[1]]
+    tail = ((xx < 300) | ((yy < 565) & (xx < 520))) & (sat < 40)
+    tail &= ~((xx > 178) & (xx < 256) & (yy > 632) & (yy < 726))          # keep SUPAGAS / RedCut
+    tail |= (lum < 120) & (sat < 30)
+    ph[tail] = ph[tail] * .2 + np.array([18, 18, 20], np.float32) * .8
+    A.project(outline, 'right', glass=glass, decals=decals, above=(1.2, blk), arch=.42)
+    A.wrap = [(.55, 1.0, -2.4, -.5)]
+    # the purple-to-red band across the nose under the bonnet edge, carried on under the headlights
+    def band_col(x, y, z, view):
+        t = np.clip((np.abs(x) - .05) / .7, 0, 1)[..., None]
+        return hexc('#d2203c').astype(np.float32) * (1 - t) + hexc('#7a3ad0').astype(np.float32) * t
+    A.over(band_col, lambda x, y, z, view: band(z, 2.42, 2.53), views=('top',))
+    A.bonnet(text('PIT VIPER', 'ArchivoBlack-Regular', 200, '#ffffff', slant=.15), 2.475, .035, maxw=.4)
+    A.bonnet(quartz_mark(gold, wht), A.f + .55, .3, maxw=.95)
+    A.bonnet(text('99', 'ArchivoBlack-Regular', 200, wht), A.f - .45, .3, maxw=.4)
     A.put('front', logo('bowtie'), 0, .55, .05)
-    A.put('front', logo('cc604486c7'), .5, .4, .04)
-    A.put('front', logo('cc604486c7'), -.5, .4, .04)
-    A.put('rear', recol(logo('cdadefee3e'), '#ffffff'), 0, .7, .07)
+    A.put('rear', erebus_word('#ffffff'), 0, .72, .06, maxw=.6)
+    A.put('rear', text('TotalEnergies', 'Montserrat', 200, wht, weight=600), 0, .5, .06, maxw=.6)
+    A.wingcol = blk
+    A.wing(erebus_word('#ffffff'), .12, maxw=1.2)
+    A.endplate = blk
+    A.exact = True
 
 
 def L_premiair(A, kind):
