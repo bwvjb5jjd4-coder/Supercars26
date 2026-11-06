@@ -1102,59 +1102,297 @@ def L_castrol(A, kind):
     A.put('rear', cas, 0, .62, .1)
 
 
-def L_optus(A, kind):
-    """Walkinshaw #1 Mobil 1 Optus Supra (refs wau/01-05): black, teal skirts, red and white GR shard."""
-    blk, teal, wht, red = '#1c1e20', '#22b3b0', '#f2f2f2', '#e3312d'
+_WAU = {}
+
+
+def wau_masks(name, hues, shard_boxes, r_hues=None, drop=(), min_area=60):
+    """Colour masks (float, smoothed) cut from a Walkinshaw side photo: the accent skirts, the R of the GR shard
+    and the white G. hues: (lo, hi) degrees of the accent; r_hues: of the R (default the accent).
+    shard_boxes: photo boxes holding the shard; drop: photo boxes to clear (logos)."""
+    if name in _WAU:
+        return _WAU[name]
+    import cv2
+    rgb = np.asarray(Image.open(os.path.join(REFS, name + '.png')).convert('RGB'))
+    hsv = cv2.cvtColor(rgb, cv2.COLOR_RGB2HSV_FULL).astype(float)
+    h, s, v = hsv[..., 0] * 360 / 256, hsv[..., 1] / 255, hsv[..., 2] / 255
+
+    def hue(lo, hi):
+        hh = (h >= lo) & (h <= hi) if lo < hi else (h >= lo) | (h <= hi)
+        return hh & (s > .45) & (v > .3)
+    acc = hue(*hues)
+    red = hue(*(r_hues or hues))
+    wht = (v > .55) & (s < .12)
+    inbox = np.zeros(acc.shape, bool)
+    for x0, y0, x1, y1 in shard_boxes:
+        inbox[y0:y1, x0:x1] = True
+    out = {}
+    for k, m, cl in (('acc', acc & ~inbox, 5), ('r', red & inbox, 3), ('g', wht & inbox, 3)):
+        m = m.astype(np.uint8)
+        for x0, y0, x1, y1 in drop:
+            m[y0:y1, x0:x1] = 0
+        m = cv2.morphologyEx(m, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (cl, cl)))
+        cs, _ = cv2.findContours(m, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+        hi = np.zeros((m.shape[0] * 4, m.shape[1] * 4), np.uint8)
+        for c in cs:
+            if cv2.contourArea(c) >= min_area:
+                c = cv2.approxPolyDP(c.astype(np.float32) * 4, 3.0, True).astype(np.int32)
+                cv2.fillPoly(hi, [c], 255)
+        hi = cv2.GaussianBlur(hi.astype(np.float32) / 255, (0, 0), 2.5)
+        out[k] = (hi, 4)
+    _WAU[name] = out
+    return out
+
+
+_YMAP = {}
+
+
+def top_ymap(kind_key):
+    """For every texel of the top view, the height y (m) of the body surface the game draws there (NaN where
+    nothing maps): lets a side design wrap up over a haunch or shoulder that faces the sky."""
+    if kind_key in _YMAP:
+        return _YMAP[kind_key]
+    import base64, gzip, cv2
+    d = json.loads(gzip.decompress(open(os.path.join(ROOT, 'assets/s26', kind_key.lower() + '.json.gz.bin'), 'rb').read()))
+    w, h = SIZE['top']
+    ym = np.full((h * K, w * K), -9.0, np.float32)
+    tris = []
+    for r in d['levels'][0]:
+        if r['role'] not in ('wing', 'hood') or not r.get('q'):
+            continue
+        p = np.frombuffer(base64.b64decode(r['p']), np.int16).reshape(-1, 3).astype(np.float64) / 10000
+        f = np.frombuffer(base64.b64decode(r['i']), np.uint16 if r.get('i16') else np.uint32).reshape(-1, 3)
+        tris.append(p[f])
+    t = np.concatenate(tris)
+    fn = np.cross(t[:, 1] - t[:, 0], t[:, 2] - t[:, 0])
+    fn /= np.maximum(np.linalg.norm(fn, axis=1, keepdims=True), 1e-12)
+    t = t[fn[:, 1] > .62]
+    yv = t[..., 1].mean(1)
+    for i in np.argsort(yv):
+        q = np.stack([(t[i, :, 2] - ZB) * S * K, (XL - t[i, :, 0]) * S * K], -1)
+        cv2.fillPoly(ym, [np.round(q * 16).astype(np.int32)], float(yv[i]), cv2.LINE_8, 4)
+    ym[ym < -8] = np.nan
+    _YMAP[kind_key] = ym
+    return ym
+
+
+def side_H(A, pts):
+    """Homography from side (z, y) to photo pixels from the two wheel centres (u, v); the vertical scale is taken
+    equal to the horizontal one (a square-on side photo)."""
+    (uf, vf), (ur, vr) = pts
+    k = np.hypot(uf - ur, vf - vr) / (A.f - A.r)
+    src = [(A.f, .34), (A.r, .34), (A.f, .67), (A.r, .67)]
+    dst = [(uf, vf), (ur, vr), (uf, vf - .33 * k), (ur, vr - .33 * k)]
+    M = []
+    for (z, y), (u, v) in zip(src, dst):
+        M.append([z, y, 1, 0, 0, 0, -u * z, -u * y, -u])
+        M.append([0, 0, 0, z, y, 1, -v * z, -v * y, -v])
+    H = np.linalg.svd(np.array(M))[2][-1].reshape(3, 3)
+    return H / H[2, 2], k
+
+
+def sample(m, H, z, y):
+    from scipy import ndimage
+    m, sc = m
+    q = H @ np.stack([z.ravel(), y.ravel(), np.ones(z.size)])
+    u, v = q[0] / q[2] * sc, q[1] / q[2] * sc
+    return ndimage.map_coordinates(m, [v, u], order=1, mode='constant').reshape(z.shape)
+
+
+def mobil1(c='#ffffff'):
+    im = logo('mobil1')
+    return im if c == '#ffffff' else recol(im, c)
+
+
+def wau_round(px=400):
+    """Chemical Guys roundel: white ring, CHEMICAL / GUYS round the rim."""
+    from PIL import ImageDraw, ImageFont
+    im = Image.new('RGBA', (px, px), (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
+    d.ellipse((4, 4, px - 5, px - 5), fill='#141414', outline='#f4f4f4', width=int(px * .05))
+    d.ellipse((px * .3, px * .3, px * .7, px * .7), outline='#f4f4f4', width=int(px * .03))
+    f = ImageFont.truetype(os.path.join(FONTS, 'ArchivoBlack-Regular.ttf'), int(px * .12))
+    for word, a0, a1, rr in (('CHEMICAL', 215, 325, .36), ('GUYS', 140, 40, .36)):
+        n = len(word)
+        for i, ch in enumerate(word):
+            t = np.radians(a0 + (a1 - a0) * (i + .5) / n)
+            cx, cy = px / 2 + rr * px * np.cos(t), px / 2 + rr * px * np.sin(t)
+            g = Image.new('RGBA', (int(px * .2), int(px * .2)), (0, 0, 0, 0))
+            ImageDraw.Draw(g).text((px * .1, px * .1), ch, font=f, fill='#f4f4f4', anchor='mm')
+            rot = -(np.degrees(t) + 90) if a1 > a0 else -(np.degrees(t) - 90)
+            g = g.rotate(rot, resample=Image.BICUBIC)
+            im.alpha_composite(g, (int(cx - g.width / 2), int(cy - g.height / 2)))
+    return im
+
+
+def mobil_parts():
+    """The Mobil word and the boxed 1, apart (the bonnet stacks them)."""
+    im = logo('mobil1')
+    a = np.asarray(im)[..., 3] > 60
+    cols = np.nonzero(a.any(0))[0]
+    gaps = np.nonzero(np.diff(cols) > im.width * .03)[0]
+    cut = cols[gaps[-1]] + 1
+    w, b = im.crop((0, 0, cut, im.height)), im.crop((cut, 0, im.width, im.height))
+    return w.crop(w.getbbox()), b.crop(b.getbbox())
+
+
+def wau_ring(px=160):
+    from PIL import ImageDraw
+    im = Image.new('RGBA', (px, px), (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
+    d.ellipse((6, 6, px - 7, px - 7), outline='#f2f2f2', width=int(px * .1))
+    d.ellipse((px * .32, px * .32, px * .68, px * .68), fill='#f2f2f2')
+    return im
+
+
+def supercheap(px=200):
+    red, yel = '#d71920', '#ffd400'
+    top = plate(text('SUPERCHEAP', 'Anton-Regular', px, '#ffffff', slant=.12), red, pad=.08, radius=.05)
+    bot = plate(text('AUTO', 'ArchivoBlack-Regular', int(px * .55), red), yel, pad=.12, radius=.05)
+    return stack(top, bot, gap=.02)
+
+
+def ta_parts():
+    """Truck Assist logo split into its orange circle and the white words."""
+    im = logo('6aa12045ea')
+    a = np.asarray(im).copy()
+    org = (a[..., 0] > 180) & (a[..., 2] < 120)
+    circ, word = a.copy(), a.copy()
+    circ[~org, 3] = 0
+    word[org, 3] = 0
+    c, w = Image.fromarray(circ), Image.fromarray(word)
+    return c.crop(c.getbbox()), w.crop(w.getbbox())
+
+
+def L_wau(A, kind, car):
+    """Walkinshaw TWG Toyota Supras from Riley's photos (wau/1_* Optus #1, wau/2_* Truck Assist #2): black with
+    accent skirts (teal / orange), the white G and red (orange) R shard over the rear wheel, OPTUS or the Truck
+    Assist mark on the doors, Mobil 1 bonnet and rear, LOCTITE on a red wing. Each flank is painted from its own
+    side photo (1_side is the left flank, 2_side the right), mapped by the wheel centres."""
+    blk, wht = '#1c1e20', '#f2f2f2'
+    acc, rc = ('#25b5b4', '#e3312d') if car == 1 else ('#f06a1c', '#f06a1c')
+    R = wau_masks('wau/2_side', (8, 35), [(170, 238, 420, 290), (260, 290, 420, 312)], drop=[(410, 235, 525, 340), (0, 0, 160, 262), (100, 0, 1024, 238), (188, 286, 236, 306)])
+    L = wau_masks('wau/1_side', (165, 200), [(398, 205, 575, 262)], r_hues=(330, 20), drop=[(0, 0, 678, 205)], min_area=20)
+    g, sc = L['g']
+    vv, uu = np.mgrid[:g.shape[0], :g.shape[1]] / sc
+    g[(uu > 482) & (vv < 219 + (uu - 482) * 11 / 93)] = 0          # the backdrop above the tail is not paint
+    HL, kL = side_H(A, [(167, 282), (485, 282)])
+    HR, kR = side_H(A, [(755, 337), (293, 337)])
+
+    def zy(H, u, v):
+        q = np.linalg.inv(H) @ np.array([u, v, 1.0])
+        return q[0] / q[2], q[1] / q[2]
+    zR0, zR1 = zy(HR, 172, 265)[0], zy(HR, 412, 265)[0]          # the GR shard on the right flank (G at the rear end)
+    zL1 = zy(HL, 405, 240)[0]                                     # left flank: the G starts just behind OPTUS
+    zL0 = zL1 - (zR1 - zR0)
 
     def base(x, y, z, view):
         c = fill(x.shape, blk)
-        if view in ('front', 'rear'):
-            c = lay(c, band(y, -1, .2), teal)
+        if view in ('left', 'right'):
+            M, H = (R, HR) if view == 'right' else (L, HL)          # each flank's shard from its own photo
+            body = (y < .98).astype(np.float32)
+            for k, col in (('r', rc), ('g', wht)):
+                c = lay(c, np.clip((sample(M[k], H, z, y) - .5) * 4 + .5, 0, 1) * body, col)
+        if view == 'front':
+            c = lay(c, band(y, -1, .17), acc)
+        if view == 'rear':                     # visible tail: y .40 (diffuser below) to the boot lip ~1.0
+            c = lay(c, (band(y, -1, .495) * (1 - band(np.abs(x), -1, .16) * band(y, -1, .47))), acc)
+            c = lay(c, ((np.abs(x) > .62) & (y < .6)).astype(np.float32), acc)
         if view == 'top':
-            c = lay(c, band(z, -9, -2.12), red)
+            c = lay(c, ((np.abs(np.abs(x) - .56) < .008) & (z > -1.0) & (z < .55)).astype(np.float32), acc)
+            ym = top_ymap(A.kind_key)[:x.shape[0], :x.shape[1]]
+            ok = np.isfinite(ym) & (np.abs(x) > .45)
+            yy = np.where(ok, ym, -5)
+            for M, H, sel in ((L, HL, x > 0), (R, HR, x < 0)):     # the shard wraps up over the rear haunches
+                for k, col in (('r', rc), ('g', wht)):
+                    keep = (ok & sel & (yy < .98)).astype(np.float32)
+                    c = lay(c, np.clip((sample(M[k], H, z, yy) - .5) * 4 + .5, 0, 1) * keep, col)
         return c
     A.paint(base)
-    A.photo('wau/02', [(1211, 677), (469, 683), (1211, 597), (469, 603)], tyre=.33)
-    A.trace([blk, teal, wht, red], belt=.92, erase=[(650, 555, 1100, 670)], allow={2: (A.r - .1, 0.1)},
-            outline=[(240, 690), (235, 545), (265, 505), (345, 480), (500, 440), (700, 420), (930, 490), (1050, 505), (1270, 555), (1305, 640), (1300, 690), (1000, 700)])
-    A.plogo(logo('f29dbe61eb'), 875, 611, 92, maxw_px=430)
-    A.plogo(logo('d5e7ef776a'), 491, 510, 24)
-    A.plogo(crop('wau/02', (320, 610, 385, 640), tol=60), 352, 625, 22)         # Coates
-    A.plogo(crop('wau/02', (570, 640, 665, 680), tol=60), 617, 659, 30)         # Supercheap
-    A.plogo(crop('wau/02', (1095, 545, 1280, 580), tol=60), 1188, 562, 20)      # Ringers Western
-    A.bonnet(logo('d5e7ef776a'), A.f + .25, .3, maxw=1.1)
-    A.roof(logo('f29dbe61eb'), -.05, .15, maxw=.7)
-    A.wingtop(crop('wau/02', (170, 425, 255, 470), tol=70), -2.24, .1, maxw=.6)
-    A.put('front', logo('f1175a1e66'), 0, .55, .06)
-    A.put('rear', logo('f29dbe61eb'), 0, .7, .07)
-    A.put('rear', logo('d5e7ef776a'), 0, .5, .06)
+    skirts = [[(356, 334), (686, 349.5), (687, 378.5), (420, 378), (418, 365), (356, 364)],         # sill
+              [(145, 317.5), (172, 343), (194, 321), (234, 321), (234, 359), (165, 360), (150, 345)],  # rear quarter
+              [(824, 349), (831, 349), (832, 365), (878, 366), (880, 372), (824, 373)],                 # splitter end
+              [(196, 311.5), (234, 311.5), (234, 313.5), (196, 313.5)],                                 # pinline under Coates
+              [(416, 336.2), (607, 347.2), (607, 348.4), (416, 337.6)]]                                 # pinline over the sill
+    for pts in skirts:
+        A.poly('sides', [zy(HR, u, v) for u, v in pts], acc)
+    A.poly('sides', [zy(HR, u, v) for u, v in [(416, 337.6), (607, 348.4), (686, 349.5), (686, 350.6), (416, 339.5)]], blk)
+    A.soft = None
+    mont = lambda t, px=160, c=wht, w=800, **k: text(t, 'Montserrat', px, c, weight=w, **k)
+
+    def at(view, im, u, v, hpx, maxw_px=None, rot=0):
+        H, k = (HL, kL) if view == 'left' else (HR, kR)
+        q = np.linalg.inv(H) @ np.array([u, v, 1.0])
+        A.put(view, im, q[0] / q[2], q[1] / q[2], hpx / k, maxw_px / k if maxw_px else None, rot)
+
+    def both(im, u, v, hpx, maxw_px=None, rot=0, im_left=None):
+        """u, v on 2_side (right flank); the left flank gets the same (z, y)."""
+        H, k = HR, kR
+        q = np.linalg.inv(H) @ np.array([u, v, 1.0])
+        z, y = q[0] / q[2], q[1] / q[2]
+        A.put('right', im, z, y, hpx / k, maxw_px / k if maxw_px else None, rot)
+        A.put('left', im_left or im, z, y, hpx / k, maxw_px / k if maxw_px else None, -rot)
+
+    # doors
+    if car == 1:
+        optus = mont('OPTUS', 300, wht, 700, track=.02)
+        at('left', optus, 305, 251, 40, 182)
+        both_z = None
+        q = np.linalg.inv(HL) @ np.array([305, 251, 1.0])
+        A.put('right', optus, q[0] / q[2], q[1] / q[2], 40 / kL, 182 / kL)
+    else:
+        circ, word = ta_parts()
+        at('right', row(circ, word, gap=.04), 560, 292, 102, 275, rot=-4)
+        at('right', circ, 467, 288, 100) if False else None
+        q = np.linalg.inv(HR) @ np.array([560, 292, 1.0])
+        A.put('left', row(word, circ, gap=.04), q[0] / q[2], q[1] / q[2], 102 / kR, 275 / kR, rot=4)
+    # quarter panels and sills (positions from 2_side, mirrored to the left flank by (z, y))
+    both(mobil1(), 304, 230, 13, 70)
+    both(supercheap(), 384, 324, 17, 54)
+    both(mont('Coates', 200, '#f26a21', 800), 216, 304, 12, 42)
+    both(wau_round(), 170, 299, 37)
+    both(logo('ppg'), 212, 329, 13, 14)
+    both(mont('GEARWRENCH', 120, wht, 900), 180, 328, 5, 34)
+    both(stack(mont('move', 200, wht, 700), mont('my.wheels.com.au', 70, wht, 600), gap=.02), 200, 350, 11, 34)
+    both(row(text('RINGERS', 'LibreBaskerville', 160, wht, track=.06), wau_ring(), text('WESTERN', 'LibreBaskerville', 160, wht, track=.06), gap=.15), 746, 260, 9, 110)
+    both(mont('CoreStaff', 140, wht, 700), 848, 308, 6, 30)
+    both(text('DUNLOP', 'ArchivoBlack-Regular', 120, wht, slant=.2), 652, 251, 5, 40)
+    both(row(mont('DesignEars', 110, wht, 600), mont('employmenthero', 110, wht, 600), mont('Lloyds', 110, wht, 600), mont('Spicers', 110, wht, 600), gap=.6), 430, 349, 6, 135)
+    both(recol(logo('repco'), wht), 654, 370, 6, 32)
+    # bonnet, roof, nose
+    mw, mb = mobil_parts()
+    A.bonnet(mw, 1.86, .2, maxw=1.2)
+    A.bonnet(mb, 2.2, .2, maxw=.4)
+    ngk = stack(mont('NGK', 200, wht, 900), mont('SPARK PLUGS', 90, wht, 700))
+    A.bonnet(ngk, 2.3, .07, x=.6, maxw=.2)
+    A.bonnet(ngk, 2.3, .07, x=-.6, maxw=.2)
+    A.roof(mont('Coates', 200, '#f26a21', 800), .45, .14, maxw=.8)
+    A.roof(mobil1(), -.2, .2, maxw=.9)
+    A.roof(recol(logo('tgr'), wht), -.75, .14, maxw=.8)
+    A.put('front', stack(mont('NTK', 200, wht, 900), mont('FILTERS', 110, wht, 800)), 0, .46, .05, maxw=.14)
+    for sx in (-1, 1):
+        A.put('front', text('Yes', 'KaushanScript-Regular', 200, wht), .62 * sx, .37, .06, maxw=.14)
+        A.put('front', mont('CoreStaff', 140, wht, 700), .55 * sx, .46, .03, maxw=.18)
+        A.put('front', mont('JB Caravans', 120, '#141414', 800), .4 * sx, .15, .035, maxw=.26)
+    # tail
+    A.put('rear', mont('OPTUS', 300, wht, 700) if car == 1 else row(ta_parts()[0], mont('TRUCK ASSIST', 200, wht, 900), gap=.05), 0, .665, .075, maxw=.55)
+    A.put('rear', mobil1(), 0, .555, .07, maxw=.48)
+    for sx in (-1, 1):
+        A.put('rear', stack(mont('NTK', 200, '#1d9a56', 900), mont('FILTERS', 110, wht, 800)), .56 * sx, .56, .065, maxw=.15)
+        A.put('rear', mont('employmenthero', 110, wht, 600), .4 * sx, .475, .025, maxw=.22)
+        A.put('rear', mont(('PALM', 'TRANS')[sx > 0], 160, wht, 600), .25 * sx, .94, .03, maxw=.12)
+    A.put('rear', recol(logo('toyota'), wht), 0, .44, .03, maxw=.2) if False else None
+    A.endplate = '#d42a2a'
+    A.wingcol = '#d42a2a'
+    A.wing(outline(recol(logo('loctite'), wht), '#b81e1e', .03), .16, maxw=1.3)
+    A.exact = True
+
+
+def L_optus(A, kind):
+    L_wau(A, kind, 1)
 
 
 def L_truckassist(A, kind):
-    """Walkinshaw #2 Mobil 1 Truck Assist Supra (refs wau/06-08): black, orange skirts, white/orange GR shard."""
-    blk, org, wht = '#222426', '#ef6b1f', '#f0f0f0'
-
-    def base(x, y, z, view):
-        c = fill(x.shape, blk)
-        if view in ('front', 'rear'):
-            c = lay(c, band(y, -1, .2), org)
-        if view == 'top':
-            c = lay(c, band(z, -9, -2.12), '#e8452c')
-        return c
-    A.paint(base)
-    A.photo('wau/06', [(416, 683), (1147, 683), (416, 603), (1147, 603)], tyre=.33)
-    A.trace([blk, org, wht], belt=.92, erase=[(540, 525, 1000, 680)], allow={2: (A.r - .1, 0.1)},
-            outline=[(205, 680), (215, 570), (300, 520), (560, 470), (720, 410), (900, 405), (1150, 460), (1230, 480), (1285, 540), (1290, 660), (1250, 690), (205, 690)])
-    A.plogo(logo('6aa12045ea'), 744, 602, 139, maxw_px=410)
-    A.plogo(logo('d5e7ef776a'), 1125, 496, 24)
-    A.plogo(crop('wau/06', (1225, 590, 1300, 625), tol=60), 1262, 607, 24)       # Coates
-    A.plogo(crop('wau/06', (960, 625, 1050, 665), tol=60), 1005, 645, 30)        # Supercheap
-    A.plogo(crop('wau/06', (345, 535, 525, 565), tol=60), 435, 550, 20)          # Ringers Western
-    A.bonnet(logo('d5e7ef776a'), A.f + .25, .3, maxw=1.1)
-    A.roof(logo('6aa12045ea'), -.05, .2, maxw=.7)
-    A.wingtop(crop('wau/06', (1355, 410, 1445, 450), tol=70), -2.24, .1, maxw=.6)
-    A.put('front', logo('f1175a1e66'), 0, .55, .06)
-    A.put('rear', logo('6aa12045ea'), 0, .7, .09)
+    L_wau(A, kind, 2)
 
 
 def L_shell(A, kind):
