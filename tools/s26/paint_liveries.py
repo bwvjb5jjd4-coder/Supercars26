@@ -2692,43 +2692,100 @@ def L_total(A, kind):
 
 
 def L_premiair(A, kind):
-    """PremiAir Camaros (refs premiair/01-03): white, a red Mr UMAMI panel over the doors, red over the rear
-    quarter, black sills with a red line, NULON on the nose, NAPA on the bonnet, PremiAir on the quarter."""
-    wht, red, blk = '#f5f6f6', '#e0301e', '#141516'
+    """PremiAir #777 / #31 Mr. Umami Camaros from Riley's photos (premiair/777_side, _front34, _top, _track, _rear).
+    The sides are the side photo projected straight onto the body (the Mr. UMAMI panel, the mascot, the red and
+    black rear quarter, PremiAir 1300 WE HIRE, NULON, fill'er app, HIFLEX, POWER CRANK), with the lettering turned
+    the right way round on the far flank. White bonnet with black/red shoulder wedges, NAPA and the big NULON,
+    red deck and tail with 1300 WE HIRE, NULON plate and POWER CRANK, silver SP TOOLS wing."""
+    wht, red, blk = '#f4f5f6', '#de1a12', '#141516'
+    A.soft = None
 
     def base(x, y, z, view):
         c = fill(x.shape, wht)
-        if view in ('left', 'right'):
-            front = .98 - (y - .2) * .6
-            c = lay(c, ss(front + .01, front - .01, z) * ss(A.r + .3, A.r + .32, z) * band(y, .2, .84), red)
-            c = lay(c, ss(A.r + .55, A.r + .5, z) * band(y, .8, .93), red)
-            c = lay(c, band(y, -1, .17), blk)
-            c = lay(c, band(y, .19, .215) * band(z, A.r - .6, A.f + .6), red)
         if view == 'top':
-            c = lay(c, band(np.abs(x), .3, .34), red)
-            c = lay(c, band(z, -9, A.r - .7), red)
+            # black wedges on the bonnet shoulders: wide at the screen corners, tapering to a point mid-bonnet,
+            # with a red inner edge
+            t = np.clip((z - (A.f - .8)) / 1.15, 0, 1)
+            inner = .47 + .12 * t
+            w = .16 * (1 - t)
+            on = band(z, A.f - .85, A.f + .35)
+            for sx in (-1, 1):
+                c = lay(c, ((sx * x > inner) & (sx * x < inner + w)).astype(np.float32) * on, blk)
+                c = lay(c, ((sx * x > inner - .028) & (sx * x <= inner) & (w > .01)).astype(np.float32) * on, red)
+            c = lay(c, band(z, -9, A.r - .7), red)                                     # red deck
+            c = lay(c, band(np.abs(x), .62, 9) * band(z, -9, -.55), red)                 # red rear haunches
         if view == 'front':
             c = lay(c, band(y, -1, .14), blk)
-            c = lay(c, band(y, .14, .17), red)
+            c = lay(c, band(y, .14, .165), red)
         if view == 'rear':
-            c = lay(c, band(y, .4, 9), red)
-            c = lay(c, band(y, -1, .16), blk)
+            c = lay(c, band(y, .36, 9), red)
+            c = lay(c, band(y, -1, .36), blk)
         return c
     A.paint(base)
+    A.photo('premiair/777_side', [(860, 1007), (290, 1012), (860, 940), (290, 944)], tyre=.34)
+    outline = [(90, 1020), (87, 930), (110, 865), (160, 850), (225, 830), (360, 810), (460, 802), (560, 805), (635, 825),
+               (700, 875), (810, 887), (910, 905), (1000, 925), (1032, 960), (1035, 1040), (960, 1042), (885, 1050),
+               (710, 1032), (370, 1042), (225, 1040), (120, 1025)]
+    glass = [[(362, 832), (560, 822), (620, 836), (684, 880), (440, 878), (382, 856)],
+             [(640, 862), (690, 862), (700, 892), (650, 892)]]                         # the NAPA mirror
+    R1, R2, W1, T = '#f2050f', '#c40206', '#f4f5f6', '#141516'
+    decals = [((155, 868, 338, 922), [W1, '#d8dde2'], 70),            # PremiAir / 1300 WE HIRE
+              ((470, 903, 786, 982), [R1, R2, '#f07a70'], 80),          # Mr.UMAMI
+              ((498, 964, 748, 1006), [R1, R2, '#f07a70'], 80),         # "Smart Meals for Busy Lives"
+              ((122, 962, 207, 1006), [R2, '#8a0004', T], 80),          # NULON (rear quarter)
+              ((955, 950, 1015, 1028), [W1, '#d8dde2', '#b9c2cc'], 70),  # NULON / fill'er app (front bumper)
+              ((812, 895, 912, 920), [W1, '#d8dde2'], 70),              # HIFLEX
+              ((748, 890, 812, 922), [W1, '#d8dde2'], 90),              # POWER CRANK
+              ((272, 828, 352, 852), [R1, R2], 80),                     # AIR & ALLIED
+              ((408, 1018, 772, 1042), [T, '#2a2a2c'], 70)]             # sill sponsors
+    A.project(outline, 'right', glass=glass, decals=decals, glass_fill='#f4f5f6', glass_pad=5, above=(1.2, wht), arch=.42)
+    # the nose corners ahead of the front arches are repainted flat (the photo is patchy round the headlight)
+    def ends(x, y, z, view):
+        c = fill(x.shape, wht)
+        c = lay(c, band(y, -1, .2), blk)
+        c = lay(c, band(y, .2, .225), red)
+        return c
+    A.over(ends, lambda x, y, z, view: np.clip((z - 1.98) / .06, 0, 1))
     nulon = logo('8343746a47')
     napa = logo('ce3a7771bb')
+    napa = napa.crop((0, 0, int(napa.width * .31), napa.height))
+    napa = napa.crop(napa.getbbox())
     pa = logo('3fe2cb0d65')
-    A.put('sides', crop('premiair/03', (704, 576, 1088, 747), bg='#e2341f', tol=40, keep=['#f8f8f8']), -.05, .5, .4, maxw=1.7)
-    A.put('sides', pa, A.r - .2, .66, .14, maxw=.75)
-    A.put('sides', recol(nulon, '#141516'), A.f + .45, .48, .1, maxw=.6)
-    A.put('sides', napa, .75, .86, .06, maxw=.3)
-    A.bonnet(napa, A.f + .4, .3, maxw=.6)
-    A.bonnet(recol(nulon, '#141516'), A.f + 1.05, .2, maxw=1.2)
-    A.roof(pa, -.4, .14, maxw=.8)
-    A.wingtop(recol(nulon, '#ffffff'), -2.2, .1, maxw=1.0)
-    A.put('front', recol(nulon, '#141516'), 0, .3, .07)
+    A.bonnet(napa, A.f - .22, .4, maxw=.6)
+    A.bonnet(nulon_dark(nulon), A.f + .38, .3, maxw=1.25)
+    A.bonnet(row(text('PremiAir', 'Montserrat', 160, blk, weight=700), text('Fuels', 'Montserrat', 160, red, weight=700, slant=.15), gap=.15), 2.46, .035, maxw=.5)
+    for v in ('left', 'right'):
+        A.put(v, nulon_dark(nulon), 2.1, .55, .07, maxw=.24)
+        A.put(v, text("fill'er app", 'Montserrat', 150, blk, weight=700), 2.06, .4, .035, maxw=.15)
+    A.put('front', recol(nulon, '#141516'), .6, .4, .05, maxw=.22)
+    A.put('front', recol(nulon, '#141516'), -.6, .4, .05, maxw=.22)
+    A.put('lip', text('HIFLEX', 'ArchivoBlack-Regular', 200, '#ffffff', slant=.15), 0, .152, .05, maxw=.5)
     A.put('front', logo('bowtie'), 0, .5, .05)
-    A.put('rear', recol(pa, '#ffffff'), 0, .7, .08)
+    A.put('rear', text('1300 WE HIRE', 'Montserrat', 200, '#ffffff', weight=700), 0, .85, .06, maxw=.62)
+    A.put('rear', plate(nulon, blk, pad=.25, radius=.2), 0, .52, .12, maxw=.5)
+    pc = power_crank()
+    for sx in (-1, 1):
+        A.put('rear', pc, .55 * sx, .52, .1, maxw=.26)
+    A.roof(recol(pa, red), -.2, .12, maxw=.7)
+    A.wingcol = '#b9bdc2'
+    A.wing(text('SP TOOLS', 'ArchivoBlack-Regular', 200, '#ffffff', track=.08), .12, maxw=1.2)
+    A.endplate = blk
+    A.exact = True
+
+
+def nulon_dark(nulon):
+    """NULON with black lettering and its red swoosh (the logo file has white letters)."""
+    a = np.asarray(nulon).copy()
+    wht = (a[..., 0] > 150) & (a[..., 1] > 150) & (a[..., 2] > 150)
+    a[wht, :3] = (20, 21, 22)
+    return Image.fromarray(a)
+
+
+def power_crank():
+    y = '#f6d21a'
+    t = stack(outline(text('POWER', 'ArchivoBlack-Regular', 200, y, slant=.1), '#141516', .08),
+              outline(text('CRANK', 'ArchivoBlack-Regular', 200, y, slant=.1), '#141516', .08), gap=.02)
+    return t
 
 
 def L_cooldrive(A, kind):
