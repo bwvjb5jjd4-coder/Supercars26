@@ -243,6 +243,7 @@ class Atlas:
         self.wingcol = None           # rear wing blade colour; None = whatever the top view has there
         self.wlogos = []
         self.wrap = None              # (xmin, ymax, zmin, zmax): copy the finished flanks onto sky-facing shoulder texels
+        self.post = []                # logos laid after the wrap (marks painted straight onto a sloping shoulder)
 
     def coords(self, view):
         u0, v0 = REGION[view]
@@ -366,6 +367,11 @@ class Atlas:
             return (im if sc == 1 else im.resize((max(1, int(im.width * sc)), max(1, int(im.height * sc))), Image.LANCZOS)), x0, y0
         self.moved.append((view, 'NO FIT', im.width, im.height))
         return im, x, y
+
+    def after(self, view, im, a, b, h, maxw=None, rot=0):
+        """put(), but laid on top of the finished atlas after the shoulder wrap."""
+        self.put(view, im, a, b, h, maxw, rot)
+        self.post.append(self.logos.pop())
 
     def bonnet(self, im, z, h, x=0.0, maxw=1.2):
         """Reads from in front of the car."""
@@ -671,6 +677,8 @@ class Atlas:
                 rr, cc = np.nonzero(m)
                 arr[tv0 * K + rr, tu0 * K + cc] = arr[np.clip(sv, 0, arr.shape[0] - 1), np.clip(su, 0, arr.shape[1] - 1)]
             out = Image.fromarray(arr)
+        for im, x, y, view, soft in self.post:
+            out.alpha_composite(im, (max(0, x), max(0, y)), (max(0, -x), max(0, -y)))
         # the wing blade's own patch: by default a copy of the top view under it (so every livery looks as before)
         u0, v0, w, h = WING
         uu, vv = np.meshgrid((np.arange(w * K) + .5) / K, (np.arange(h * K) + .5) / K)
@@ -1185,9 +1193,26 @@ def top_ymap(kind_key):
     fn /= np.maximum(np.linalg.norm(fn, axis=1, keepdims=True), 1e-12)
     t = t[fn[:, 1] > .62]
     yv = t[..., 1].mean(1)
-    for i in np.argsort(yv):
+    H_, W_ = ym.shape
+    for i in np.argsort(yv):       # y interpolated across each triangle (a flat y per triangle left stair steps)
         q = np.stack([(t[i, :, 2] - ZB) * S * K, (XL - t[i, :, 0]) * S * K], -1)
-        cv2.fillPoly(ym, [np.round(q * 16).astype(np.int32)], float(yv[i]), cv2.LINE_8, 4)
+        x0, y0 = np.floor(q.min(0)).astype(int)
+        x1, y1 = np.ceil(q.max(0)).astype(int)
+        x0, y0, x1, y1 = max(x0, 0), max(y0, 0), min(x1, W_ - 1), min(y1, H_ - 1)
+        if x1 < x0 or y1 < y0:
+            continue
+        px, py = np.meshgrid(np.arange(x0, x1 + 1) + .5, np.arange(y0, y1 + 1) + .5)
+        (ax, ay), (bx, by), (cx, cy) = q
+        den = (by - cy) * (ax - cx) + (cx - bx) * (ay - cy)
+        if abs(den) < 1e-9:
+            continue
+        l1 = ((by - cy) * (px - cx) + (cx - bx) * (py - cy)) / den
+        l2 = ((cy - ay) * (px - cx) + (ax - cx) * (py - cy)) / den
+        l3 = 1 - l1 - l2
+        m = (l1 >= -.02) & (l2 >= -.02) & (l3 >= -.02)
+        if m.any():
+            yy = l1 * t[i, 0, 1] + l2 * t[i, 1, 1] + l3 * t[i, 2, 1]
+            ym[y0:y1 + 1, x0:x1 + 1][m] = yy[m]
     ym[ym < -8] = np.nan
     _YMAP[kind_key] = ym
     return ym
@@ -1304,6 +1329,8 @@ def ta_parts():
     circ, word = a.copy(), a.copy()
     circ[~org, 3] = 0
     word[org, 3] = 0
+    for x in (circ, word):                 # faint edge residue of the other part would pad the crop
+        x[x[..., 3] < 60, 3] = 0
     c, w = Image.fromarray(circ), Image.fromarray(word)
     return c.crop(c.getbbox()), w.crop(w.getbbox())
 
@@ -1369,27 +1396,26 @@ def L_wau(A, kind, car):
     # doors
     if car == 1:
         optus = mont('OPTUS', 300, wht, 700, track=.02)
-        at('left', optus, 305, 251, 40, 182)
-        both_z = None
-        q = np.linalg.inv(HL) @ np.array([305, 251, 1.0])
-        A.put('right', optus, q[0] / q[2], q[1] / q[2], 40 / kL, 182 / kL)
+        at('left', optus, 305, 266, 40, 182, rot=5)          # sits low on the door, rising toward the rear
+        q = np.linalg.inv(HL) @ np.array([305, 266, 1.0])
+        A.put('right', optus, q[0] / q[2], q[1] / q[2], 40 / kL, 182 / kL, rot=-5)
     else:
         circ, word = ta_parts()
-        at('right', row(circ, word, gap=.04), 560, 292, 102, 275, rot=-4)
+        at('right', row(circ, word, gap=.04), 560, 300, 102, 275, rot=-4)
         at('right', circ, 467, 288, 100) if False else None
-        q = np.linalg.inv(HR) @ np.array([560, 292, 1.0])
+        q = np.linalg.inv(HR) @ np.array([560, 300, 1.0])
         A.put('left', row(word, circ, gap=.04), q[0] / q[2], q[1] / q[2], 102 / kR, 275 / kR, rot=4)
     # the GR: right flank G over the rear arch with the R ahead of it; left flank G just behind OPTUS
     gr = gr_shard(wht, rc)
-    at('right', gr, 292, 270, 66, 242)
+    at('right', gr, 292, 280, 57, 210)            # top at y .88: Mobil 1 sits above it
     if car == 1:
-        at('left', gr, 488, 240, 46, 150)
+        at('left', gr, 488, 246, 46, 150)
     else:                                  # #2: the GR follows the Truck Assist circle, as on the right flank
-        zc, yc = zy(HR, 560, 292)
-        wg = 242 / kR
-        A.put('left', gr, zc - 275 / kR / 2 - .06 - wg / 2, zy(HR, 292, 270)[1], 66 / kR, wg)
+        zc, yc = zy(HR, 560, 300)
+        wg = 210 / kR
+        A.put('left', gr, zc - 275 / kR / 2 - .06 - wg / 2, zy(HR, 292, 280)[1], 57 / kR, wg)
     # quarter panels and sills (positions from 2_side, mirrored to the left flank by (z, y))
-    both(mobil1(), 318, 240, 12, 64)
+    A.put('sides', mobil1(), -1.14, .925, .05, maxw=.36)   # the steep band under the rear side window
     both(supercheap(), 384, 324, 17, 54)
     # the small rear-quarter marks, laid out in the one flat column between the rear arch and the tail
     A.put('sides', wau_round(), -2.03, .565, .12)
@@ -1397,15 +1423,20 @@ def L_wau(A, kind, car):
     A.put('sides', logo('ppg'), -1.78, .48, .06, maxw=.06)
     A.put('sides', mont('GEARWRENCH', 120, wht, 900), -1.96, .44, .022, maxw=.17)
     A.put('sides', stack(mont('move', 200, wht, 700), mont('my.wheels.com.au', 70, wht, 600), gap=.02), -1.86, .32, .07, maxw=.17)
-    both(row(text('RINGERS', 'LibreBaskerville', 160, wht, track=.06), wau_ring(), text('WESTERN', 'LibreBaskerville', 160, wht, track=.06), gap=.15), 740, 268, 8, 100)
+    # RINGERS (o) WESTERN runs along the front flare, whose top slopes up to the bonnet: the side view smears it,
+    # so it is laid in the top view along the flare, letter tops toward the bonnet
+    rw = lambda t: text(t, 'LibreBaskerville', 240, wht, track=.05, weight=700)
+    rwim = row(rw('RINGERS'), wau_ring(240), rw('WESTERN'), gap=.12)
+    for sx in (1, -1):
+        A.after('top', rwim, 1.5, .83 * sx, .05, .72, rot=180 if sx > 0 else 0)
     both(mont('CoreStaff', 140, wht, 700), 848, 308, 6, 30)
     both(text('DUNLOP', 'ArchivoBlack-Regular', 120, wht, slant=.2), 652, 251, 5, 40)
     both(row(mont('DesignEars', 110, wht, 600), mont('employmenthero', 110, wht, 600), mont('Lloyds', 110, wht, 600), mont('Spicers', 110, wht, 600), gap=.6), 430, 349, 6, 135)
     both(recol(logo('repco'), wht), 654, 370, 6, 32)
     # bonnet, roof, nose
     mw, mb = mobil_parts()
-    A.bonnet(mw, 2.02, .2, maxw=1.15)
-    A.bonnet(mb, 2.3, .17, maxw=.35)
+    A.bonnet(mw, 2.0, .26, maxw=1.45)
+    A.bonnet(mb, 2.31, .2, maxw=.42)
     ngk = stack(mont('NGK', 200, wht, 900), mont('SPARK PLUGS', 90, wht, 700))
     A.bonnet(ngk, 2.3, .07, x=.6, maxw=.2)
     A.bonnet(ngk, 2.3, .07, x=-.6, maxw=.2)
