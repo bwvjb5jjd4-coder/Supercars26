@@ -1152,6 +1152,34 @@ def srt_logistics(c='#ffffff'):
     return row(_tf_text('SRT', 170, c, 900), _tf_text('logistics', 170, c, 500), ch, gap=.04)
 
 
+def hyperix(c0='#2bb3a3', c1='#2f5fd8'):
+    """Hyperix wordmark: teal-to-blue lettering under a swoosh with a little star."""
+    from PIL import ImageDraw
+    t = _tf_text('Hyperix', 220, '#ffffff', 600)
+    W, H = t.width + 60, t.height + 90
+    im = Image.new('RGBA', (W, H), (0, 0, 0, 0))
+    im.alpha_composite(t, (0, 90))
+    a = np.asarray(im).astype(np.float32)
+    g = np.linspace(0, 1, W)[None, :, None]
+    col = np.array(hexc(c0), np.float32) * (1 - g) + np.array(hexc(c1), np.float32) * g
+    a[..., :3] = np.broadcast_to(col, a[..., :3].shape)
+    im = Image.fromarray(a.astype(np.uint8))
+    d = ImageDraw.Draw(im)
+    d.arc((20, 40, W - 70, 300), 200, 300, fill=c0, width=14)
+    st = _tf_text('*', 200, c1, 700)
+    im.alpha_composite(st, (W - st.width, 0))
+    return im
+
+
+def paclease(c='#ffffff'):
+    from PIL import ImageDraw
+    ic = Image.new('RGBA', (150, 170), (0, 0, 0, 0))
+    d = ImageDraw.Draw(ic)
+    d.polygon([(30, 0), (150, 0), (120, 110), (60, 110), (40, 170), (0, 170)], fill=c)
+    d.polygon([(70, 30), (115, 30), (102, 80), (57, 80)], fill=(0, 0, 0, 0))
+    return row(ic, _tf_text('PacLease', 170, c, 700), gap=.1)
+
+
 def mega_rewards():
     m = outline(text('MEGA', 'ArchivoBlack-Regular', 200, '#e2231a', slant=.18), '#ffffff', .05)
     r = outline(text('REWARDS', 'ArchivoBlack-Regular', 200, '#ffcc00', slant=.18), '#e2231a', .05)
@@ -1213,22 +1241,24 @@ def L_castrol(A, kind):
     A.soft = None
 
     def sweep(z):          # centre of the green sweep under the Castrol word
-        return np.interp(z, [-2.6, -1.8, -.85, .6, 2.6], [.44, .45, .6, .36, .36])
+        return np.interp(z, [-2.6, -1.85, -.89, .78, 2.6], [.47, .47, .385, .23, .23])
 
     def base(x, y, z, view):
         c = fill(x.shape, wht)
         if view in ('left', 'right'):
-            zb = .8 + (.9 - y) * .35                       # green nose / front guard edge, leaning forward
-            c = lay(c, ss(zb - .01, zb + .01, z), grn)
-            bh = np.interp(z, [-2.6, -1.9, -1.0, -.5, .6], [.022, .025, .05, .1, .1])
+            # from tickford/55_side: thin green band under the glass, green front guard behind a raked edge,
+            # white doors, a green sweep along the bottom of the doors with a red wedge under it (never behind the word)
+            zb = .68 + (.85 - y) * 2.16
+            c = lay(c, ss(zb - .01, zb + .01, z) * (y > .2), grn)
+            bh = np.interp(z, [-2.6, -1.9, -1.0, .7], [.022, .025, .075, .075])
             bl = tf_belt(z) + .03
             up = (y > bl - bh) & ((y < bl + .025) | (y > 1.03) | (z > -.95))
-            c = lay(c, up * (z < .7), grn)                                              # beltline band (thin over the rear quarter)
+            c = lay(c, up * (z < .9) * (z > -1.25), grn)
             sy = sweep(z)
-            c = lay(c, band(y - sy, -.045, .045) * (z < .6), grn)
-            th = np.interp(z, [-2.6, -1.8, -.85, .25], [.24, .24, .15, 0])
-            c = lay(c, band(y, sy - .065 - th, sy - .065) * (y > .19), red)
-            c = lay(c, (y < .19).astype(np.float32), '#1b1c1e')                        # black sill skirt
+            c = lay(c, band(y - sy, -.042, .042) * (z < 1.2), grn)
+            th = np.interp(z, [-2.6, -1.85, -.89, -.1, .35], [.26, .26, .16, .1, 0])
+            c = lay(c, band(y, sy - .042 - th, sy - .042) * (y > .17), red)
+            c = lay(c, (y < .17).astype(np.float32), '#1b1c1e')                        # black sill skirt
         if view == 'top':
             c = lay(c, ((np.abs(x) > .63) & (z > .6)).astype(np.float32), grn)          # green front guards
             c = lay(c, ((np.abs(x) > .5) & (z > -1.0) & (z < .45)).astype(np.float32), grn)   # roof rails
@@ -1249,15 +1279,19 @@ def L_castrol(A, kind):
     A.paint(base)
     disc, word = castrol_parts()
     full = logo('2e167ec379')
-    for v, r in (('left', 1), ('right', -1)):
-        A.put(v, full, -.03, .53, .47, maxw=1.62, rot=9 * r)
-        A.put(v, faw_trucks(), 1.12, .74, .065, maxw=.62, rot=5 * r)
-        A.put(v, text('DUNLOP', 'ArchivoBlack-Regular', 120, '#1b1c1e', slant=.2), 1.0, .83, .03, maxw=.2)
-        A.put(v, gmg_hex(), -1.48, .77, .17, maxw=.47)
+    for v in ('left', 'right'):
+        # the C disc always reads first: at the back of the door on the right flank, the front on the left
+        dz, wz = (-.53, .37) if v == 'right' else (.66, -.22)
+        A.put(v, outline(disc, wht, .035), dz, .65, .4)
+        A.put(v, word, wz, .49, .5, maxw=1.36)
+        A.put(v, hyperix(), -1.5, .79, .2, maxw=.78)
+        A.put(v, _tf_text('AI & IT', 120, blu, 600), -1.5, .675, .04, maxw=.2)
+        A.put(v, hyperix(wht, wht), 1.45, .75, .12, maxw=.48)
+        A.put(v, stack(_tf_text('BAYFORD', 140, '#2a2a2a', 800)), -1.92, .56, .05, maxw=.36)
+        A.put(v, paclease(), -.66, .235, .055, maxw=.36)
+        A.put(v, recol(logo('ford_oval'), wht), -2.12, .3, .05, maxw=.14)
+        A.put(v, text('DUNLOP', 'ArchivoBlack-Regular', 120, wht, slant=.2), 1.0, .86, .03, maxw=.2)
         A.put(v, ryco(), 2.07, .31, .055, maxw=.14)
-        A.put(v, faw_trucks(), 2.07, .42, .028, maxw=.15)
-        A.put(v, _tf_text('GRAPHENE', 120, '#3a3a3a', 500, track=.15), -1.98, .83, .045, maxw=.36)
-        A.put(v, stack(_tf_text('BAYFORD', 140, '#2a2a2a', 800)), -2.12, .68, .04, maxw=.22)
     A.bonnet(disc, 1.68, .72, x=-.02, maxw=.72)
     A.bonnet(word, 2.2, .24, x=.05, maxw=1.2)
     hel = logo('bp-d2a4eb7d52')
