@@ -1084,48 +1084,198 @@ def L_penrite(A, kind):
     A.exact = True
 
 
+def _tf_text(t, px=160, c='#ffffff', w=800, **k):
+    return text(t, 'Montserrat', px, c, weight=w, **k)
+
+
+def tf_belt(z):
+    """Mustang beltline (bottom of the side glass), from the Grove trace."""
+    return np.interp(z, [-2.5, -1.85, -.6, .58, 2.08, 2.6], [1.0, .97, .9, .865, .69, .6])
+
+
+def faw_trucks(c='#ffffff'):
+    from PIL import ImageDraw
+    ic = Image.new('RGBA', (200, 200), (0, 0, 0, 0))
+    d = ImageDraw.Draw(ic)
+    d.ellipse((6, 6, 193, 193), outline=c, width=16)
+    for k in (-1, 0, 1):
+        d.rectangle((60, 92 + k * 34 - 8, 140, 92 + k * 34 + 8), fill=c)
+    d.rectangle((92, 50, 108, 150), fill=c)
+    return row(ic, _tf_text('FAW', 170, c, 700), _tf_text('TRUCKS', 170, c, 500), gap=.12)
+
+
+def gmg_hex(c='#bcd630', t='#ffffff'):
+    from PIL import ImageDraw
+    out = []
+    for ch in 'GMG':
+        im = Image.new('RGBA', (240, 260), (0, 0, 0, 0))
+        d = ImageDraw.Draw(im)
+        pts = [(120 + 118 * np.cos(np.radians(a)), 130 + 128 * np.sin(np.radians(a))) for a in range(30, 390, 60)]
+        d.polygon(pts, fill=c)
+        g = _tf_text(ch, 150, t, 600)
+        im.alpha_composite(g, ((240 - g.width) // 2, (260 - g.height) // 2))
+        out.append(im)
+    return row(*out, gap=.02)
+
+
+def castrol_parts():
+    """The Castrol mark split into its green C disc and the red word."""
+    im = logo('2e167ec379')
+    a = np.asarray(im)
+    g = (a[..., 1].astype(int) > a[..., 0].astype(int) + 30) & (a[..., 3] > 60)
+    cols = np.nonzero(g.any(0))[0]
+    cut = cols.max() + 3
+    disc, word = im.crop((0, 0, cut, im.height)), im.crop((cut, 0, im.width, im.height))
+    return disc.crop(disc.getbbox()), word.crop(word.getbbox())
+
+
+def autobarn(c='#ffffff'):
+    return _tf_text('autObarn', 220, c, 800, track=-.02)
+
+
+def ryco():
+    from PIL import ImageDraw
+    t = _tf_text('RYCO', 200, '#ffffff', 900, slant=.12)
+    W, H = t.width + 90, t.height + 70
+    im = Image.new('RGBA', (W, H), (0, 0, 0, 0))
+    ImageDraw.Draw(im).rounded_rectangle((0, 0, W - 1, H - 1), 26, fill='#e2231a')
+    im.alpha_composite(t, (45, 35))
+    return im
+
+
+def srt_logistics(c='#ffffff'):
+    from PIL import ImageDraw
+    ch = Image.new('RGBA', (120, 160), (0, 0, 0, 0))
+    d = ImageDraw.Draw(ch)
+    for k, col in ((0, '#2f7fd8'), (50, '#f2d21a')):
+        d.polygon([(k, 0), (k + 30, 0), (k + 70, 80), (k + 30, 160), (k, 160), (k + 40, 80)], fill=col)
+    return row(_tf_text('SRT', 170, c, 900), _tf_text('logistics', 170, c, 500), ch, gap=.04)
+
+
+def mega_rewards():
+    m = outline(text('MEGA', 'ArchivoBlack-Regular', 200, '#e2231a', slant=.18), '#ffffff', .05)
+    r = outline(text('REWARDS', 'ArchivoBlack-Regular', 200, '#ffcc00', slant=.18), '#e2231a', .05)
+    return row(m, r, gap=.05)
+
+
 def L_monster(A, kind):
-    """Tickford #6 Monster Energy Mustang (refs tickford/05-10): satin black, lime sill and quarter stripes."""
-    blk, lime, wht = '#232527', '#bfe01e', '#eeeeee'
-    A.paint(lambda x, y, z, view: lay(fill(x.shape, blk), band(y, -1, .16) * (view == 'front'), lime))
-    A.photo('tickford/09', [(475, 485), (1040, 485), (475, 427), (1040, 427)], tyre=.33)
-    A.trace([blk, lime, wht], belt=.9, erase=[(540, 380, 940, 500), (950, 375, 1180, 425)])
-    A.poly('sides', [(A.f - .4, .2), (A.r + .4, .2), (A.r + .4, .23), (A.f - .4, .23)], lime)
-    A.poly('sides', [(A.r + .62, .62), (A.r - .35, .64), (A.r - .35, .69), (A.r + .62, .67)], lime)
-    A.plogo(logo('f3a8cd4401'), 587, 448, 112)
-    A.plogo(logo('d8af11eb9d'), 787, 459, 78, maxw_px=290)
-    A.plogo(crop('tickford/09', (955, 382, 1175, 422), tol=60), 1064, 402, 38)     # autObarn
-    A.plogo(crop('tickford/09', (318, 488, 372, 520), tol=60), 345, 503, 30)       # RYCO
-    A.bonnet(logo('f3a8cd4401'), A.f + .25, .62, maxw=.9)
-    A.roof(logo('f3a8cd4401'), -.1, .52, maxw=.75)
-    A.wingtop(logo('d8af11eb9d'), -2.22, .1)
-    A.put('front', logo('3952a5b529'), 0, .62, .06)
-    A.put('front', crop('tickford/07', (1180, 790, 1260, 830), tol=60), .45, .33, .06)
-    A.put('front', crop('tickford/07', (1180, 790, 1260, 830), tol=60), -.45, .33, .06)
-    A.put('rear', logo('d8af11eb9d'), 0, .62, .1)
+    """Tickford #6 Monster Energy Mustang from Riley's photos (tickford/6_studio, 6_track): satin black, a giant
+    lime claw on the bonnet and roof, the claw and MONSTER ENERGY on the doors, autObarn over yellow/lime
+    stripes on the rear quarters, lime skirts and splitter, RYCO / NARVA / FAW TRUCKS on the nose."""
+    blk, lime, yel, wht = '#141516', '#b5e61d', '#f2d21a', '#f2f2f2'
+    A.soft = None
+
+    def base(x, y, z, view):
+        c = fill(x.shape, blk)
+        if view in ('left', 'right'):
+            c = lay(c, band(y, .175, .245) * band(z, -.95, 1.15), lime)                 # sill skirt
+            # autObarn stripes: yellow over lime, sweeping down to the tail under the rear-quarter word
+            yc = np.interp(z, [-2.6, -2.0, -1.3, -.95], [.69, .7, .68, .64])
+            m = band(z, -2.55, -.95)
+            c = lay(c, band(y - yc, .02, .07) * m, yel)
+            c = lay(c, band(y - yc, -.03, .012) * m, lime)
+        if view == 'front':
+            c = lay(c, band(y, .13, .2), lime)                                         # splitter lip
+        if view == 'rear':
+            c = lay(c, band(y, .2, .25), lime)
+        return c
+    A.paint(base)
+    claw = logo('f3a8cd4401')
+    word = logo('d8af11eb9d')
+    for v, r in (('left', 1), ('right', -1)):
+        A.put(v, claw, .62, .56, .66)
+        A.put(v, word, -.3, .58, .48, maxw=1.5)
+        A.put(v, ryco(), 2.07, .31, .055, maxw=.14)
+        A.put(v, srt_logistics(), 2.08, .42, .024, maxw=.12)
+        A.put(v, autobarn(), -1.42, .8, .15, maxw=.9)
+        A.put(v, faw_trucks(), 1.2, .74, .06, maxw=.6, rot=6 * r)
+        A.put(v, text('DUNLOP', 'ArchivoBlack-Regular', 120, wht, slant=.2), 1.05, .83, .03, maxw=.2)
+        A.put(v, recol(logo('repco'), wht), .85, .2, .03, maxw=.2)
+    A.bonnet(claw, 1.68, 1.2, maxw=1.25)
+    A.roof(claw, -.25, .7, maxw=.6)
+    for sx in (-1, 1):
+        A.put('front', _tf_text('NARVA', 160, wht, 900), .655 * sx, .5, .028, maxw=.1)
+    A.put('front', logo('3952a5b529'), 0, .62, .05)
+    A.put('rear', word, 0, .62, .1, maxw=.6)
+    A.put('rear', autobarn(), 0, .45, .06, maxw=.4)
+    A.wingcol = blk
+    A.wing(mega_rewards(), .12, maxw=1.4)
+    A.endplate = wht
+    A.exact = True
 
 
 def L_castrol(A, kind):
-    """Tickford #55 Castrol Mustang (refs tickford/01-04): green body, white upper, red/white Castrol ribbon."""
-    grn, wht, red, yel = '#0d8a43', '#f2f2f2', '#d9262a', '#e2e33a'
-    A.paint(lambda x, y, z, view: fill(x.shape, grn) if view != 'top' else fill(x.shape, wht))
-    A.photo('tickford/01', [(784, 683), (1141, 619), (784, 581), (1141, 539)], tyre=.33)
-    # white upper bodywork from the nose over the front guards, white rear-door panel edged by the red ribbon
-    m = (A.f + A.r) / 2
-    A.poly('sides', [(2.7, .62), (A.f - .45, .78), (A.f - .7, 1.2), (2.7, 1.2)], wht)
-    A.poly('sides', [(m - .05, .95), (m + .2, .55), (m + .05, .28), (A.r + .2, .28), (A.r - .25, .95)], wht)
-    A.poly('sides', [(m + .2, .55), (m + .32, .55), (m + .17, .28), (m + .05, .28)], red)
-    A.poly('sides', [(A.r + .2, .26), (m + .17, .26), (m + .17, .3), (A.r + .2, .3)], red)
-    A.photo_top('tickford/04', 342, 1180, 451, 174)
-    A.trace([grn, wht, red, yel, '#1c3f94'], view='top', erase=[(350, 300, 420, 560), (690, 320, 800, 600), (1150, 300, 1240, 600)])
-    cas = logo('2e167ec379')
-    A.put('sides', cas, (A.r + m) / 2 + .05, .62, .26, maxw=1.0)
-    A.put('sides', crop('tickford/01', (700, 505, 870, 540), tol=70), A.f - .55, .78, .06, maxw=.5)   # FAW Trucks
-    A.bonnet(cas, A.f + .2, .3, maxw=1.0)
-    A.put('front', crop('tickford/01', (470, 700, 650, 780), tol=60), .42, .25, .09)   # RYCO
-    A.put('front', crop('tickford/01', (470, 700, 650, 780), tol=60), -.42, .25, .09)
-    A.put('front', logo('3952a5b529'), 0, .6, .05)
-    A.put('rear', cas, 0, .62, .1)
+    """Tickford #55 Castrol Mustang from Riley's photos (tickford/55_studio, 55_top, 55_rear): white body with a
+    green nose and front guards, a green beltline band, a green sweep under the giant Castrol on the doors
+    with a red wedge below it growing to the tail, GMG/GRAPHENE on the rear quarters, the green Castrol C and
+    word on a white bonnet, bp helios and lime bp ultimate bands on the roof, a lime bp ultimate wing."""
+    grn, wht, red, lim, blu = '#0b8a3e', '#f4f5f3', '#e2231a', '#cfe000', '#1e4fa3'
+    A.soft = None
+
+    def sweep(z):          # centre of the green sweep under the Castrol word
+        return np.interp(z, [-2.6, -1.8, -.85, .6, 2.6], [.44, .45, .6, .36, .36])
+
+    def base(x, y, z, view):
+        c = fill(x.shape, wht)
+        if view in ('left', 'right'):
+            zb = .8 + (.9 - y) * .35                       # green nose / front guard edge, leaning forward
+            c = lay(c, ss(zb - .01, zb + .01, z), grn)
+            bh = np.interp(z, [-2.6, -1.9, -1.0, -.5, .6], [.022, .025, .05, .1, .1])
+            bl = tf_belt(z) + .03
+            up = (y > bl - bh) & ((y < bl + .025) | (y > 1.03) | (z > -.95))
+            c = lay(c, up * (z < .7), grn)                                              # beltline band (thin over the rear quarter)
+            sy = sweep(z)
+            c = lay(c, band(y - sy, -.045, .045) * (z < .6), grn)
+            th = np.interp(z, [-2.6, -1.8, -.85, .25], [.24, .24, .15, 0])
+            c = lay(c, band(y, sy - .065 - th, sy - .065) * (y > .19), red)
+            c = lay(c, (y < .19).astype(np.float32), '#1b1c1e')                        # black sill skirt
+        if view == 'top':
+            c = lay(c, ((np.abs(x) > .63) & (z > .6)).astype(np.float32), grn)          # green front guards
+            c = lay(c, ((np.abs(x) > .5) & (z > -1.0) & (z < .45)).astype(np.float32), grn)   # roof rails
+            c = lay(c, band(z, .2, .4) * (np.abs(x) < .5), lim)                          # roof front band
+            c = lay(c, band(z, -.92, -.7) * (np.abs(x) < .5), lim)                       # roof rear band
+            for sx in (-1, 1):                                                          # bonnet corner bars
+                for k, col in enumerate((grn, red, grn)):
+                    x0 = sx * (.36 + k * .085)
+                    c = lay(c, (band(z - (x - x0) * sx * .25, 1.1, 1.16) * (np.abs(x - x0) < .035)).astype(np.float32), col)
+        if view == 'front':
+            c = fill(x.shape, grn)
+            c = lay(c, band(y, -1, .2), '#1b1c1e')
+        if view == 'rear':
+            c = lay(c, band(y, .2, .4), red)
+            c = lay(c, band(y, .4, .45), grn)
+            c = lay(c, band(y, .66, .74), lim)
+        return c
+    A.paint(base)
+    disc, word = castrol_parts()
+    full = logo('2e167ec379')
+    for v, r in (('left', 1), ('right', -1)):
+        A.put(v, full, -.03, .53, .47, maxw=1.62, rot=9 * r)
+        A.put(v, faw_trucks(), 1.12, .74, .065, maxw=.62, rot=5 * r)
+        A.put(v, text('DUNLOP', 'ArchivoBlack-Regular', 120, '#1b1c1e', slant=.2), 1.0, .83, .03, maxw=.2)
+        A.put(v, gmg_hex(), -1.48, .77, .17, maxw=.47)
+        A.put(v, ryco(), 2.07, .31, .055, maxw=.14)
+        A.put(v, faw_trucks(), 2.07, .42, .028, maxw=.15)
+        A.put(v, _tf_text('GRAPHENE', 120, '#3a3a3a', 500, track=.15), -1.98, .83, .045, maxw=.36)
+        A.put(v, stack(_tf_text('BAYFORD', 140, '#2a2a2a', 800)), -2.12, .68, .04, maxw=.22)
+    A.bonnet(disc, 1.68, .72, x=-.02, maxw=.72)
+    A.bonnet(word, 2.2, .24, x=.05, maxw=1.2)
+    hel = logo('bp-d2a4eb7d52')
+    hel = hel.crop((0, int(hel.height * .24), hel.width, hel.height))
+    A.roof(hel, -.3, .5, maxw=.5)
+    bpu = logo('bp-ultimate')
+    A.roof(bpu, -.81, .14, maxw=.7)
+    A.put('top', bpu, .3, 0, .13, .7, rot=-90)        # front band reads from behind
+    A.put('front', logo('3952a5b529'), 0, .62, .05)
+    for sx in (-1, 1):
+        A.put('front', _tf_text('NARVA', 160, wht, 900), .655 * sx, .5, .028, maxw=.1)
+    A.put('rear', plate(full, wht, pad=.15, radius=.15), 0, .3, .1, maxw=.5)
+    A.put('rear', bpu, 0, .7, .06, maxw=.5)
+    A.put('rear', recol(logo('fordracing'), blu) if False else _tf_text('FORD RACING', 140, blu, 800), 0, .86, .035, maxw=.4)
+    A.wingcol = lim
+    A.wing(bpu, .12, maxw=1.3)
+    A.endplate = wht
+    A.exact = True
 
 
 _WAU = {}
