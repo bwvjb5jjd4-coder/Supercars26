@@ -1250,10 +1250,11 @@ def L_castrol(A, kind):
             # white doors, a green sweep along the bottom of the doors with a red wedge under it (never behind the word)
             zb = .68 + (.85 - y) * 2.16
             c = lay(c, ss(zb - .01, zb + .01, z) * (y > .2), grn)
-            bh = np.interp(z, [-2.6, -1.9, -1.0, .7], [.022, .025, .075, .075])
-            bl = tf_belt(z) + .03
-            up = (y > bl - bh) & ((y < bl + .025) | (y > 1.03) | (z > -.95))
-            c = lay(c, up * (z < .9) * (z > -1.25), grn)
+            # green under the side glass, sweeping up behind the rear quarter window onto the deck (one smooth edge)
+            lo = tf_belt(z) - .045
+            lo = np.where(z < -1.0, np.interp(z, [-1.75, -1.35, -1.0], [1.12, 1.0, float(tf_belt(-1.0)) - .045]), lo)
+            lo = np.where(z < -1.75, 9.0, lo)
+            c = lay(c, ss(lo - .004, lo + .004, y) * (z < .9), grn)
             sy = sweep(z)
             c = lay(c, band(y - sy, -.042, .042) * (z < 1.2), grn)
             th = np.interp(z, [-2.6, -1.85, -.89, -.1, .35], [.26, .26, .16, .1, 0])
@@ -1261,7 +1262,7 @@ def L_castrol(A, kind):
             c = lay(c, (y < .17).astype(np.float32), '#1b1c1e')                        # black sill skirt
         if view == 'top':
             c = lay(c, ((np.abs(x) > .63) & (z > .6)).astype(np.float32), grn)          # green front guards
-            c = lay(c, ((np.abs(x) > .5) & (z > -1.0) & (z < .45)).astype(np.float32), grn)   # roof rails
+            c = lay(c, ((np.abs(x) > .5) & (z > -.8) & (z < .65)).astype(np.float32), grn)   # roof rails
             c = lay(c, band(z, .2, .4) * (np.abs(x) < .5), lim)                          # roof front band
             c = lay(c, band(z, -.92, -.7) * (np.abs(x) < .5), lim)                       # roof rear band
             for sx in (-1, 1):                                                          # bonnet corner bars
@@ -1281,9 +1282,8 @@ def L_castrol(A, kind):
     full = logo('2e167ec379')
     for v in ('left', 'right'):
         # the C disc always reads first: at the back of the door on the right flank, the front on the left
-        dz, wz = (-.53, .37) if v == 'right' else (.66, -.22)
-        A.put(v, outline(disc, wht, .035), dz, .65, .4)
-        A.put(v, word, wz, .49, .5, maxw=1.36)
+        # the whole Castrol mark (C disc then the word, properly spaced), tilted to run with the sweep under it
+        A.put(v, full, .1, .56, .4, maxw=1.3, rot=5.5 * (1 if v == 'left' else -1))
         A.put(v, hyperix(), -1.5, .79, .2, maxw=.78)
         A.put(v, _tf_text('AI & IT', 120, blu, 600), -1.5, .675, .04, maxw=.2)
         A.put(v, hyperix(wht, wht), 1.45, .75, .12, maxw=.48)
