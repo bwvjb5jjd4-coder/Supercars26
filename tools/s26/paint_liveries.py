@@ -242,6 +242,7 @@ class Atlas:
         self.endplate = '#141416'     # rear wing endplates (one flat patch, see build_bodies.ENDPLATE_UV)
         self.wingcol = None           # rear wing blade colour; None = whatever the top view has there
         self.wlogos = []
+        self.wrap = None              # (xmin, ymax, zmin, zmax): copy the finished flanks onto sky-facing shoulder texels
 
     def coords(self, view):
         u0, v0 = REGION[view]
@@ -653,6 +654,23 @@ class Atlas:
             h, w = min(sub.shape[0], occ.shape[0] - y0), min(sub.shape[1], occ.shape[1] - x0)
             occ[y0:y0 + h, x0:x0 + w] |= sub[:h, :w] > 0
             out.alpha_composite(im, (max(0, x), max(0, y)), (max(0, -x), max(0, -y)))
+        if self.wrap:      # haunches/shoulders that face up are drawn from the top view: give them the flank design
+            arr = np.asarray(out).copy()
+            x, y, z = self.coords('top')
+            ym = top_ymap(self.kind_key)[:x.shape[0], :x.shape[1]]
+            sel = np.zeros(x.shape, bool)
+            for xmin, ymax, zmin, zmax in (self.wrap if isinstance(self.wrap, list) else [self.wrap]):
+                sel |= np.isfinite(ym) & (np.abs(x) > xmin) & (ym < ymax) & (z > zmin) & (z < zmax)
+            tu0, tv0 = REGION['top']
+            for vw, side in (('left', x > 0), ('right', x < 0)):
+                m = sel & side
+                u0, v0 = REGION[vw]
+                zz, yy = z[m], ym[m]
+                su = ((u0 + ((ZF - zz) if vw == 'left' else (zz - ZB)) * S) * K).astype(int)
+                sv = ((v0 + (YT - yy) * S) * K).astype(int)
+                rr, cc = np.nonzero(m)
+                arr[tv0 * K + rr, tu0 * K + cc] = arr[np.clip(sv, 0, arr.shape[0] - 1), np.clip(su, 0, arr.shape[1] - 1)]
+            out = Image.fromarray(arr)
         # the wing blade's own patch: by default a copy of the top view under it (so every livery looks as before)
         u0, v0, w, h = WING
         uu, vv = np.meshgrid((np.arange(w * K) + .5) / K, (np.arange(h * K) + .5) / K)
@@ -1105,7 +1123,7 @@ def L_castrol(A, kind):
 _WAU = {}
 
 
-def wau_masks(name, hues, shard_boxes, r_hues=None, drop=(), min_area=60):
+def wau_masks(name, hues, shard_boxes, r_hues=None, drop=(), min_area=60, r_smin=.45):
     """Colour masks (float, smoothed) cut from a Walkinshaw side photo: the accent skirts, the R of the GR shard
     and the white G. hues: (lo, hi) degrees of the accent; r_hues: of the R (default the accent).
     shard_boxes: photo boxes holding the shard; drop: photo boxes to clear (logos)."""
@@ -1116,11 +1134,11 @@ def wau_masks(name, hues, shard_boxes, r_hues=None, drop=(), min_area=60):
     hsv = cv2.cvtColor(rgb, cv2.COLOR_RGB2HSV_FULL).astype(float)
     h, s, v = hsv[..., 0] * 360 / 256, hsv[..., 1] / 255, hsv[..., 2] / 255
 
-    def hue(lo, hi):
+    def hue(lo, hi, smin=.45):
         hh = (h >= lo) & (h <= hi) if lo < hi else (h >= lo) | (h <= hi)
-        return hh & (s > .45) & (v > .3)
+        return hh & (s > smin) & (v > .3)
     acc = hue(*hues)
-    red = hue(*(r_hues or hues))
+    red = hue(*(r_hues or hues), smin=r_smin)
     wht = (v > .55) & (s < .12)
     inbox = np.zeros(acc.shape, bool)
     for x0, y0, x1, y1 in shard_boxes:
@@ -1135,9 +1153,9 @@ def wau_masks(name, hues, shard_boxes, r_hues=None, drop=(), min_area=60):
         hi = np.zeros((m.shape[0] * 4, m.shape[1] * 4), np.uint8)
         for c in cs:
             if cv2.contourArea(c) >= min_area:
-                c = cv2.approxPolyDP(c.astype(np.float32) * 4, 3.0, True).astype(np.int32)
+                c = cv2.approxPolyDP(c.astype(np.float32) * 4, 5.0, True).astype(np.int32)
                 cv2.fillPoly(hi, [c], 255)
-        hi = cv2.GaussianBlur(hi.astype(np.float32) / 255, (0, 0), 2.5)
+        hi = cv2.GaussianBlur(hi.astype(np.float32) / 255, (0, 0), 1.2)
         out[k] = (hi, 4)
     _WAU[name] = out
     return out
@@ -1235,6 +1253,33 @@ def mobil_parts():
     return w.crop(w.getbbox()), b.crop(b.getbbox())
 
 
+def gr_shard(gcol, rcol, stretch=1.15):
+    """The giant GR on the Walkinshaw flanks: the letters of the TOYOTA GAZOO Racing mark (cut out of its black
+    parallelogram), G and R in their own colours, stretched long as on the cars."""
+    im = logo('tgr')
+    a = np.asarray(im)
+    H, W = a.shape[:2]
+    box = (a[..., 3] > 128)
+    cols = np.nonzero(box.any(0))[0]
+    # the black parallelogram is the first run of columns; letters are the holes inside it
+    run_end = cols[np.nonzero(np.diff(cols) > 1)[0][0]] if (np.diff(cols) > 1).any() else cols[-1]
+    sub = box[:, :run_end + 1]
+    import cv2
+    filled = np.zeros_like(sub, np.uint8)
+    cs, _ = cv2.findContours(sub.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+    cv2.drawContours(filled, cs, -1, 1, -1)
+    letters = (filled > 0) & ~sub
+    n, lab, st, _ = cv2.connectedComponentsWithStats(letters.astype(np.uint8))
+    big = [i for i in range(1, n) if st[i, cv2.CC_STAT_AREA] > 500]
+    big.sort(key=lambda i: st[i, cv2.CC_STAT_LEFT])
+    out = np.zeros(sub.shape + (4,), np.uint8)
+    for i, col in zip(big[:2], (gcol, rcol)):
+        out[lab == i] = tuple(hexc(col).astype(np.uint8)) + (255,)
+    o = Image.fromarray(out)
+    o = o.crop(o.getbbox())
+    return o.resize((int(o.width * stretch), o.height), Image.LANCZOS)
+
+
 def wau_ring(px=160):
     from PIL import ImageDraw
     im = Image.new('RGBA', (px, px), (0, 0, 0, 0))
@@ -1271,7 +1316,7 @@ def L_wau(A, kind, car):
     blk, wht = '#1c1e20', '#f2f2f2'
     acc, rc = ('#25b5b4', '#e3312d') if car == 1 else ('#f06a1c', '#f06a1c')
     R = wau_masks('wau/2_side', (8, 35), [(170, 238, 420, 290), (260, 290, 420, 312)], drop=[(410, 235, 525, 340), (0, 0, 160, 262), (100, 0, 1024, 238), (188, 286, 236, 306)])
-    L = wau_masks('wau/1_side', (165, 200), [(398, 205, 575, 262)], r_hues=(330, 20), drop=[(0, 0, 678, 205)], min_area=20)
+    L = wau_masks('wau/1_side', (165, 200), [(398, 205, 575, 262)], r_hues=(335, 20), drop=[(0, 0, 678, 205), (560, 205, 678, 262)], min_area=20, r_smin=.3)
     g, sc = L['g']
     vv, uu = np.mgrid[:g.shape[0], :g.shape[1]] / sc
     g[(uu > 482) & (vv < 219 + (uu - 482) * 11 / 93)] = 0          # the backdrop above the tail is not paint
@@ -1287,11 +1332,6 @@ def L_wau(A, kind, car):
 
     def base(x, y, z, view):
         c = fill(x.shape, blk)
-        if view in ('left', 'right'):
-            M, H = (R, HR) if view == 'right' else (L, HL)          # each flank's shard from its own photo
-            body = (y < .98).astype(np.float32)
-            for k, col in (('r', rc), ('g', wht)):
-                c = lay(c, np.clip((sample(M[k], H, z, y) - .5) * 4 + .5, 0, 1) * body, col)
         if view == 'front':
             c = lay(c, band(y, -1, .17), acc)
         if view == 'rear':                     # visible tail: y .40 (diffuser below) to the boot lip ~1.0
@@ -1299,15 +1339,9 @@ def L_wau(A, kind, car):
             c = lay(c, ((np.abs(x) > .62) & (y < .6)).astype(np.float32), acc)
         if view == 'top':
             c = lay(c, ((np.abs(np.abs(x) - .56) < .008) & (z > -1.0) & (z < .55)).astype(np.float32), acc)
-            ym = top_ymap(A.kind_key)[:x.shape[0], :x.shape[1]]
-            ok = np.isfinite(ym) & (np.abs(x) > .45)
-            yy = np.where(ok, ym, -5)
-            for M, H, sel in ((L, HL, x > 0), (R, HR, x < 0)):     # the shard wraps up over the rear haunches
-                for k, col in (('r', rc), ('g', wht)):
-                    keep = (ok & sel & (yy < .98)).astype(np.float32)
-                    c = lay(c, np.clip((sample(M[k], H, z, yy) - .5) * 4 + .5, 0, 1) * keep, col)
         return c
     A.paint(base)
+    A.wrap = [(.5, .99, -2.6, 1.0), (.68, .99, 1.0, 2.3)]
     skirts = [[(356, 334), (686, 349.5), (687, 378.5), (420, 378), (418, 365), (356, 364)],         # sill
               [(145, 317.5), (172, 343), (194, 321), (234, 321), (234, 359), (165, 360), (150, 345)],  # rear quarter
               [(824, 349), (831, 349), (832, 365), (878, 366), (880, 372), (824, 373)],                 # splitter end
@@ -1345,23 +1379,33 @@ def L_wau(A, kind, car):
         at('right', circ, 467, 288, 100) if False else None
         q = np.linalg.inv(HR) @ np.array([560, 292, 1.0])
         A.put('left', row(word, circ, gap=.04), q[0] / q[2], q[1] / q[2], 102 / kR, 275 / kR, rot=4)
+    # the GR: right flank G over the rear arch with the R ahead of it; left flank G just behind OPTUS
+    gr = gr_shard(wht, rc)
+    at('right', gr, 292, 270, 66, 242)
+    if car == 1:
+        at('left', gr, 488, 240, 46, 150)
+    else:                                  # #2: the GR follows the Truck Assist circle, as on the right flank
+        zc, yc = zy(HR, 560, 292)
+        wg = 242 / kR
+        A.put('left', gr, zc - 275 / kR / 2 - .06 - wg / 2, zy(HR, 292, 270)[1], 66 / kR, wg)
     # quarter panels and sills (positions from 2_side, mirrored to the left flank by (z, y))
-    both(mobil1(), 304, 230, 13, 70)
+    both(mobil1(), 318, 240, 12, 64)
     both(supercheap(), 384, 324, 17, 54)
-    both(mont('Coates', 200, '#f26a21', 800), 216, 304, 12, 42)
-    both(wau_round(), 170, 299, 37)
-    both(logo('ppg'), 212, 329, 13, 14)
-    both(mont('GEARWRENCH', 120, wht, 900), 180, 328, 5, 34)
-    both(stack(mont('move', 200, wht, 700), mont('my.wheels.com.au', 70, wht, 600), gap=.02), 200, 350, 11, 34)
-    both(row(text('RINGERS', 'LibreBaskerville', 160, wht, track=.06), wau_ring(), text('WESTERN', 'LibreBaskerville', 160, wht, track=.06), gap=.15), 746, 260, 9, 110)
+    # the small rear-quarter marks, laid out in the one flat column between the rear arch and the tail
+    A.put('sides', wau_round(), -2.03, .565, .12)
+    A.put('sides', mont('Coates', 200, '#f26a21', 800), -1.87, .585, .05, maxw=.15)
+    A.put('sides', logo('ppg'), -1.78, .48, .06, maxw=.06)
+    A.put('sides', mont('GEARWRENCH', 120, wht, 900), -1.96, .44, .022, maxw=.17)
+    A.put('sides', stack(mont('move', 200, wht, 700), mont('my.wheels.com.au', 70, wht, 600), gap=.02), -1.86, .32, .07, maxw=.17)
+    both(row(text('RINGERS', 'LibreBaskerville', 160, wht, track=.06), wau_ring(), text('WESTERN', 'LibreBaskerville', 160, wht, track=.06), gap=.15), 740, 268, 8, 100)
     both(mont('CoreStaff', 140, wht, 700), 848, 308, 6, 30)
     both(text('DUNLOP', 'ArchivoBlack-Regular', 120, wht, slant=.2), 652, 251, 5, 40)
     both(row(mont('DesignEars', 110, wht, 600), mont('employmenthero', 110, wht, 600), mont('Lloyds', 110, wht, 600), mont('Spicers', 110, wht, 600), gap=.6), 430, 349, 6, 135)
     both(recol(logo('repco'), wht), 654, 370, 6, 32)
     # bonnet, roof, nose
     mw, mb = mobil_parts()
-    A.bonnet(mw, 1.86, .2, maxw=1.2)
-    A.bonnet(mb, 2.2, .2, maxw=.4)
+    A.bonnet(mw, 2.02, .2, maxw=1.15)
+    A.bonnet(mb, 2.3, .17, maxw=.35)
     ngk = stack(mont('NGK', 200, wht, 900), mont('SPARK PLUGS', 90, wht, 700))
     A.bonnet(ngk, 2.3, .07, x=.6, maxw=.2)
     A.bonnet(ngk, 2.3, .07, x=-.6, maxw=.2)
