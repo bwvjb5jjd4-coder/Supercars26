@@ -1396,9 +1396,9 @@ def L_wau(A, kind, car):
     # doors
     if car == 1:
         optus = mont('OPTUS', 300, wht, 700, track=.02)
-        at('left', optus, 305, 266, 40, 182, rot=5)          # sits low on the door, rising toward the rear
+        at('left', optus, 305, 266, 40, 182)                 # low on the door, level
         q = np.linalg.inv(HL) @ np.array([305, 266, 1.0])
-        A.put('right', optus, q[0] / q[2], q[1] / q[2], 40 / kL, 182 / kL, rot=-5)
+        A.put('right', optus, q[0] / q[2], q[1] / q[2], 40 / kL, 182 / kL)
     else:
         circ, word = ta_parts()
         at('right', row(circ, word, gap=.04), 560, 300, 102, 275, rot=-4)
