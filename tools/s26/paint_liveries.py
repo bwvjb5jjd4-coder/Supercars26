@@ -2713,7 +2713,6 @@ def L_premiair(A, kind):
                 c = lay(c, ((sx * x > inner) & (sx * x < inner + w)).astype(np.float32) * on, blk)
                 c = lay(c, ((sx * x > inner - .028) & (sx * x <= inner) & (w > .01)).astype(np.float32) * on, red)
             c = lay(c, band(z, -9, A.r - .7), red)                                     # red deck
-            c = lay(c, band(np.abs(x), .62, 9) * band(z, -9, -.55), red)                 # red rear haunches
         if view == 'front':
             c = lay(c, band(y, -1, .14), blk)
             c = lay(c, band(y, .14, .165), red)
@@ -2735,7 +2734,7 @@ def L_premiair(A, kind):
               ((122, 962, 207, 1006), [R2, '#8a0004', T], 80),          # NULON (rear quarter)
               ((955, 950, 1015, 1028), [W1, '#d8dde2', '#b9c2cc'], 70),  # NULON / fill'er app (front bumper)
               ((812, 895, 912, 920), [W1, '#d8dde2'], 70),              # HIFLEX
-              ((748, 890, 812, 922), [W1, '#d8dde2'], 90),              # POWER CRANK
+              ((744, 886, 816, 926), [W1, '#d8dde2'], 60, 'erase'),     # POWER CRANK on the front guard: removed (Riley)
               ((272, 828, 352, 852), [R1, R2], 80),                     # AIR & ALLIED
               ((408, 1018, 772, 1042), [T, '#2a2a2c'], 70)]             # sill sponsors
     A.project(outline, 'right', glass=glass, decals=decals, glass_fill='#f4f5f6', glass_pad=5, above=(1.2, wht), arch=.42)
