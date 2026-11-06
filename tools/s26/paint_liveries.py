@@ -2680,7 +2680,7 @@ def L_chiko(A, kind):
              [(1045, 425), (1175, 425), (1175, 505), (1045, 505)]]
     R1, R2, O1, N1 = '#d4421f', '#c8302a', '#e07a2a', '#1a1c22'
     decals = [((1058, 466, 1424, 664), [R1, R2, '#b82a2a', '#a8242c'], 70),                      # CHIKO oval
-              ((1448, 436, 1664, 524), [N1, '#14161a', '#262830', '#30323a'], 80),                # Snap-on
+              ((1448, 436, 1664, 524), [N1, '#14161a', '#262830', '#30323a'], 80, 'erase'),       # Snap-on (re-laid sharp below)
               ((768, 496, 1012, 562), [R1, O1, '#d86028', '#e89040'], 75),                        # PLUMBTRAX
               ((958, 516, 1034, 722), [R1, R2, '#c03826'], 75),                                   # Marina / sponsor column
               ((1138, 676, 1242, 704), [N1, '#14161a', '#0c0c0c'], 70),                           # Snap-on (sill)
@@ -2702,7 +2702,7 @@ def L_chiko(A, kind):
     A.put('sides', ch, (z0 + z1) / 2, (yt + yb) / 2, yt - yb, maxw=abs(z1 - z0))
     z0, y0 = A.from_photo(1455, 480)
     z1, y1 = A.from_photo(1658, 470)
-    A.put('sides', text('Snap-on', 'ArchivoBlack-Regular', 200, wht, slant=.18), (z0 + z1) / 2, (y0 + y1) / 2, .12, maxw=abs(z1 - z0), rot=-3)
+    A.put('sides', text('Snap-on', 'ArchivoBlack-Regular', 200, wht, slant=.18), (z0 + z1) / 2, (y0 + y1) / 2 - .01, .17, maxw=abs(z1 - z0) * 1.25, rot=-3)
     A.put('left', ch, 2.2, .5, .06, maxw=.2)
     A.put('left', quartz_mark(gold, wht), 2.2, .36, .07, maxw=.22)
     # right front guard: black panel with the PEDDERS / TFH / BiC / SS SIGNS stickers (9_front34)
