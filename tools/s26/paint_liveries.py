@@ -2823,62 +2823,160 @@ def power_crank():
     return t
 
 
+def bl_outline(sx, sy, ox, oy):
+    """The Blanchard studio side photos are shot from the same spot: one body outline / window, scaled."""
+    o = [(262, 700), (268, 660), (288, 628), (400, 628), (500, 606), (600, 582), (700, 558), (800, 543), (1000, 555),
+         (1100, 598), (1220, 660), (1400, 664), (1560, 690), (1640, 742), (1652, 800), (1660, 860), (1686, 905),
+         (1680, 918), (1580, 915), (1500, 945), (1400, 945), (1310, 920), (690, 920), (640, 935), (480, 935),
+         (440, 872), (330, 858), (275, 830), (262, 790)]
+    g = [[(628, 598), (700, 577), (800, 567), (1000, 567), (1100, 600), (1218, 662), (1000, 655), (800, 648), (680, 640)],
+         [(1135, 615), (1200, 615), (1205, 664), (1135, 664)]]
+    f = lambda p: (ox + (p[0] - 565) * sx, oy + (p[1] - 833) * sy)
+    return [f(p) for p in o], [[f(p) for p in gg] for gg in g]
+
+
+def bl_hash(A, cols, z0, n, step, w, x0, x1, slope):
+    """Rows of thin stripes on the front-guard tops at the screen corners (top view, both sides)."""
+    def fn(x, y, z, view):
+        c = np.zeros(x.shape + (3,), np.float32)
+        return c
+    for i in range(n):
+        zc = z0 - i * step
+        col = cols[i * len(cols) // n]
+        A.over(lambda x, y, z, view, zc=zc, col=col: fill(x.shape, col),
+               lambda x, y, z, view, zc=zc: (np.abs(z - (zc + (np.abs(x) - x0) * slope)) < w / 2) * band(np.abs(x), x0, x1 - i * .012),
+               views=('top',))
+
+
+def bl_bar(im, ratio, fill='#141516'):
+    """A mark centred on a plain bar `ratio` times as wide as it is tall."""
+    H = int(im.height * 1.3)
+    out = Image.new('RGBA', (int(H * ratio), H), fill)
+    out.alpha_composite(im, ((out.width - im.width) // 2, (H - im.height) // 2))
+    return out
+
+
+def bl_nose(A, hashc, side='#141516'):
+    """Gen3 Mustang nose as Blanchard run it: black panels round the lower intakes beside the grille (sponsor
+    plates), a black bar under the grille, and diagonal hash marks on the outer bumper corners."""
+    blk = '#141516'
+    def fn(x, y, z, view):
+        c = fill(x.shape, blk)
+        return c
+    A.over(fn, lambda x, y, z, view: band(np.abs(x), .52, .8) * band(y, .16, .44), views=('front',))
+    # the bumper corners beside the grille are side-facing texels: black intake panels there too
+    A.over(fn, lambda x, y, z, view: np.clip((z - 2.02) / .04, 0, 1) * band(y, .17, .43))
+    for i in range(4):
+        A.over(lambda x, y, z, view: fill(x.shape, hashc),
+               lambda x, y, z, view, i=i: (np.abs((np.abs(x) - .8) - (y - .1) * .45 - i * .045 + .02) < .012) * band(np.abs(x), .8, 1.1) * band(y, .08, .42),
+               views=('front',))
+    sak = row(plate(text('SAKURA', 'Montserrat', 120, '#ffffff', weight=800), '#d8101e', pad=.2, radius=.5), text('SAKURA', 'ArchivoBlack-Regular', 200, '#e3222a', slant=.1), gap=.15)
+    for sx in (-1, 1):
+        A.put('front', sak, .66 * sx, .36, .05, maxw=.24)
+        A.put('front', text('BOSCH', 'ArchivoBlack-Regular', 200, '#e3222a'), .67 * sx, .24, .05, maxw=.2)
+        A.put('front', text('Gabriel', 'Montserrat', 160, '#e3222a' if side != 'blue' else '#ffffff', weight=700, slant=.1), .74 * sx, .47, .03, maxw=.13)
+    A.put('sides', text('SAKURA', 'ArchivoBlack-Regular', 200, '#e3222a'), 2.2, .36, .05, maxw=.25)
+    A.put('sides', text('BOSCH', 'ArchivoBlack-Regular', 200, '#e3222a'), 2.2, .25, .05, maxw=.22)
+
+
 def L_cooldrive(A, kind):
-    """Blanchard Racing #7 CoolDrive Mustang (refs cooldrive/01-05): CoolDrive blue, white sill band with
-    the chequered AUTO PARTS strip, white hash marks."""
-    blue, wht, lb = '#1e4fc0', '#f2f4f7', '#49a7e4'
+    """Blanchard Racing #7 CoolDrive Mustang from Riley's photos (cooldrive/03 side, blanchard/7_front34, 7_rear34,
+    cooldrive/04-05 front and rear). The sides are the studio side photo projected onto the body (CoolDrive AUTO PARTS
+    with the chequers, S&A Stairs, Roth's, Ballarat Isuzu, DUNLOP, white hash marks, the white sill with its
+    sponsors), lettering turned the right way round on the far flank. Blue bonnet with white shoulder hash and the
+    CoolDrive lockup, blue tail with FORD RACING, Aerpro, Bremtec Brakes and the CTE diffuser, white CoolDrive wing."""
+    blue, wht, blk = '#0d3fae', '#f4f6f8', '#121314'
+    A.soft = None
 
     def base(x, y, z, view):
         c = fill(x.shape, blue)
-        if view in ('front', 'rear'):
+        if view == 'front':
             c = lay(c, band(y, -1, .2), wht)
-        if view == 'top':
-            c = lay(c, band(z, -9, -2.12), wht)
+        if view == 'rear':
+            c = lay(c, band(y, -1, .3), blk)
         return c
     A.paint(base)
-    A.photo('cooldrive/03', [(1216, 699), (466, 699), (1216, 619), (466, 619)], tyre=.33)
-    A.trace([blue, wht, lb], belt=.92, erase=[(581, 560, 1099, 650), (299, 539, 549, 587)],
-            outline=[(200, 640), (205, 560), (225, 500), (330, 470), (450, 450), (640, 420), (780, 420), (960, 520), (1180, 540), (1300, 575), (1310, 700), (1250, 720), (1020, 720), (540, 720), (330, 690)])
-    cd = logo('f28f9d1197')
-    A.plogo(cd, 843, 612, 82, maxw_px=520)
-    A.plogo(crop('cooldrive/03', (587, 651, 1099, 717), tol=70), 843, 684, 66, maxw_px=515)
-    A.plogo(crop('cooldrive/03', (299, 539, 549, 587), tol=70), 424, 563, 48)          # S&A Stairs
-    A.plogo(crop('cooldrive/03', (1155, 562, 1280, 605), tol=70), 1217, 583, 40)       # Ballarat Isuzu
-    A.bonnet(cd, A.f + .2, .22, maxw=1.0)
-    A.roof(crop('cooldrive/03', (299, 539, 549, 587), tol=70), -.5, .12, maxw=.7)
-    A.wingtop(cd, -2.24, .1, maxw=1.3)
-    A.put('front', logo('3952a5b529'), 0, .6, .05)
-    A.put('front', logo('bosch'), 0, .3, .05)
-    A.put('rear', cd, 0, .72, .09)
+    A.photo('cooldrive/03', [(1217, 705), (465, 699), (1217, 618), (465, 610)], tyre=.34)
+    outline, glass = bl_outline(.845, .845, 465, 699)
+    B1, B2, B3, W1 = '#0a3a9e', '#1a52c4', '#2f6ad6', '#f2f6fa'
+    decals = [((585, 556, 1106, 714), [B1, B2, B3, '#04236f', '#3f7fe0'], 75),     # CoolDrive AUTO PARTS lockup
+              ((292, 536, 552, 588), [B1, B2, B3, '#04236f', '#3f7fe0'], 75),     # S&A Stairs
+              ((226, 603, 314, 652), [B1, B2, B3, '#04236f', '#3f7fe0'], 75),     # Roth's
+              ((300, 688, 364, 732), [W1, '#d8dee8', '#c0c8d6'], 70),             # Ford Racing
+              ((1058, 568, 1150, 592), [B1, B2, B3, '#04236f'], 75),              # DUNLOP
+              ((1155, 560, 1290, 612), [B1, B2, B3, '#04236f', '#3f7fe0'], 75),   # Ballarat Isuzu
+              ((1322, 610, 1378, 640), [blk, '#2a2a2c'], 70),                     # ignite
+              ((1350, 650, 1396, 720), [blk, '#2a2a2c'], 70),                     # SAKURA / BOSCH
+              ((605, 740, 1040, 762), [W1, '#d8dee8'], 70)]                       # sill sponsors
+    A.project(outline, 'right', glass=glass, decals=decals, above=(1.2, blue), arch=.42)
+    A.wrap = [(.55, 1.0, -2.4, -.5)]
+    A.wrap = [(.55, 1.0, -2.4, -.5), (.55, 1.0, .4, 2.4)]
+    cd = crop('cooldrive/04', (520, 452, 1100, 628), keep=['#ffffff'], tol=70)
+    cd = cd.resize((cd.width, int(cd.height * 1.7)), Image.LANCZOS)
+    A.bonnet(cd, A.f + .3, .5, maxw=1.15)
+    bl_nose(A, wht, 'blue')
+    A.put('front', logo('3952a5b529'), 0, .62, .05)
+    A.put('rear', text('FORD RACING', 'ArchivoBlack-Regular', 200, wht, track=.04), 0, .9, .05, maxw=.62)
+    A.put('rear', crop('cooldrive/05', (700, 526, 890, 582), keep=['#ffffff'], tol=60), 0, .68, .065, maxw=.4)
+    for sx in (-1, 1):
+        A.put('rear', crop('cooldrive/05', (474, 598, 580, 668) if sx < 0 else (1010, 598, 1116, 668), keep=['#ffffff'], tol=60), .6 * sx, .56, .09, maxw=.2)
+        A.put('rear', plate(text('PPG', 'ArchivoBlack-Regular', 160, '#ffffff'), '#1d5bd8', pad=.25, radius=.2), .42 * sx, .74, .035, maxw=.09)
+    A.put('rear', bl_bar(crop('cooldrive/05', (650, 625, 940, 692), keep=['#ffffff'], tol=60), 4.6), 0, .52, .1, maxw=.62)
+    A.wingcol = wht
+    A.wing(crop('cooldrive/05', (452, 314, 1152, 372), keep=['#1a3fd0', '#2a50e0', '#0a2fb0'], tol=60), .14, maxw=1.4)
+    A.endplate = blk
+    A.exact = True
 
 
 def L_liquimoly(A, kind):
-    """Blanchard Racing #3 LIQUI MOLY / BLAHST Mustang (refs liquimoly/01-05): white, red over blue sweep,
-    hash marks, BLAHST panel."""
-    wht, red, blue, blk = '#f3f4f6', '#e3242b', '#1a3fa6', '#151515'
+    """Blanchard Racing #3 LIQUI MOLY / BLAHST Mustang from Riley's photos (blanchard/3_side, 3_front, 3_front34,
+    liquimoly/03 rear). The sides are the studio side photo projected onto the body (red over blue bands, the big
+    LIQUI MOLY door logo, the BLAHST panel, red/blue/white hash marks, DUNLOP, BUSHRANGER, VICTA, Ford Racing, sill
+    sponsors), lettering turned the right way round on the far flank. White bonnet with the LIQUI MOLY logo and
+    blue/red shoulder pinstripes, red deck and tail, BLAHST on the grille and the diffuser, white BLAHST wing."""
+    wht, red, blue, blk = '#f4f5f7', '#d8101e', '#1438a8', '#141516'
+    A.soft = None
 
     def base(x, y, z, view):
         c = fill(x.shape, wht)
-        if view in ('front', 'rear'):
-            c = lay(c, band(y, -1, .2), blue)
         if view == 'top':
-            c = lay(c, band(np.abs(x), .62, 2) * band(z, A.f - .6, 9), red)
-            c = lay(c, band(z, -9, -2.12), blk)
+            c = lay(c, band(z, -9, A.r - .7), red)
+        if view == 'rear':
+            c = lay(c, band(y, .9, 9), red)
+            c = lay(c, band(y, .45, .66), blue)
+            c = lay(c, band(y, -1, .45), blk)
         return c
     A.paint(base)
-    A.photo('liquimoly/02', [(1216, 699), (469, 693), (1216, 613), (469, 613)], tyre=.33)
-    A.trace([wht, red, blue, blk], belt=.92, erase=[(725, 555, 965, 725)], allow={3: (-9, -9)},
-            outline=[(200, 640), (205, 560), (225, 500), (330, 470), (450, 450), (640, 420), (780, 420), (960, 520), (1180, 540), (1300, 575), (1310, 700), (1250, 720), (1020, 720), (540, 720), (330, 690)])
+    A.photo('blanchard/3_side', [(1455, 844), (565, 833), (1455, 738), (565, 722)], tyre=.34)
+    outline, glass = bl_outline(1, 1, 565, 833)
+    W1, W2, R1, N1 = '#f6f7f9', '#dfe2e8', '#db0018', '#03256d'
+    decals = [((462, 636, 796, 730), [W1, W2, '#c9ccd4'], 80),                   # BLAHST
+              ((872, 664, 1160, 868), ['#2753f4', '#1d44d8', R1, '#c8001a'], 80),  # LIQUI MOLY
+              ((292, 742, 364, 778), [W1, W2, '#c9ccd4'], 70),                   # VICTA
+              ((376, 828, 444, 874), [W1, W2, '#c9ccd4', '#b7bccb'], 70),         # Ford Racing
+              ((1276, 684, 1370, 704), [W1, W2], 70),                            # DUNLOP
+              ((1372, 681, 1542, 720), [W1, W2], 70),                            # BUSHRANGER
+              ((1578, 744, 1648, 776), [blk, '#2a2a2c', '#3f3d40'], 70),          # ignite
+              ((1584, 798, 1614, 834), [W1, W2], 70),                            # LIQUI MOLY (bumper)
+              ((1616, 795, 1668, 878), [blk, '#2a2a2c', '#3f3d40'], 70),          # SAKURA / BOSCH
+              ((728, 884, 1242, 914), [W1, W2, '#ffffff'], 70)]                  # sill sponsors
+    A.project(outline, 'right', glass=glass, decals=decals, above=(1.2, wht), arch=.42)
+    A.wrap = [(.55, 1.0, -2.4, -.5)]
+    A.wrap = [(.55, 1.0, -2.4, -.5), (.55, 1.0, .4, 2.4)]
     lm = logo('40cf8518a9')
-    A.plogo(lm, 845, 640, 171, maxw_px=245)
-    A.plogo(crop('liquimoly/02', (380, 525, 670, 610), tol=80), 525, 567, 66, maxw_px=300)   # BLAHST
-    A.plogo(crop('liquimoly/02', (1140, 568, 1285, 598), tol=70), 1212, 583, 26)              # Bushranger
-    A.bonnet(lm, A.f + .2, .52, maxw=.8)
-    A.roof(logo('b186a2271a'), -.5, .16, maxw=.7)
-    A.wingtop(recol(logo('b186a2271a').convert('RGBA'), '#ffffff') if False else logo('b186a2271a'), -2.24, .12, maxw=1.2)
-    A.put('front', logo('b186a2271a'), 0, .32, .07)
-    A.put('front', logo('3952a5b529'), 0, .6, .05)
-    A.put('rear', logo('b186a2271a'), 0, .62, .1)
+    A.bonnet(lm, A.f + .28, .6, maxw=1.05)
+    bl_nose(A, blue)
+    A.put('front', logo('3952a5b529'), 0, .62, .05)
+    A.put('rear', text('FORD RACING', 'ArchivoBlack-Regular', 200, wht, track=.04), 0, .92, .05, maxw=.62)
+    A.put('rear', bl_bar(crop('liquimoly/03', (652, 628, 950, 705), keep=['#ffffff'], tol=60), 3.6), 0, .55, .13, maxw=.62)
+    lmr = Image.open(os.path.join(REFS, 'liquimoly/03.jpg')).convert('RGBA').crop((510, 610, 606, 674))
+    for sx in (-1, 1):
+        A.put('rear', lmr, .55 * sx, .56, .085, maxw=.16)
+        A.put('rear', plate(text('PPG', 'ArchivoBlack-Regular', 160, '#ffffff'), '#1d5bd8', pad=.25, radius=.2), .42 * sx, .71, .035, maxw=.09)
+    A.wingcol = wht
+    A.wing(text('BLAHST', 'ArchivoBlack-Regular', 200, blk), .14, maxw=1.3)
+    A.endplate = blk
+    A.exact = True
 
 
 def L_objective(A, kind):
