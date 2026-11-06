@@ -560,7 +560,14 @@ class Atlas:
             a0, a1 = cols[0], cols[-1] + 1           # flip about the lettering's own centre, not the box's
             out = bgR.copy()
             fl = M[:, a0:a1][:, ::-1] > 0
-            out[:, a0:a1] = np.where(fl[..., None], R[:, a0:a1][:, ::-1], bgR[:, a0:a1])
+            fR = R[:, a0:a1][:, ::-1]
+            if len(dec) > 4 and dec[4]:     # a sloped mark keeps its own slope (dy/dx in photo px) once flipped
+                sl = 2 * dec[4]
+                cx = (a1 - a0) / 2
+                Mw = np.float32([[1, 0, 0], [sl, 1, -sl * cx]])
+                fR = cv2.warpAffine(np.ascontiguousarray(fR), Mw, (a1 - a0, R.shape[0]), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
+                fl = cv2.warpAffine(fl.astype(np.uint8) * 255, Mw, (a1 - a0, R.shape[0]), flags=cv2.INTER_LINEAR) > 127
+            out[:, a0:a1] = np.where(fl[..., None], fR, bgR[:, a0:a1])
             far[y0:y1, x0:x1] = out
         if glass_fill is not None:     # the photo's windows and their black surround become plain paint
             gm_ = Image.new('L', (im.shape[1], im.shape[0]), 0)
@@ -2899,7 +2906,7 @@ def L_cooldrive(A, kind):
     A.photo('cooldrive/03', [(1217, 705), (465, 699), (1217, 618), (465, 610)], tyre=.34)
     outline, glass = bl_outline(.845, .845, 465, 699)
     B1, B2, B3, W1 = '#0a3a9e', '#1a52c4', '#2f6ad6', '#f2f6fa'
-    decals = [((585, 556, 1106, 714), [B1, B2, B3, '#04236f', '#3f7fe0'], 75),     # CoolDrive AUTO PARTS lockup
+    decals = [((585, 540, 1106, 730), [B1, B2, B3, '#04236f', '#3f7fe0'], 75, 'flip', .073),   # CoolDrive AUTO PARTS lockup (keeps its slope)
               ((292, 536, 552, 588), [B1, B2, B3, '#04236f', '#3f7fe0'], 75),     # S&A Stairs
               ((226, 603, 314, 652), [B1, B2, B3, '#04236f', '#3f7fe0'], 75),     # Roth's
               ((300, 688, 364, 732), [W1, '#d8dee8', '#c0c8d6'], 70),             # Ford Racing
