@@ -2713,6 +2713,13 @@ def L_premiair(A, kind):
                 c = lay(c, ((sx * x > inner) & (sx * x < inner + w)).astype(np.float32) * on, blk)
                 c = lay(c, ((sx * x > inner - .028) & (sx * x <= inner) & (w > .01)).astype(np.float32) * on, red)
             c = lay(c, band(z, -9, A.r - .7), red)                                     # red deck
+            # the red C-pillar sail runs back over the haunch tops to a point above the tail, edged in black;
+            # it stays above the shoulder crease (y > ~1.03) so it never cuts across the PremiAir lettering
+            ym = top_ymap(A.kind_key)[:x.shape[0], :x.shape[1]]
+            thr = np.interp(z, [-2.05, -1.6, -1.0, -.55], [1.08, 1.01, 1.0, .99])
+            hz = (np.abs(x) > .55) & (z > -2.05) & (z < -.55) & (ym > -5) & (ym < 1.18)
+            c = lay(c, (hz & (ym > thr)).astype(np.float32), red)
+            c = lay(c, (hz & (ym > thr - .022) & (ym <= thr)).astype(np.float32), blk)
         if view == 'front':
             c = lay(c, band(y, -1, .14), blk)
             c = lay(c, band(y, .14, .165), red)
@@ -2728,16 +2735,45 @@ def L_premiair(A, kind):
     glass = [[(362, 832), (560, 822), (620, 836), (684, 880), (440, 878), (382, 856)],
              [(640, 862), (690, 862), (700, 892), (650, 892)]]                         # the NAPA mirror
     R1, R2, W1, T = '#f2050f', '#c40206', '#f4f5f6', '#141516'
-    decals = [((155, 868, 338, 922), [W1, '#d8dde2'], 70),            # PremiAir / 1300 WE HIRE
+    decals = [((150, 862, 342, 926), [W1, '#d8dde2'], 70, 'erase'),   # PremiAir / 1300 WE HIRE: lifted, re-laid lower below
               ((470, 903, 786, 982), [R1, R2, '#f07a70'], 80),          # Mr.UMAMI
               ((498, 964, 748, 1006), [R1, R2, '#f07a70'], 80),         # "Smart Meals for Busy Lives"
               ((122, 962, 207, 1006), [R2, '#8a0004', T], 80),          # NULON (rear quarter)
               ((955, 950, 1015, 1028), [W1, '#d8dde2', '#b9c2cc'], 70),  # NULON / fill'er app (front bumper)
               ((812, 895, 912, 920), [W1, '#d8dde2'], 70),              # HIFLEX
-              ((744, 886, 816, 926), [W1, '#d8dde2'], 60, 'erase'),     # POWER CRANK on the front guard: removed (Riley)
               ((272, 828, 352, 852), [R1, R2], 80),                     # AIR & ALLIED
               ((408, 1018, 772, 1042), [T, '#2a2a2c'], 70)]             # sill sponsors
+    # POWER CRANK on the front guard is taken off the photo (Riley): only the logo pixels above the black stripe
+    # are filled from the white round them, so the stripe under it carries on untouched
+    import cv2
+    ph = A.ph[0]
+    x0, y0, x1, y1 = 742, 886, 824, 932
+    sub = ph[y0:y1, x0:x1]
+    yy, xx = np.mgrid[y0:y1, x0:x1]
+    top = 909.5 + (xx - 740) * .245                  # top edge of the black stripe under the logo
+    lum, sat = sub.mean(-1), sub.max(-1) - sub.min(-1)
+    clean = (lum > 232) & (sat < 25) & (yy < top - 2)
+    white = np.median(sub[clean], 0)
+    sub[(yy < top) & ~clean] = white                 # logo above the stripe -> the white panel
+    sub[(yy >= top) & (yy < top + 9) & (xx < 792) & (sub.max(-1) > 70)] = (18, 18, 20)    # logo bits on the stripe -> black
+    ph[y0:y1, x0:x1] = cv2.GaussianBlur(sub, (3, 3), 0) * .5 + sub * .5
     A.project(outline, 'right', glass=glass, decals=decals, glass_fill='#f4f5f6', glass_pad=5, above=(1.2, wht), arch=.42)
+    # PremiAir / 1300 WE HIRE cut clean from the photo and laid back 4 cm lower, so the tops of the letters stay on
+    # the flank instead of stretching over the shoulder
+    ppm = A.px_per_m()
+    bx = (152, 864, 340, 903)
+    mark = crop('premiair/777_side', bx, ink='#141516')
+    bb = LAST_BB
+    zc, yc = A.from_photo(bx[0] + (bb[0] + bb[2]) / 8, bx[1] + (bb[1] + bb[3]) / 8)
+    A.put('sides', mark, zc, yc - .04, (bb[3] - bb[1]) / 4 / ppm)
+    # 1300 WE HIRE redrawn sharp (the photo's red lettering is too small to cut cleanly), same place and size
+    z0, y0 = A.from_photo(161, 912)
+    z1, _ = A.from_photo(298, 912)
+    hire = text('1300 WE HIRE', 'Montserrat', 200, '#e3221c', weight=600, slant=.12)
+    A.put('sides', hire, (z0 + z1) / 2, y0 - .04, .055, maxw=abs(z1 - z0))
+    # the rear haunch tops (which face the sky) carry on the flank design: the red C-pillar sail and its black
+    # stripe run up and over the shoulder instead of stopping at a white patch
+    A.wrap = [(.55, 1.0, -2.4, -.5)]
     # the nose corners ahead of the front arches are repainted flat (the photo is patchy round the headlight)
     def ends(x, y, z, view):
         c = fill(x.shape, wht)
