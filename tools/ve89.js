@@ -434,8 +434,13 @@ function roadTile(b){
   b.innerHTML=`<span class="ve89-swatch" style="${sw}"></span><span class="ui26-tile-copy"><strong>${p?esc2(p.name):'Factory colour'}</strong><small>${p?(p.metal>.4?'Metallic':'Solid')+' · VE colour chart':'Each car in its launch colour'}</small></span>`+check+act;
  }
 }
-// Two tabs at the top of the car picker; LB/RB (or Q/E) switch tabs.
+// Tabs at the top of the car picker: Supercars 18 (the grid), Road Cars, Supercars 26 (when the s26 layer adds its
+// Gen3 cars). LB/RB (or Q/E) step through them.
 let tab=null;
+const TABS=[['race','Supercars 18','Supercars'],['road','Road Cars','road cars'],['s26','Supercars 26','Supercars']];
+const tabOf=v=>(v||'').startsWith('road:')?'road':(v||'').startsWith('s26:')?'s26':'race';
+function tabsHere(grid){return TABS.filter(([k])=>k==='race'||grid.querySelector(`[data-value^="${k}:"]`));}
+function stepTab(d){const grid=document.querySelector('#ui26-picker .ui26-picker-cars');if(!grid)return;const ts=tabsHere(grid).map(t=>t[0]);const i=ts.indexOf(tab);setTab(ts[(i+d+ts.length)%ts.length]||'race',true);}
 function pickerTabs(){
  const sheet=document.getElementById('ui26-picker'),grid=sheet?.querySelector('.ui26-picker-cars');
  if(!grid||sheet.hidden)return;
@@ -443,10 +448,10 @@ function pickerTabs(){
  let bar=sheet.querySelector('.ve89-tabs');
  if(!bar){
   bar=document.createElement('div');bar.className='ve89-tabs';bar.setAttribute('role','tablist');
-  bar.innerHTML=`<span class="ve89-pad">LB</span><button type="button" role="tab" data-tab="race">Supercars</button><button type="button" role="tab" data-tab="road">Road Cars</button><span class="ve89-pad">RB</span>`;
+  bar.innerHTML=`<span class="ve89-pad">LB</span>`+tabsHere(grid).map(([k,l])=>`<button type="button" role="tab" data-tab="${k}">${l}</button>`).join('')+`<span class="ve89-pad">RB</span>`;
   grid.before(bar);
   for(const b of bar.querySelectorAll('button'))b.onclick=()=>setTab(b.dataset.tab,true);
-  const on=grid.querySelector('[aria-pressed="true"]');tab=on?.dataset.value?.startsWith('road:')?'road':'race';
+  const on=grid.querySelector('[aria-pressed="true"]');tab=tabOf(on?.dataset.value);
  }
  setTab(tab||'race',false);
 }
@@ -454,9 +459,9 @@ function setTab(t,focus){
  tab=t;const sheet=document.getElementById('ui26-picker'),grid=sheet?.querySelector('.ui26-picker-cars'),bar=sheet?.querySelector('.ve89-tabs');if(!grid||!bar)return;
  let n=0,first=null;
  // Only touch the DOM when something differs: the tile observer watches these attributes.
- for(const b of grid.children){const road=(b.dataset.value||'').startsWith('road:'),show=(t==='road')===road;if(b.hidden===show)b.hidden=!show;if(show){n++;if(!first||b.getAttribute('aria-pressed')==='true'&&first.getAttribute('aria-pressed')!=='true')first=b;}}
+ for(const b of grid.children){const show=tabOf(b.dataset.value)===t;if(b.hidden===show)b.hidden=!show;if(show){n++;if(!first||b.getAttribute('aria-pressed')==='true'&&first.getAttribute('aria-pressed')!=='true')first=b;}}
  for(const b of bar.querySelectorAll('button')){const on=b.dataset.tab===t;if(b.getAttribute('aria-selected')!==String(on))b.setAttribute('aria-selected',String(on));if(b.classList.contains('on')!==on)b.classList.toggle('on',on);}
- const count=sheet.querySelector('.ui26-picker-top p'),txt=`${n} ${t==='road'?'road cars':'Supercars'} · Select a tile to confirm`;if(count&&count.textContent!==txt)count.textContent=txt;
+ const count=sheet.querySelector('.ui26-picker-top p'),txt=`${n} ${(TABS.find(x=>x[0]===t)||TABS[0])[2]} · Select a tile to confirm`;if(count&&count.textContent!==txt)count.textContent=txt;
  if(focus&&first){first.focus({preventScroll:true});first.scrollIntoView({block:'nearest'});}
 }
 function onDom(){
@@ -470,12 +475,12 @@ let queued=false;
 new MutationObserver(recs=>{if(recs.every(r=>r.target.closest?.('.ve89-tabs')||r.target.parentElement?.closest?.('.ui26-picker-top')&&r.type==='childList'))return;if(queued)return;queued=true;queueMicrotask(()=>{queued=false;try{onDom();}catch(e){console.warn(e);}});}).observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:['hidden','aria-pressed','data-value']});
 document.addEventListener('change',e=>{if(e.target?.id==='ir-car')onDom();});
 document.addEventListener('keydown',e=>{const sheet=document.getElementById('ui26-picker');if(!sheet||sheet.hidden||!sheet.querySelector('.ve89-tabs'))return;
- if(e.key==='q'||e.key==='Q'||e.key==='['){setTab('race',true);e.preventDefault();}else if(e.key==='e'||e.key==='E'||e.key===']'){setTab('road',true);e.preventDefault();}},true);
+ if(e.key==='q'||e.key==='Q'||e.key==='['){stepTab(-1);e.preventDefault();}else if(e.key==='e'||e.key==='E'||e.key===']'){stepTab(1);e.preventDefault();}},true);
 let padPrev=[false,false];
 (function pad(){
  try{const sheet=document.getElementById('ui26-picker');if(sheet&&!sheet.hidden&&sheet.querySelector('.ve89-tabs')){
   const gp=[...(navigator.getGamepads?.()||[])].find(g=>g&&g.connected);
-  if(gp){const lb=!!gp.buttons[4]?.pressed,rb=!!gp.buttons[5]?.pressed;if(lb&&!padPrev[0])setTab('race',true);if(rb&&!padPrev[1])setTab('road',true);padPrev=[lb,rb];}}}catch(e){}
+  if(gp){const lb=!!gp.buttons[4]?.pressed,rb=!!gp.buttons[5]?.pressed;if(lb&&!padPrev[0])stepTab(-1);if(rb&&!padPrev[1])stepTab(1);padPrev=[lb,rb];}}}catch(e){}
  setTimeout(pad,60);
 })();
 const css=document.createElement('style');css.id='ve89-style';css.textContent=`

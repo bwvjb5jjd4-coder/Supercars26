@@ -1,0 +1,565 @@
+{
+ "_note": "2026 Repco Supercars grid in the game's twelve two-car teams (RAW order). The real SCT Motorsport runs one car, so the game's SCT seat 2 carries #96 Macauley Jones (R&J Batteries Supra until SCT is redone). BJR #8 Andre Heimgartner runs the Pizza Hut Camaro. Sources: supercars.com 2026 livery reveal articles and spotter's guide.",
+ "roster": {
+  "0": [
+   {
+    "body": "camaro",
+    "number": 88,
+    "livery": "redbull",
+    "name": "Broc Feeney"
+   },
+   {
+    "body": "camaro",
+    "number": 888,
+    "livery": "redbull",
+    "name": "Will Brown"
+   }
+  ],
+  "1": [
+   {
+    "body": "mustang",
+    "number": 19,
+    "livery": "penrite",
+    "name": "Matt Payne"
+   },
+   {
+    "body": "mustang",
+    "number": 26,
+    "livery": "penrite",
+    "name": "Kai Allen"
+   }
+  ],
+  "2": [
+   {
+    "body": "mustang",
+    "number": 6,
+    "livery": "monster",
+    "name": "Cam Waters"
+   },
+   {
+    "body": "mustang",
+    "number": 55,
+    "livery": "castrol",
+    "name": "Thomas Randle"
+   }
+  ],
+  "3": [
+   {
+    "body": "supra",
+    "number": 1,
+    "livery": "optus",
+    "name": "Chaz Mostert"
+   },
+   {
+    "body": "supra",
+    "number": 2,
+    "livery": "truckassist",
+    "name": "Ryan Wood"
+   }
+  ],
+  "4": [
+   {
+    "body": "mustang",
+    "number": 17,
+    "livery": "shell",
+    "name": "Brodie Kostecki"
+   },
+   {
+    "body": "mustang",
+    "number": 38,
+    "livery": "shell",
+    "name": "Rylan Gray"
+   }
+  ],
+  "5": [
+   {
+    "body": "camaro",
+    "number": 18,
+    "livery": "dewalt",
+    "name": "Anton De Pasquale"
+   },
+   {
+    "body": "camaro",
+    "number": 20,
+    "livery": "snowyriver",
+    "name": "David Reynolds"
+   }
+  ],
+  "6": [
+   {
+    "body": "camaro",
+    "make": "Holden",
+    "number": 8,
+    "livery": "pizzahut",
+    "name": "Andre Heimgartner"
+   },
+   {
+    "body": "camaro",
+    "make": "Holden",
+    "number": 14,
+    "livery": "middys",
+    "name": "Cameron Hill"
+   }
+  ],
+  "7": [
+   {
+    "body": "camaro",
+    "number": 4,
+    "livery": "sherrin",
+    "name": "Jack Le Brocq"
+   },
+   {
+    "body": "camaro",
+    "number": 10,
+    "livery": "bendix",
+    "name": "Zach Bates"
+   }
+  ],
+  "8": [
+   {
+    "body": "camaro",
+    "number": 9,
+    "livery": "chiko",
+    "name": "Jobe Stewart"
+   },
+   {
+    "body": "camaro",
+    "number": 99,
+    "livery": "total",
+    "name": "Cooper Murray"
+   }
+  ],
+  "9": [
+   {
+    "body": "camaro",
+    "number": 777,
+    "livery": "premiair",
+    "name": "Declan Fraser"
+   },
+   {
+    "body": "camaro",
+    "number": 31,
+    "livery": "premiair",
+    "name": "Jayden Ojeda"
+   }
+  ],
+  "10": [
+   {
+    "body": "mustang",
+    "number": 7,
+    "livery": "cooldrive",
+    "name": "James Golding"
+   },
+   {
+    "body": "mustang",
+    "number": 3,
+    "livery": "liquimoly",
+    "name": "Aaron Cameron"
+   }
+  ],
+  "11": [
+   {
+    "body": "mustang",
+    "number": 11,
+    "livery": "objective",
+    "name": "Jackson Walls"
+   },
+   {
+    "body": "supra",
+    "make": "Holden",
+    "number": 96,
+    "livery": "rjbatteries",
+    "name": "Macauley Jones"
+   }
+  ]
+ },
+ "liveries": {
+  "redbull": {
+   "brand": "Red Bull Ampol",
+   "hood": "Red Bull",
+   "wing": "Ampol",
+   "paint": [
+    "#0d2452",
+    "#f4f5f6",
+    "#d6001c"
+   ],
+   "partners": [
+    "Ampol",
+    "Ford Racing",
+    "Century Batteries",
+    "Supercheap Auto",
+    "National Storage",
+    "Quad Lock",
+    "Wurth",
+    "KMC"
+   ],
+   "body": "camaro",
+   "note": "Striking blue, Ford Racing stripes (reveal, 7 Feb 2026)",
+   "logo": "assets/img/5630d1cdfa.png"
+  },
+  "penrite": {
+   "brand": "Penrite",
+   "paint": [
+    "#0b0b0d",
+    "#c9a24b",
+    "#ffffff"
+   ],
+   "partners": [
+    "Gates",
+    "BLAHST",
+    "Ford Racing",
+    "Snap-on",
+    "PPG"
+   ],
+   "body": "mustang",
+   "note": "Black and polished gold, after the 1980s JPS BMWs",
+   "logo": "assets/img/ef64ee4a7a.png"
+  },
+  "monster": {
+   "brand": "Monster Energy",
+   "hood": "Monster Claw",
+   "wing": "Monster Word",
+   "paint": [
+    "#0f1110",
+    "#78c51f",
+    "#ffffff"
+   ],
+   "partners": [
+    "Autobarn",
+    "Ford",
+    "RYCO",
+    "PPG",
+    "ENZED",
+    "Bayford"
+   ],
+   "body": "mustang",
+   "note": "Largely unchanged year on year",
+   "logo": "assets/img/7fabab4846.png"
+  },
+  "castrol": {
+   "brand": "Castrol",
+   "paint": [
+    "#f3f5f3",
+    "#00843d",
+    "#e2231a"
+   ],
+   "partners": [
+    "Autobarn",
+    "Bayford",
+    "Ford Racing",
+    "RYCO",
+    "PPG"
+   ],
+   "body": "mustang",
+   "note": "New treatment and a simpler design",
+   "logo": "assets/img/2e167ec379.png"
+  },
+  "optus": {
+   "brand": "Mobil 1 Optus",
+   "hood": "Mobil 1",
+   "wing": "Optus",
+   "paint": [
+    "#161819",
+    "#00b3a8",
+    "#ffffff"
+   ],
+   "partners": [
+    "Optus",
+    "Toyota",
+    "Coca-Cola"
+   ],
+   "body": "supra",
+   "note": "Black satin with teal",
+   "logo": "assets/img/d5e7ef776a.png"
+  },
+  "truckassist": {
+   "brand": "Mobil 1 Truck Assist",
+   "hood": "Mobil 1",
+   "wing": "Truck Assist",
+   "paint": [
+    "#f2f3f4",
+    "#0d2b5c",
+    "#e4002b"
+   ],
+   "partners": [
+    "Truck Assist",
+    "Toyota"
+   ],
+   "body": "supra",
+   "note": "Colours not described in the reveal text; Mobil 1 colours",
+   "logo": "assets/img/6aa12045ea.png"
+  },
+  "shell": {
+   "brand": "Shell V-Power",
+   "hood": "Shell",
+   "wing": "Shell V-Power",
+   "paint": [
+    "#d91c32",
+    "#ffd229",
+    "#fafbf9"
+   ],
+   "partners": [
+    "Penske",
+    "Pirtek",
+    "Repco",
+    "DXC",
+    "Doric",
+    "MAN"
+   ],
+   "body": "mustang",
+   "note": "2025 design with tweaks incl. a midnight blue rear wing",
+   "logo": "assets/img/755f654419.png"
+  },
+  "dewalt": {
+   "brand": "DEWALT",
+   "paint": [
+    "#febd17",
+    "#121212",
+    "#ffffff"
+   ],
+   "partners": [
+    "Coca-Cola",
+    "Cub Cadet",
+    "FUCHS",
+    "Hino",
+    "Seiko"
+   ],
+   "body": "camaro",
+   "note": "DEWALT yellow, fade to black on the rear quarters, Chevrolet bow tie",
+   "logo": "assets/img/4ed2777886.png"
+  },
+  "snowyriver": {
+   "brand": "Snowy River Caravans",
+   "hood": "Snowy River",
+   "wing": "TRADIE",
+   "paint": [
+    "#00a0a8",
+    "#111213",
+    "#ffffff"
+   ],
+   "partners": [
+    "TRADIE",
+    "Industrial Batteries",
+    "World Gym",
+    "Sika"
+   ],
+   "body": "camaro",
+   "note": "Teal and black, same base design as #18",
+   "logo": "assets/img/e25c0e6ab0.png"
+  },
+  "rjbatteries": {
+   "brand": "R&J Batteries",
+   "paint": [
+    "#f3f4f5",
+    "#d41f2b",
+    "#14254f"
+   ],
+   "partners": [
+    "3M",
+    "Blackwoods",
+    "Trico",
+    "Beta Tools"
+   ],
+   "body": "supra",
+   "note": "A new take on the R&J colours",
+   "logo": "assets/img/2a6304aceb.png"
+  },
+  "dare": {
+   "brand": "Dare Iced Coffee",
+   "hood": "Dare",
+   "wing": "Dare",
+   "paint": [
+    "#0c0a09",
+    "#6e4728",
+    "#efe2c8"
+   ],
+   "partners": [
+    "3M",
+    "PPG",
+    "Panasonic"
+   ],
+   "body": "supra",
+   "note": "Gradient from black to rich coffee brown",
+   "logo": "assets/img/f4713fdf29.png"
+  },
+  "alphatheta": {
+   "brand": "AlphaTheta",
+   "paint": [
+    "#f4f5f8",
+    "#2747d6",
+    "#7a3cd0"
+   ],
+   "partners": [
+    "3M",
+    "PPG"
+   ],
+   "body": "supra",
+   "note": "White, blue and purple",
+   "logo": "assets/s26/alphatheta_logo.png"
+  },
+  "sherrin": {
+   "brand": "Sherrin Rentals",
+   "paint": [
+    "#e9b21c",
+    "#14254d",
+    "#ffffff"
+   ],
+   "partners": [
+    "Bendix",
+    "Coca-Cola"
+   ],
+   "body": "camaro",
+   "note": "Bright gold and navy blue",
+   "logo": "assets/img/ddc016a379.png"
+  },
+  "bendix": {
+   "brand": "Bendix",
+   "paint": [
+    "#14254d",
+    "#e01b22",
+    "#ffffff"
+   ],
+   "partners": [
+    "Sherrin Rentals"
+   ],
+   "body": "camaro",
+   "note": "Sherrin and Bendix colours on both cars",
+   "logo": "assets/img/90cbdec9f0.png"
+  },
+  "chiko": {
+   "brand": "CHIKO",
+   "paint": [
+    "#ffd000",
+    "#d7261e",
+    "#121212"
+   ],
+   "partners": [
+    "Coca-Cola",
+    "Mongrel"
+   ],
+   "body": "camaro",
+   "note": "Update of the 2025 Bathurst CHIKO design",
+   "logo": "assets/img/57c38ba607.png"
+  },
+  "total": {
+   "brand": "TotalEnergies",
+   "hood": "TotalEnergies",
+   "wing": "QUARTZ",
+   "paint": [
+    "#f4f6f8",
+    "#173a8c",
+    "#e30613"
+   ],
+   "partners": [
+    "QUARTZ",
+    "Coca-Cola"
+   ],
+   "body": "camaro",
+   "note": "TotalEnergies Quartz Camaro",
+   "logo": "assets/img/cdadefee3e.png"
+  },
+  "premiair": {
+   "brand": "PremiAir",
+   "hood": "NAPA",
+   "wing": "Nulon",
+   "paint": [
+    "#f5f6f6",
+    "#d4202c",
+    "#121314"
+   ],
+   "partners": [
+    "NAPA",
+    "Nulon",
+    "HIFLEX",
+    "Sailor Studio",
+    "SP Tools"
+   ],
+   "body": "camaro",
+   "note": "Predominantly white, early-2010s HRT inspired, NAPA on the bonnet and mirrors",
+   "logo": "assets/img/3fe2cb0d65.png"
+  },
+  "cooldrive": {
+   "brand": "CoolDrive",
+   "paint": [
+    "#1d50b8",
+    "#ffffff",
+    "#0c1c3c"
+   ],
+   "partners": [
+    "Dayco",
+    "Ford Racing"
+   ],
+   "body": "mustang",
+   "note": "CoolDrive blue with more white detailing",
+   "logo": "assets/img/03cb3603a6.png"
+  },
+  "liquimoly": {
+   "brand": "LIQUI MOLY",
+   "hood": "LIQUI MOLY",
+   "wing": "BLAHST",
+   "paint": [
+    "#f5f6f7",
+    "#0d3a8c",
+    "#e30613"
+   ],
+   "partners": [
+    "BLAHST",
+    "Ford Racing"
+   ],
+   "body": "mustang",
+   "note": "White, blue and red",
+   "logo": "assets/img/40cf8518a9.png"
+  },
+  "objective": {
+   "brand": "Objective Racing",
+   "hood": "Objective",
+   "wing": "SCT Logistics",
+   "paint": [
+    "#0b0b0c",
+    "#ffffff",
+    "#2a8be0"
+   ],
+   "partners": [
+    "SCT Logistics",
+    "Liberty",
+    "Programmed",
+    "Shaw and Partners",
+    "Ford Racing"
+   ],
+   "body": "mustang",
+   "note": "Striking black, Ford Racing and Mustang design elements",
+   "logo": "assets/img/779f4d33e6.png"
+  },
+  "middys": {
+   "brand": "Middy's Electrical",
+   "paint": [
+    "#e8389f",
+    "#141416",
+    "#2b3aa0"
+   ],
+   "partners": [
+    "Coca-Cola",
+    "Mack",
+    "PPG"
+   ],
+   "body": "camaro",
+   "note": "BJR #14: hot pink with lightning, black nose, blue sills",
+   "logo": "assets/img/s26_middys.webp"
+  },
+  "pizzahut": {
+   "brand": "Pizza Hut",
+   "paint": [
+    "#f4f4f4",
+    "#e3171e",
+    "#141414"
+   ],
+   "partners": [
+    "Kubota",
+    "Coca-Cola"
+   ],
+   "body": "camaro",
+   "note": "BJR #8: white with red roof, bonnet roundel and lower swoosh",
+   "logo": "assets/img/s26_pizzahut.webp"
+  }
+ }
+}
