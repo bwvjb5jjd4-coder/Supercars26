@@ -2643,8 +2643,8 @@ def L_chiko(A, kind):
     """Erebus #9 CHIKO Camaro from Riley's photos (erebus/9_side left flank at Sydney, 9_front34 right front,
     99chiko_model for the bonnet layout). The flanks are the track photo projected onto the body: orange-to-red
     fade with the big CHIKO oval on the doors, navy-black rear quarters with Snap-on, PLUMBTRAX on the front guard,
-    lettering turned the right way round on the far flank. The right front guard is black with PEDDERS, TFH, BiC
-    and SS SIGNS (9_front34). Black bonnet with the CHIKO oval at the nose and orange edge lines, black roof and
+    lettering turned the right way round on the far flank. Both flanks match the left side (Riley asked for the
+    right's black guard and its PEDDERS / TFH / BiC stickers to go). Black bonnet with the CHIKO oval at the nose and orange edge lines, black roof and
     tail, black erebus wing."""
     red, org, blk, wht, gold = '#e2381f', '#f08a2a', '#14161c', '#f4f2ee', '#e09a3a'
     A.soft = None
@@ -2692,7 +2692,7 @@ def L_chiko(A, kind):
         c = fill(x.shape, red)
         c = lay(c, band(y, -1, .17), blk)
         return c
-    A.over(ends, lambda x, y, z, view: np.clip((z - 1.9) / .06, 0, 1), views=('left',))
+    A.over(ends, lambda x, y, z, view: np.clip((z - 1.9) / .06, 0, 1), views=('left', 'right'))
     ch = logo('57c38ba607')
     # the big door oval and the rear-quarter Snap-on laid back sharp over the photo's soft ones
     z0, y0 = A.from_photo(1062, 565)
@@ -2703,24 +2703,8 @@ def L_chiko(A, kind):
     z0, y0 = A.from_photo(1455, 480)
     z1, y1 = A.from_photo(1658, 470)
     A.put('sides', text('Snap-on', 'ArchivoBlack-Regular', 200, wht, slant=.18), (z0 + z1) / 2, (y0 + y1) / 2 - .01, .17, maxw=abs(z1 - z0) * 1.25, rot=-3)
-    A.put('left', ch, 2.2, .5, .06, maxw=.2)
-    A.put('left', quartz_mark(gold, wht), 2.2, .36, .07, maxw=.22)
-    # right front guard: black panel with the PEDDERS / TFH / BiC / SS SIGNS stickers (9_front34)
-    def guard(x, y, z, view):
-        return fill(x.shape, blk)
-    top = lambda z: .84 + np.clip(z - 1.2, 0, 2) * .03
-    A.over(guard, lambda x, y, z, view: np.clip((z - 1.2) / .03, 0, 1) * band(y, .12, 9) * (y < top(z)), views=('right',))
-    A.over(lambda x, y, z, view: fill(x.shape, org),
-           lambda x, y, z, view: np.clip((z - 1.2) / .02, 0, 1) * (np.abs(y - top(z) - .012) < .012), views=('right',))
-    A.put('right', plate(text('PEDDERS', 'ArchivoBlack-Regular', 200, '#d8202a'), '#ffffff', pad=.2, radius=.1), 1.95, .78, .06, maxw=.36)
-    # the right bumper corner (front-view texels, x < 0) is black too, with TFH and BiC on it
-    A.over(guard, lambda x, y, z, view: np.clip((-x - .42) / .03, 0, 1) * band(y, .1, .5), views=('front',))
-    A.put('front', plate(text('TFH', 'ArchivoBlack-Regular', 200, '#141414'), '#f2c21a', pad=.15, radius=.1), -.64, .42, .055, maxw=.17)
-    A.put('front', plate(text('BiC', 'ArchivoBlack-Regular', 200, '#141414'), '#f2a81a', pad=.15, radius=.5), -.64, .3, .06, maxw=.17)
-    A.put('right', plate(text('TFH', 'ArchivoBlack-Regular', 200, '#141414'), '#f2c21a', pad=.15, radius=.1), 2.3, .56, .08, maxw=.24)
-    A.put('right', plate(text('BiC', 'ArchivoBlack-Regular', 200, '#141414'), '#f2a81a', pad=.15, radius=.5), 2.3, .41, .085, maxw=.24)
-    A.put('right', row(text('SS', 'ArchivoBlack-Regular', 200, '#2f8fe0'), text('SIGNS', 'ArchivoBlack-Regular', 200, '#ffffff'), gap=.1), 1.45, .68, .05, maxw=.26)
-    A.put('right', plate(text('LINCOLN ELECTRIC', 'ArchivoBlack-Regular', 160, '#d8202a'), '#ffffff', pad=.2, radius=.1), 2.2, .22, .045, maxw=.3)
+    A.put('sides', ch, 2.2, .5, .06, maxw=.2)
+    A.put('sides', quartz_mark(gold, wht), 2.2, .36, .07, maxw=.22)
     # bonnet: the CHIKO oval at the nose, black panel behind
     A.bonnet(ch, A.f + .62, .3, maxw=.85)
     A.put('front', logo('bowtie'), 0, .55, .05)
