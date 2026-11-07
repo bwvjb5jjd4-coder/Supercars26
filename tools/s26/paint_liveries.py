@@ -2572,8 +2572,8 @@ def L_middys(A, kind):
 
 
 def L_pizzahut(A, kind):
-    """BJR #96 Pizza Hut Camaro from Riley's photos (bjr/96_fq, 96_diecast, 96_top): white; red roof with a
-    white-ringed 96 roundel; a big red Pizza Hut roundel across the bonnet; the red Pizza Hut disc on the door
+    """BJR #8 Pizza Hut Camaro (Andre Heimgartner) from Riley's photos (bjr/96_fq, 96_diecast, 96_top): white; red roof with a
+    white-ringed 8 roundel; a big red Pizza Hut roundel across the bonnet; the red Pizza Hut disc on the door
     and black Pizza Hut script on the rear door and quarter; a red swoosh with white pinstripes rising along
     the lower body; Fastron on the front guard; DRILLPRO on a black wing with red endplates."""
     wht, red, blk = '#f4f4f4', '#cc0f17', '#141414'
@@ -2620,13 +2620,13 @@ def L_pizzahut(A, kind):
     A.put('sides', mont('Kubota', 200, blk, 700), 2.15, .38, .07, maxw=.3)
     A.put('sides', plate(mont('UNIT', 140, blk, 900, track=.1), wht, pad=.15, radius=.08, outline=red, ow=.08), 2.15, .1, .045, maxw=.14)
     A.put('sides', recol(logo('cocacola'), red), -2.05, .72, .07, maxw=.3)
-    # bonnet roundel, roof 96
+    # bonnet roundel, roof 8
     pw = pizza_word(wht)
     A.bonnet(hut_icon(wht, 400), 1.33, .14, maxw=.45)
     A.bonnet(pw, 1.62, .26, maxw=.8)
     A.bonnet(mont('coregas', 160, blk, 500), 2.22, .06, maxw=.42)
     A.bonnet(mont('DRILLPRO', 160, blk, 900), 2.512, .022, maxw=.5)
-    A.roof(text('96', 'ArchivoBlack-Regular', 300, wht), -.25, .4, maxw=.6)
+    A.roof(text('8', 'ArchivoBlack-Regular', 300, wht), -.25, .4, maxw=.6)
     A.roof(hut_icon(wht, 400), .32, .1, maxw=.35)
     # tail
     A.put('rear', pizza_word(blk), 0, .9, .05, maxw=.45)

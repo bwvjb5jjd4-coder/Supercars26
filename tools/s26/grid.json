@@ -1,5 +1,5 @@
 {
- "_note": "2026 Repco Supercars grid in the game's twelve two-car teams (RAW order). The real SCT Motorsport runs one car, so the game's SCT seat 2 carries Brad Jones Racing's third Supra (#96 Macauley Jones). Sources: supercars.com 2026 livery reveal articles and spotter's guide.",
+ "_note": "2026 Repco Supercars grid in the game's twelve two-car teams (RAW order). The real SCT Motorsport runs one car, so the game's SCT seat 2 carries #96 Macauley Jones (R&J Batteries Supra until SCT is redone). BJR #8 Andre Heimgartner runs the Pizza Hut Camaro. Sources: supercars.com 2026 livery reveal articles and spotter's guide.",
  "roster": {
   "0": [
    {
@@ -87,9 +87,10 @@
   ],
   "6": [
    {
-    "body": "supra",
+    "body": "camaro",
+    "make": "Holden",
     "number": 8,
-    "livery": "rjbatteries",
+    "livery": "pizzahut",
     "name": "Andre Heimgartner"
    },
    {
@@ -164,10 +165,10 @@
     "name": "Jackson Walls"
    },
    {
-    "body": "camaro",
+    "body": "supra",
     "make": "Holden",
     "number": 96,
-    "livery": "pizzahut",
+    "livery": "rjbatteries",
     "name": "Macauley Jones"
    }
   ]
@@ -557,7 +558,7 @@
     "Coca-Cola"
    ],
    "body": "camaro",
-   "note": "BJR #96: white with red roof, bonnet roundel and lower swoosh",
+   "note": "BJR #8: white with red roof, bonnet roundel and lower swoosh",
    "logo": "assets/img/s26_pizzahut.webp"
   }
  }
